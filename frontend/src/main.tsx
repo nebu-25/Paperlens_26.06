@@ -345,44 +345,96 @@ function App() {
   const [uploading, setUploading] = useState(false);
   const [doiLoading, setDoiLoading] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [online, setOnline] = useState(false);
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const paper = activeId ? library[activeId] ?? null : null;
   const note = (activeId ? notes[activeId] : undefined) ?? EMPTY_NOTE;
 
-  // ── 시작 시 localStorage에서 복원 (#1) ──
+  // ── 시작 시 서버에서 불러오고, 실패하면 localStorage로 폴백 ──
   useEffect(() => {
+    let cancelled = false;
+    // 마지막으로 열어둔 논문 힌트만 localStorage에서 미리 읽는다(activeId는 서버에 저장 안 함).
+    let activeHint: string | null = null;
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const data = JSON.parse(raw) as {
+      if (raw) activeHint = (JSON.parse(raw) as { activeId?: string | null }).activeId ?? null;
+    } catch {
+      /* ignore */
+    }
+
+    const apply = (lib: Record<string, Paper>, rawNotes: Record<string, ReviewNote>) => {
+      const fixed: Record<string, ReviewNote> = {};
+      for (const [id, n] of Object.entries(rawNotes)) fixed[id] = normalizeNote(n);
+      setLibrary(lib);
+      setNotes(fixed);
+      const ids = Object.keys(lib);
+      setActiveId(activeHint && ids.includes(activeHint) ? activeHint : null);
+    };
+
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/notes`);
+        if (!res.ok) throw new Error('server unavailable');
+        const data = (await res.json()) as {
           library?: Record<string, Paper>;
           notes?: Record<string, ReviewNote>;
-          activeId?: string | null;
         };
-        if (data.library) setLibrary(data.library);
-        if (data.notes) {
-          const fixed: Record<string, ReviewNote> = {};
-          for (const [id, n] of Object.entries(data.notes)) fixed[id] = normalizeNote(n);
-          setNotes(fixed);
+        if (cancelled) return;
+        apply(data.library ?? {}, data.notes ?? {});
+        setOnline(true);
+        if (Object.keys(data.library ?? {}).length > 0) setSavedAt('서버에서 불러옴');
+      } catch {
+        // 오프라인: localStorage 캐시로 폴백
+        try {
+          const raw = window.localStorage.getItem(STORAGE_KEY);
+          if (raw && !cancelled) {
+            const data = JSON.parse(raw) as {
+              library?: Record<string, Paper>;
+              notes?: Record<string, ReviewNote>;
+            };
+            apply(data.library ?? {}, data.notes ?? {});
+            if (Object.keys(data.library ?? {}).length > 0) setSavedAt('로컬 복원(오프라인)');
+          }
+        } catch {
+          /* 손상된 캐시는 무시 */
         }
-        if (data.activeId) setActiveId(data.activeId);
-        if (data.library && Object.keys(data.library).length > 0) setSavedAt('복원됨');
+        if (!cancelled) setOnline(false);
+      } finally {
+        if (!cancelled) setLoaded(true);
       }
-    } catch {
-      /* 손상된 데이터는 무시하고 새로 시작 */
-    }
-    setLoaded(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // ── 자동 저장 (5초 debounce, NFR-05) ──
+  // ── 자동 저장 (5초 debounce, NFR-05): 서버 PUT + localStorage 미러(오프라인 캐시) ──
   // 복원이 끝난 뒤에만 저장해 초기 빈 상태가 기존 데이터를 덮어쓰지 않게 한다.
   useEffect(() => {
     if (!loaded) return;
-    const handle = window.setTimeout(() => {
+    const handle = window.setTimeout(async () => {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ library, notes, activeId }));
-      setSavedAt(new Date().toLocaleTimeString('ko-KR'));
+      const time = new Date().toLocaleTimeString('ko-KR');
+      if (!activeId || !library[activeId]) {
+        setSavedAt(`로컬 저장 ${time}`);
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/notes/${activeId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paper: library[activeId], note: notes[activeId] ?? EMPTY_NOTE }),
+        });
+        if (!res.ok) throw new Error('save failed');
+        setSavedAt(`서버 저장 ${time}`);
+        setOnline(true);
+      } catch {
+        setSavedAt(`로컬 저장 ${time} (오프라인)`);
+        setOnline(false);
+      }
     }, 5000);
     return () => window.clearTimeout(handle);
   }, [library, notes, activeId, loaded]);
@@ -423,6 +475,7 @@ function App() {
     setLibrary(({ [id]: _omitP, ...rest }) => rest);
     setNotes(({ [id]: _omitN, ...rest }) => rest);
     setActiveId((cur) => (cur === id ? null : cur));
+    fetch(`${API_BASE}/notes/${id}`, { method: 'DELETE' }).catch(() => {});
   }
 
   async function handleFile(file: File) {
@@ -442,8 +495,8 @@ function App() {
       const unknownTitle = !data.title || data.title === '(제목 없음)';
       const unknownAuthors = !data.authors || data.authors === '저자 미상';
       registerPaper({
-        title: unknownTitle ? file.name.replace(/\.pdf$/i, '') : data.title,
-        authors: unknownAuthors ? '' : data.authors,
+        title: unknownTitle ? file.name.replace(/\.pdf$/i, '') : (data.title ?? ''),
+        authors: unknownAuthors ? '' : (data.authors ?? ''),
         link: data.link || '',
         text: data.text || '(본문 텍스트가 비어 있습니다)',
       });
@@ -709,9 +762,14 @@ function App() {
             <article className="bg-paper p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-base font-semibold">리뷰 노트</h2>
-                <span className="flex items-center gap-1 rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
+                <span
+                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
+                    online ? 'bg-emerald-50 text-emerald-700' : 'bg-paper text-muted'
+                  }`}
+                  title={online ? '서버에 저장됩니다' : '서버 미연결 — 로컬에만 저장됩니다'}
+                >
                   <Save size={12} />
-                  {savedAt ? `저장됨 ${savedAt}` : '자동 저장 대기'}
+                  {savedAt ?? '자동 저장 대기'}
                 </span>
               </div>
 

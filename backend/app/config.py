@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     # CrossRef "polite pool" 사용을 위한 연락처(선택). 설정 시 User-Agent에 포함된다.
     crossref_mailto: str = ""
+    # 리뷰 노트 SQLite 파일 경로 (백엔드 작업 디렉터리 기준)
+    database_path: str = "paperlens.db"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -10,3 +10,7 @@ __pycache__/
 # 테스팅 기록: 로컬에서 계속 업데이트하되 버전 관리는 제외
 /testing*.md
 
+# SQLite 데이터베이스 파일
+*.db
+*.db-journal
+
