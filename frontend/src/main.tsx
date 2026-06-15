@@ -11,6 +11,7 @@ import {
   Plus,
   Printer,
   Save,
+  Search,
   Sparkles,
   Trash2,
   Upload,
@@ -65,6 +66,7 @@ interface ReviewNote {
   oneLineSummary: string;
   oneLineSource: Source;
   summaryMode: SummaryMode;
+  tags: string[];
   sectionSummaries: SectionSummary[];
   highlights: Highlight[];
   terms: Term[];
@@ -117,6 +119,7 @@ const EMPTY_NOTE: ReviewNote = {
   oneLineSummary: '',
   oneLineSource: 'user',
   summaryMode: 'section',
+  tags: [],
   sectionSummaries: defaultSectionSummaries(),
   highlights: [],
   terms: [],
@@ -133,11 +136,24 @@ function normalizeNote(raw: Partial<ReviewNote>): ReviewNote {
   return {
     ...EMPTY_NOTE,
     ...raw,
+    tags: Array.isArray(raw.tags) ? raw.tags : [],
     sectionSummaries:
       Array.isArray(raw.sectionSummaries) && raw.sectionSummaries.length > 0
         ? raw.sectionSummaries
         : defaultSectionSummaries(),
   };
+}
+
+// 지식베이스 검색 대상 텍스트: 메타·태그·작성 내용 전체를 합쳐 소문자로 만든다.
+function searchableText(paper: Paper, note: ReviewNote): string {
+  const parts: string[] = [paper.title, paper.authors, paper.link, (note.tags ?? []).join(' '), note.oneLineSummary];
+  for (const s of note.sectionSummaries ?? []) parts.push(s.section, s.content);
+  parts.push(...Object.values(note.template ?? {}));
+  for (const t of note.terms ?? []) parts.push(t.term, t.explanation);
+  for (const q of note.questions ?? []) parts.push(q.text);
+  for (const h of note.highlights ?? []) parts.push(h.text);
+  parts.push(...Object.values(note.memos ?? {}));
+  return parts.join(' ').toLowerCase();
 }
 
 // 규칙 기반 용어 힌트: 대문자 약어(2자 이상), 외래어/영문 토큰을 후보로 본다.
@@ -346,6 +362,8 @@ function App() {
   const [doiLoading, setDoiLoading] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
+  const [search, setSearch] = useState('');
+  const [activeTags, setActiveTags] = useState<string[]>([]);
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -447,6 +465,8 @@ function App() {
 
   const setSectionSummaries = (next: SectionSummary[]) =>
     setNote((n) => ({ ...n, sectionSummaries: next }));
+
+  const setTags = (next: string[]) => setNote((n) => ({ ...n, tags: next }));
 
   // 활성 논문의 메타정보(제목/저자/링크) 직접 편집 — 자동 추출 실패 시 보완
   function updatePaper(patch: Partial<Omit<Paper, 'id'>>) {
@@ -616,6 +636,20 @@ function App() {
   ];
   const doneCount = checklist.filter((c) => c.done).length;
 
+  // ── 지식베이스 검색·태그 필터 (FR-09) ──
+  const allTags = Array.from(
+    new Set(Object.values(notes).flatMap((n) => n.tags ?? [])),
+  ).sort((a, b) => a.localeCompare(b, 'ko'));
+  const query = search.trim().toLowerCase();
+  const visiblePapers = Object.values(library).filter((p) => {
+    const n = notes[p.id] ?? EMPTY_NOTE;
+    if (activeTags.length > 0 && !activeTags.every((t) => (n.tags ?? []).includes(t))) return false;
+    if (query && !searchableText(p, n).includes(query)) return false;
+    return true;
+  });
+  const toggleTagFilter = (tag: string) =>
+    setActiveTags((cur) => (cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag]));
+
   // ── 내보내기 (FR-11) ──
   function exportMarkdown() {
     if (!paper) return;
@@ -702,13 +736,46 @@ function App() {
           </button>
 
           <p className="mb-3 mt-7 text-xs font-semibold uppercase tracking-wide text-muted">
-            내 리뷰 노트 ({Object.keys(library).length})
+            내 리뷰 노트 ({visiblePapers.length}/{Object.keys(library).length})
           </p>
           {Object.keys(library).length === 0 ? (
             <p className="text-xs text-muted">아직 등록된 논문이 없습니다.</p>
           ) : (
-            <ul className="space-y-2">
-              {Object.values(library).map((p) => (
+            <>
+              <div className="relative mb-2">
+                <Search
+                  size={14}
+                  className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted"
+                />
+                <input
+                  className="w-full rounded border border-line bg-white py-1.5 pl-7 pr-2 text-sm outline-none focus:border-action"
+                  placeholder="제목·저자·내용·태그 검색"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              {allTags.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-1">
+                  {allTags.map((tag) => (
+                    <button
+                      key={tag}
+                      className={`rounded-full px-2 py-0.5 text-xs ${
+                        activeTags.includes(tag)
+                          ? 'bg-action text-white'
+                          : 'border border-line text-muted hover:border-action'
+                      }`}
+                      onClick={() => toggleTagFilter(tag)}
+                    >
+                      #{tag}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {visiblePapers.length === 0 ? (
+                <p className="text-xs text-muted">조건에 맞는 노트가 없습니다.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {visiblePapers.map((p) => (
                 <li
                   key={p.id}
                   className={`flex items-center gap-1 rounded border bg-white px-2 py-2 text-sm ${
@@ -716,10 +783,15 @@ function App() {
                   }`}
                 >
                   <button className="min-w-0 flex-1 text-left" onClick={() => openPaper(p.id)}>
-                    <div className="line-clamp-1 font-medium">{p.title}</div>
-                    <span className="mt-1 inline-block rounded bg-paper px-2 py-0.5 text-xs text-muted">
-                      작성중
-                    </span>
+                    <div className="line-clamp-1 font-medium">{p.title || '(제목 없음)'}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <span className="rounded bg-paper px-2 py-0.5 text-xs text-muted">작성중</span>
+                      {(notes[p.id]?.tags ?? []).map((tag) => (
+                        <span key={tag} className="rounded bg-action/10 px-1.5 py-0.5 text-xs text-action">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
                   </button>
                   <button
                     className="shrink-0 p-1 text-muted hover:text-ink"
@@ -729,8 +801,10 @@ function App() {
                     <Trash2 size={14} />
                   </button>
                 </li>
-              ))}
-            </ul>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </aside>
 
@@ -804,6 +878,12 @@ function App() {
                         onChange={(e) => updatePaper({ link: e.target.value })}
                       />
                     </label>
+                    <div className="flex items-start gap-2 text-sm">
+                      <span className="w-10 shrink-0 pt-1.5 text-xs text-muted">태그</span>
+                      <div className="min-w-0 flex-1">
+                        <TagEditor tags={note.tags} onChange={setTags} />
+                      </div>
+                    </div>
                   </div>
                   <p className="mt-2 text-xs text-muted">
                     자동 추출이 비어 있으면 직접 입력하세요. (KCI 등 CrossRef 미등재 논문)
@@ -1136,6 +1216,50 @@ function App() {
         </div>
       )}
     </main>
+  );
+}
+
+function TagEditor({ tags, onChange }: { tags: string[]; onChange: (next: string[]) => void }) {
+  const [draft, setDraft] = useState('');
+  function add() {
+    const t = draft.trim().replace(/^#+/, '');
+    if (t && !tags.includes(t)) onChange([...tags, t]);
+    setDraft('');
+  }
+  return (
+    <div>
+      {tags.length > 0 && (
+        <div className="mb-1 flex flex-wrap gap-1">
+          {tags.map((t) => (
+            <span
+              key={t}
+              className="flex items-center gap-1 rounded-full bg-action/10 px-2 py-0.5 text-xs text-action"
+            >
+              #{t}
+              <button
+                className="leading-none hover:text-ink"
+                title="태그 삭제"
+                onClick={() => onChange(tags.filter((x) => x !== t))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <input
+        className="w-full rounded border border-line px-2 py-1.5 text-sm outline-none focus:border-action"
+        placeholder="태그 추가 (Enter)"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            add();
+          }
+        }}
+      />
+    </div>
   );
 }
 
