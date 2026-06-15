@@ -3,11 +3,13 @@ import ReactDOM from 'react-dom/client';
 import {
   Check,
   ChevronDown,
+  Download,
   FileText,
   Highlighter,
   Library,
   PencilLine,
   Plus,
+  Printer,
   Save,
   Sparkles,
   Trash2,
@@ -141,6 +143,129 @@ function normalizeNote(raw: Partial<ReviewNote>): ReviewNote {
 // 규칙 기반 용어 힌트: 대문자 약어(2자 이상), 외래어/영문 토큰을 후보로 본다.
 // 기획서 8-2 단서대로 정확도는 제한적이며 보조 안내일 뿐이다.
 const HINT_PATTERN = /\b([A-Z]{2,}|[A-Z][a-z]+(?:-[A-Z][a-z]+)*)\b/g;
+
+// ──────────────────────────────────────────────────────────────────────────
+// 리뷰 노트 내보내기 (FR-11) — 작성된 9영역을 통합. 토글과 무관하게 내용이 있는
+// 섹션별 요약/템플릿을 모두 포함해 사용자가 쓴 내용을 잃지 않는다.
+// ──────────────────────────────────────────────────────────────────────────
+const safeFilename = (title: string) =>
+  (title.replace(/[^\w가-힣 .-]/g, '_').trim().slice(0, 80) || 'review-note');
+
+function buildMarkdown(paper: Paper, note: ReviewNote): string {
+  const out: string[] = [];
+  out.push(`# ${paper.title || '제목 없음'}`, '');
+  out.push(`- 저자: ${paper.authors || '—'}`);
+  out.push(`- 링크: ${paper.link || '—'}`);
+  out.push(`- 내보낸 날짜: ${new Date().toLocaleString('ko-KR')}`, '');
+
+  if (note.oneLineSummary.trim()) out.push('## 한 줄 요약', '', note.oneLineSummary.trim(), '');
+
+  const sections = note.sectionSummaries.filter((s) => s.content.trim());
+  if (sections.length) {
+    out.push('## 섹션별 요약', '');
+    for (const s of sections) out.push(`### ${s.section}`, '', s.content.trim(), '');
+  }
+
+  const tmpl = TEMPLATE_QUESTIONS.filter((q) => note.template[q.key].trim());
+  if (tmpl.length) {
+    out.push('## 수동 요약 템플릿', '');
+    for (const q of tmpl) out.push(`**${q.label}**`, '', note.template[q.key].trim(), '');
+  }
+
+  if (note.terms.length) {
+    out.push('## 핵심 용어 사전', '');
+    for (const t of note.terms) out.push(`- **${t.term}**: ${t.explanation.trim() || '(설명 없음)'}`);
+    out.push('');
+  }
+
+  if (note.questions.length) {
+    out.push('## 읽으며 생긴 질문', '');
+    for (const q of note.questions) out.push(`- ${q.text}`);
+    out.push('');
+  }
+
+  if (note.highlights.length) {
+    out.push('## 핵심 문장 하이라이트', '');
+    for (const h of note.highlights) out.push(`> ${h.text}`, '');
+  }
+
+  const memos = MEMO_SECTIONS.filter((s) => (note.memos[s] ?? '').trim());
+  if (memos.length) {
+    out.push('## 섹션별 메모 카드', '');
+    for (const s of memos) out.push(`### ${s}`, '', (note.memos[s] ?? '').trim(), '');
+  }
+
+  return out.join('\n');
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const htmlParas = (s: string) =>
+  s
+    .trim()
+    .split(/\n{2,}/)
+    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+
+// 인쇄용 HTML — 새 창에서 열고 사용자가 "PDF로 저장"으로 인쇄한다(추가 라이브러리 없음).
+function buildPrintHtml(paper: Paper, note: ReviewNote): string {
+  const b: string[] = [];
+  b.push(`<h1>${escapeHtml(paper.title || '제목 없음')}</h1>`);
+  b.push(
+    `<ul class="meta"><li>저자: ${escapeHtml(paper.authors || '—')}</li>` +
+      `<li>링크: ${escapeHtml(paper.link || '—')}</li>` +
+      `<li>내보낸 날짜: ${escapeHtml(new Date().toLocaleString('ko-KR'))}</li></ul>`,
+  );
+  if (note.oneLineSummary.trim()) b.push('<h2>한 줄 요약</h2>', htmlParas(note.oneLineSummary));
+
+  const sections = note.sectionSummaries.filter((s) => s.content.trim());
+  if (sections.length) {
+    b.push('<h2>섹션별 요약</h2>');
+    for (const s of sections) b.push(`<h3>${escapeHtml(s.section)}</h3>`, htmlParas(s.content));
+  }
+
+  const tmpl = TEMPLATE_QUESTIONS.filter((q) => note.template[q.key].trim());
+  if (tmpl.length) {
+    b.push('<h2>수동 요약 템플릿</h2>');
+    for (const q of tmpl) b.push(`<h3>${escapeHtml(q.label)}</h3>`, htmlParas(note.template[q.key]));
+  }
+
+  if (note.terms.length) {
+    b.push('<h2>핵심 용어 사전</h2><ul>');
+    for (const t of note.terms)
+      b.push(`<li><b>${escapeHtml(t.term)}</b>: ${escapeHtml(t.explanation || '(설명 없음)')}</li>`);
+    b.push('</ul>');
+  }
+
+  if (note.questions.length) {
+    b.push('<h2>읽으며 생긴 질문</h2><ul>');
+    for (const q of note.questions) b.push(`<li>${escapeHtml(q.text)}</li>`);
+    b.push('</ul>');
+  }
+
+  if (note.highlights.length) {
+    b.push('<h2>핵심 문장 하이라이트</h2>');
+    for (const h of note.highlights) b.push(`<blockquote>${escapeHtml(h.text)}</blockquote>`);
+  }
+
+  const memos = MEMO_SECTIONS.filter((s) => (note.memos[s] ?? '').trim());
+  if (memos.length) {
+    b.push('<h2>섹션별 메모 카드</h2>');
+    for (const s of memos) b.push(`<h3>${escapeHtml(s)}</h3>`, htmlParas(note.memos[s] ?? ''));
+  }
+
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${escapeHtml(
+    paper.title || 'PaperLens',
+  )}</title><style>
+    body{font-family:'Noto Sans KR',system-ui,sans-serif;color:#171717;line-height:1.7;max-width:720px;margin:40px auto;padding:0 20px;}
+    h1{font-size:24px;margin:0 0 12px;} h2{font-size:18px;margin:28px 0 8px;border-bottom:1px solid #dfdcd3;padding-bottom:4px;}
+    h3{font-size:15px;margin:16px 0 4px;} ul.meta{list-style:none;padding:0;color:#66625d;font-size:14px;}
+    blockquote{margin:8px 0;padding:8px 14px;background:#fffbe6;border-left:3px solid #f0c000;}
+    p{margin:6px 0;}
+  </style></head><body>${b.join(
+    '',
+  )}<script>window.onload=function(){setTimeout(function(){window.print();},300);};</script></body></html>`;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // 공통 UI
@@ -404,6 +529,29 @@ function App() {
     { label: '섹션별 메모', done: Object.values(note.memos).some((v) => v.trim().length > 0) },
   ];
   const doneCount = checklist.filter((c) => c.done).length;
+
+  // ── 내보내기 (FR-11) ──
+  function exportMarkdown() {
+    if (!paper) return;
+    const blob = new Blob([buildMarkdown(paper, note)], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${safeFilename(paper.title)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportPdf() {
+    if (!paper) return;
+    const w = window.open('', '_blank');
+    if (!w) {
+      window.alert('팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 시도해 주세요.');
+      return;
+    }
+    w.document.write(buildPrintHtml(paper, note));
+    w.document.close();
+  }
 
   return (
     <main className="min-h-screen bg-paper text-ink" onMouseDown={() => setSelection(null)}>
@@ -827,9 +975,27 @@ function App() {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-3 text-xs text-muted">
-                    내보내기(PDF/Markdown)는 후속 작업으로 연결합니다.
-                  </p>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      className="flex flex-1 items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                      onClick={exportMarkdown}
+                      disabled={doneCount === 0}
+                    >
+                      <Download size={15} /> Markdown
+                    </button>
+                    <button
+                      className="flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm disabled:opacity-50"
+                      onClick={exportPdf}
+                      disabled={doneCount === 0}
+                    >
+                      <Printer size={15} /> PDF로 저장
+                    </button>
+                  </div>
+                  {doneCount === 0 && (
+                    <p className="mt-2 text-xs text-muted">
+                      한 가지 이상 작성하면 내보낼 수 있습니다.
+                    </p>
+                  )}
                 </SectionCard>
               </div>
             </article>
