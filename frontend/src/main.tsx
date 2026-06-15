@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import {
   Check,
@@ -370,6 +370,62 @@ function App() {
   const paper = activeId ? library[activeId] ?? null : null;
   const note = (activeId ? notes[activeId] : undefined) ?? EMPTY_NOTE;
 
+  // 저장 유실 방지: 변경된 노트를 dirty로 추적하고, 최신 상태를 ref로 보관(언로드/flush 참조용)
+  const libraryRef = useRef(library);
+  const notesRef = useRef(notes);
+  const activeIdRef = useRef(activeId);
+  const dirtyRef = useRef<Set<string>>(new Set());
+  libraryRef.current = library;
+  notesRef.current = notes;
+  activeIdRef.current = activeId;
+
+  // dirty 노트를 전부 서버에 PUT + localStorage 미러. 전환해도 직전 노트가 유실되지 않는다.
+  const flush = useCallback(async () => {
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          library: libraryRef.current,
+          notes: notesRef.current,
+          activeId: activeIdRef.current,
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
+    const ids = Array.from(dirtyRef.current);
+    if (ids.length === 0) return;
+    let savedAny = false;
+    let failed = false;
+    for (const id of ids) {
+      const p = libraryRef.current[id];
+      if (!p) {
+        dirtyRef.current.delete(id);
+        continue;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/notes/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paper: p, note: notesRef.current[id] ?? EMPTY_NOTE }),
+        });
+        if (!res.ok) throw new Error('save failed');
+        dirtyRef.current.delete(id);
+        savedAny = true;
+      } catch {
+        failed = true;
+      }
+    }
+    const time = new Date().toLocaleTimeString('ko-KR');
+    if (failed) {
+      setOnline(false);
+      setSavedAt(`로컬 저장 ${time} (오프라인)`);
+    } else if (savedAny) {
+      setOnline(true);
+      setSavedAt(`서버 저장 ${time}`);
+    }
+  }, []);
+
   // ── 시작 시 서버에서 불러오고, 실패하면 localStorage로 폴백 ──
   useEffect(() => {
     let cancelled = false;
@@ -429,37 +485,57 @@ function App() {
     };
   }, []);
 
-  // ── 자동 저장 (5초 debounce, NFR-05): 서버 PUT + localStorage 미러(오프라인 캐시) ──
-  // 복원이 끝난 뒤에만 저장해 초기 빈 상태가 기존 데이터를 덮어쓰지 않게 한다.
+  // ── 자동 저장 (5초 debounce, NFR-05): dirty 노트를 전부 저장. 복원 후에만 동작 ──
   useEffect(() => {
     if (!loaded) return;
-    const handle = window.setTimeout(async () => {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ library, notes, activeId }));
-      const time = new Date().toLocaleTimeString('ko-KR');
-      if (!activeId || !library[activeId]) {
-        setSavedAt(`로컬 저장 ${time}`);
-        return;
-      }
-      try {
-        const res = await fetch(`${API_BASE}/notes/${activeId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paper: library[activeId], note: notes[activeId] ?? EMPTY_NOTE }),
-        });
-        if (!res.ok) throw new Error('save failed');
-        setSavedAt(`서버 저장 ${time}`);
-        setOnline(true);
-      } catch {
-        setSavedAt(`로컬 저장 ${time} (오프라인)`);
-        setOnline(false);
-      }
+    const handle = window.setTimeout(() => {
+      void flush();
     }, 5000);
     return () => window.clearTimeout(handle);
-  }, [library, notes, activeId, loaded]);
+  }, [library, notes, activeId, loaded, flush]);
+
+  // ── 탭 닫기·숨김 시 강제 저장(유실 방지): keepalive PUT + 로컬 미러 ──
+  useEffect(() => {
+    const flushOnHide = () => {
+      try {
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            library: libraryRef.current,
+            notes: notesRef.current,
+            activeId: activeIdRef.current,
+          }),
+        );
+      } catch {
+        /* ignore */
+      }
+      for (const id of Array.from(dirtyRef.current)) {
+        const p = libraryRef.current[id];
+        if (!p) continue;
+        // keepalive: 페이지가 언로드되는 중에도 요청이 완료되도록 한다.
+        void fetch(`${API_BASE}/notes/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paper: p, note: notesRef.current[id] ?? EMPTY_NOTE }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushOnHide();
+    };
+    window.addEventListener('pagehide', flushOnHide);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flushOnHide);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   // ── 활성 논문의 노트만 갱신 ──
   function setNote(updater: (n: ReviewNote) => ReviewNote) {
     if (!activeId) return;
+    dirtyRef.current.add(activeId);
     setNotes((all) => ({ ...all, [activeId]: updater(all[activeId] ?? EMPTY_NOTE) }));
   }
 
@@ -471,6 +547,7 @@ function App() {
   // 활성 논문의 메타정보(제목/저자/링크) 직접 편집 — 자동 추출 실패 시 보완
   function updatePaper(patch: Partial<Omit<Paper, 'id'>>) {
     if (!activeId) return;
+    dirtyRef.current.add(activeId);
     setLibrary((lib) => (lib[activeId] ? { ...lib, [activeId]: { ...lib[activeId], ...patch } } : lib));
   }
 
@@ -480,6 +557,7 @@ function App() {
     setLibrary((l) => ({ ...l, [id]: { ...next, id } }));
     // 논문마다 자체 섹션 배열을 갖도록 새 노트를 생성한다.
     setNotes((n) => ({ ...n, [id]: { ...EMPTY_NOTE, sectionSummaries: defaultSectionSummaries() } }));
+    dirtyRef.current.add(id);
     setActiveId(id);
     setSelection(null);
     setSavedAt(null);
@@ -492,6 +570,7 @@ function App() {
   }
 
   function deletePaper(id: string) {
+    dirtyRef.current.delete(id);
     setLibrary(({ [id]: _omitP, ...rest }) => rest);
     setNotes(({ [id]: _omitN, ...rest }) => rest);
     setActiveId((cur) => (cur === id ? null : cur));
