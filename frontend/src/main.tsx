@@ -435,6 +435,22 @@ function App() {
     }
   }, []);
 
+  // 목록 응답은 본문(text)을 제외하므로, 논문을 열 때 단건 조회로 원문을 지연 로드한다(#10).
+  const ensureText = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/notes/${id}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { paper: Paper };
+      setLibrary((lib) => {
+        const cur = lib[id];
+        if (!cur || cur.text) return lib; // 이미 본문이 있으면 그대로(편집 중 덮어쓰기 방지)
+        return { ...lib, [id]: { ...cur, text: data.paper.text } };
+      });
+    } catch {
+      /* 오프라인이면 원문은 비표시 */
+    }
+  }, []);
+
   // ── 시작 시 서버에서 불러오고, 실패하면 localStorage로 폴백 ──
   useEffect(() => {
     let cancelled = false;
@@ -520,6 +536,11 @@ function App() {
       window.removeEventListener('online', retry);
     };
   }, [loaded, flush]);
+
+  // ── 활성 논문의 원문 지연 로드(#10): 목록엔 본문이 없으므로 열릴 때 단건 조회 ──
+  useEffect(() => {
+    if (activeId && online && !library[activeId]?.text) void ensureText(activeId);
+  }, [activeId, online, library, ensureText]);
 
   // ── 탭 닫기·숨김 시 강제 저장(유실 방지): keepalive PUT + 로컬 미러 ──
   useEffect(() => {
@@ -935,7 +956,11 @@ function App() {
                 onMouseUp={onTextMouseUp}
                 onMouseDown={(e) => e.stopPropagation()}
               >
-                {hintedBody}
+                {paper.text ? (
+                  hintedBody
+                ) : (
+                  <p className="text-xs text-muted">원문을 불러오는 중이거나 본문이 없습니다.</p>
+                )}
               </div>
             </article>
 

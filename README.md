@@ -14,6 +14,7 @@
 - 논문 메타정보 자동 추출(FR-02): DOI/URL 등록 시 **CrossRef** 조회, PDF 업로드 시 **본문 DOI 탐지 → CrossRef → PDF 내장 메타데이터** 순으로 제목·저자를 채웁니다. CrossRef 미등재(KCI 등)·추출 실패 시에는 메타정보 영역에서 **제목·저자·링크를 직접 편집**할 수 있습니다.
 - 백엔드는 FastAPI 기반으로, PDF 텍스트 추출(`/api/papers/extract-text`)·CrossRef 메타정보 조회(`/api/papers/metadata`)·리뷰 노트 영속화(`/api/notes` CRUD, SQLite) API를 제공합니다.
 - 프론트는 API를 **상대경로 `/api`**로 호출합니다(개발 시 Vite 프록시, 배포 시 동일 오리진). 다른 오리진의 백엔드를 가리키려면 `frontend/.env`의 `VITE_API_BASE_URL`로 오버라이드합니다.
+- 노트 목록(`GET /api/notes`)은 **본문(text)을 제외한 메타데이터**만 반환하고, 논문을 열 때 단건 조회(`GET /api/notes/{id}`)로 원문을 **지연 로드**합니다(목록 페이로드 경량화). 서버 시작은 FastAPI `lifespan`으로 DB를 초기화합니다.
 - AI 기능은 기획서 방향대로 미연동 상태를 전제로 두고, 코어 작성 UX가 먼저 동작하도록 구성했습니다.
 - 개발 서버 실행과 빌드/컴파일 검증을 완료했습니다. 검증 절차는 아래 "검증" 섹션을 참고하세요. (상세 실행 로그는 로컬 `testing.md`에 기록하며, 이 파일은 버전 관리에서 제외됩니다.)
 

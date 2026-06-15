@@ -46,18 +46,19 @@ def init_db() -> None:
         conn.close()
 
 
-def _paper_of(row: sqlite3.Row) -> dict[str, object]:
+def _paper_of(row: sqlite3.Row, *, include_text: bool = True) -> dict[str, object]:
     return {
         "id": row["id"],
         "title": row["title"],
         "authors": row["authors"],
         "link": row["link"],
-        "text": row["text"],
+        # 목록 응답에서는 본문(text)을 제외해 페이로드를 줄인다. 단건 조회 시 지연 로드.
+        "text": row["text"] if include_text else "",
     }
 
 
 def list_notes() -> dict[str, object]:
-    """프론트 모델과 동일한 { library, notes } 형태로 전체를 반환한다."""
+    """프론트 모델과 동일한 { library, notes } 형태로 전체를 반환(본문 text 제외)."""
     conn = _connect()
     try:
         rows = conn.execute("SELECT * FROM papers ORDER BY updated_at DESC").fetchall()
@@ -66,7 +67,7 @@ def list_notes() -> dict[str, object]:
     library: dict[str, object] = {}
     notes: dict[str, object] = {}
     for row in rows:
-        library[row["id"]] = _paper_of(row)
+        library[row["id"]] = _paper_of(row, include_text=False)
         notes[row["id"]] = json.loads(row["note"] or "{}")
     return {"library": library, "notes": notes}
 
@@ -93,7 +94,9 @@ def upsert_note(note_id: str, paper: dict[str, object], note: dict[str, object])
             VALUES (:id, :title, :authors, :link, :text, :note, :now, :now)
             ON CONFLICT(id) DO UPDATE SET
               title=excluded.title, authors=excluded.authors, link=excluded.link,
-              text=excluded.text, note=excluded.note, updated_at=excluded.updated_at
+              -- 빈 text(지연 로드 전 상태)가 들어오면 기존 본문을 덮어쓰지 않는다
+              text=CASE WHEN excluded.text = '' THEN papers.text ELSE excluded.text END,
+              note=excluded.note, updated_at=excluded.updated_at
             """,
             {
                 "id": note_id,
