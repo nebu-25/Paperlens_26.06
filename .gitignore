@@ -13,6 +13,8 @@ __pycache__/
 /testing*.md
 # 발표 자료: 배포와 관계없는 파일
 /presentation_content*.md
+# 로드맵/백로그: 로컬 참조용
+/ROADMAP.md
 # SQLite 데이터베이스 파일
 *.db
 *.db-journal
