@@ -1,0 +1,20 @@
+# Render Blueprint — PaperLens 백엔드(FastAPI) 배포 설정.
+# Render 대시보드에서 New > Blueprint 로 이 저장소를 연결하면 자동 인식된다.
+services:
+  - type: web
+    name: paperlens-backend
+    runtime: python
+    plan: free            # 무료 플랜(15분 미사용 시 잠듦, 첫 요청에서 깨어남)
+    rootDir: backend      # 백엔드 코드가 하위 디렉터리에 있음
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"   # pyproject requires-python >=3.12
+      - key: CORS_ORIGINS
+        # 프론트엔드(GitHub Pages) 오리진 + 로컬 개발용. Pages 주소가 바뀌면 여기를 수정한다.
+        value: "https://nebu-25.github.io,http://localhost:5173,http://127.0.0.1:5173"
+      - key: CROSSREF_MAILTO
+        # 선택: CrossRef polite pool용 이메일. 개인정보라 커밋하지 않고 대시보드에서 입력한다.
+        sync: false
