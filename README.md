@@ -5,19 +5,19 @@
 ## 현재 진행 사항
 
 - `paper_review_service_plan_v3.1.md`를 기준으로 Phase 1 코어 MVP 개발 환경을 구성했습니다.
-- 기존 루트의 `index.html` 단일 파일 데모는 유지하고, 신규 개발용 앱은 `frontend/`와 `backend/`로 분리했습니다.
-- 프론트엔드는 Vite + React 18 + TypeScript + Tailwind CSS 기반으로 초기 화면 골격을 추가했습니다.
+- 정본 화면은 `frontend/` React 앱으로 단일화했고, 기존 루트의 AI 자동 분석 데모는 `demo/index.html`로 옮겨 Phase 2 AI 보조 레이어 참고 자산으로 보존합니다.
+- 프론트엔드는 기획서 화면 2(원문/리뷰 노트 좌우 2분할)와 리뷰 노트 9영역을 구현했습니다. 본문 드래그 → 하이라이트/용어 추가, 5초 자동 저장, AI 보조 버튼 "준비 중" 비활성 등 코어 UX가 AI 없이 동작합니다.
 - 백엔드는 FastAPI 기반으로 구성하고, PDF 업로드 후 PyMuPDF로 텍스트를 추출하는 기본 API를 추가했습니다.
 - AI 기능은 기획서 방향대로 미연동 상태를 전제로 두고, 코어 작성 UX가 먼저 동작하도록 구성했습니다.
-- 개발 서버 실행과 빌드/컴파일 검증을 완료했습니다. 자세한 검증 기록은 `testing.md`를 확인하세요.
+- 개발 서버 실행과 빌드/컴파일 검증을 완료했습니다. 검증 절차는 아래 "검증" 섹션을 참고하세요. (상세 실행 로그는 로컬 `testing.md`에 기록하며, 이 파일은 버전 관리에서 제외됩니다.)
 
 ## 프로젝트 구조
 
-- `frontend/`: Vite + React 18 + TypeScript + Tailwind CSS
+- `frontend/`: Vite + React 18 + TypeScript + Tailwind CSS (정본 화면)
 - `backend/`: FastAPI + PyMuPDF 기반 PDF 텍스트 추출 API
-- `index.html`: 기존 단일 파일 데모
+- `demo/index.html`: 기존 AI 자동 분석 단일 파일 데모 (Phase 2 참고용)
 - `paper_review_service_plan_v3.1.md`: 제품 기획서
-- `testing.md`: 테스트 및 검증 기록
+- `testing.md`: 로컬 테스트·검증 기록 (버전 관리 제외, 각자 로컬에서 유지)
 
 ## 주요 추가 파일
 
@@ -65,7 +65,7 @@ curl http://127.0.0.1:8000/api/health
 
 ## 검증
 
-테스트 및 검증 기록은 `testing.md`에 별도로 정리했습니다.
+아래 명령으로 빌드·컴파일을 검증할 수 있습니다. 상세 실행 로그는 로컬 `testing.md`에 정리하며, 이 파일은 버전 관리에서 제외됩니다(공유 대상 아님).
 
 ```bash
 cd frontend

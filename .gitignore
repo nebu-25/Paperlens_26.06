@@ -7,3 +7,6 @@ __pycache__/
 .env.*
 !.env.example
 
+# 테스팅 기록: 로컬에서 계속 업데이트하되 버전 관리는 제외
+/testing*.md
+

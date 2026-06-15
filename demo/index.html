@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PaperLens — 논문 AI 분석 데모</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F7F6F2;
+    --surface: #FFFFFF;
+    --surface2: #F0EFE9;
+    --border: #E2E0D8;
+    --accent: #2A5FD4;
+    --accent-light: #EBF0FC;
+    --accent-dark: #1A3D8A;
+    --text: #1A1917;
+    --text-muted: #6B6860;
+    --text-faint: #A09E97;
+    --success: #1B7A4A;
+    --success-bg: #E8F5EE;
+    --warn: #8A4E00;
+    --warn-bg: #FFF3E0;
+    --tag-bg: #E8EBF8;
+    --tag-text: #1A3D8A;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo-dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; }
+  .badge-demo {
+    font-size: 11px;
+    background: var(--accent-light);
+    color: var(--accent);
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+
+  /* ── LAYOUT ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    min-height: calc(100vh - 58px);
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .sidebar-section-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-faint);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  /* ── UPLOAD ZONE ── */
+  .upload-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--bg);
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+  .upload-icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .upload-zone p { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+  .upload-zone strong { color: var(--accent); }
+  #file-input { display: none; }
+
+  .file-info {
+    background: var(--success-bg);
+    border: 1px solid #A8D5BC;
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--success);
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+  .file-info.visible { display: flex; }
+
+  /* ── SAMPLE TEXTS ── */
+  .sample-list { display: flex; flex-direction: column; gap: 6px; }
+  .sample-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    font-family: 'Noto Sans KR', sans-serif;
+    transition: all 0.15s;
+    line-height: 1.4;
+  }
+  .sample-btn:hover { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+  .sample-btn.active { border-color: var(--accent); background: var(--accent-light); color: var(--accent-dark); font-weight: 500; }
+  .sample-title { font-weight: 500; display: block; }
+  .sample-sub { font-size: 11px; color: var(--text-faint); display: block; margin-top: 2px; }
+  .sample-btn.active .sample-sub { color: var(--accent); }
+
+  /* ── TEXT INPUT ── */
+  .text-area-wrap { position: relative; }
+  textarea {
+    width: 100%;
+    min-height: 130px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    font-size: 13px;
+    font-family: 'Noto Sans KR', sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    resize: vertical;
+    line-height: 1.6;
+    transition: border-color 0.15s;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); background: white; }
+  .char-count { font-size: 11px; color: var(--text-faint); text-align: right; margin-top: 4px; }
+
+  /* ── ANALYZE BUTTON ── */
+  .btn-analyze {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 13px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+    letter-spacing: 0.3px;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .btn-analyze:hover { background: var(--accent-dark); }
+  .btn-analyze:disabled { background: var(--text-faint); cursor: not-allowed; }
+
+  /* ── MAIN ── */
+  .main { padding: 28px 32px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 5px;
+    box-shadow: var(--shadow);
+  }
+  .tab {
+    flex: 1;
+    padding: 9px 8px;
+    border: none;
+    background: none;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+    color: var(--text-muted);
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .tab:hover { background: var(--bg); color: var(--text); }
+  .tab.active { background: var(--accent); color: white; }
+  .tab-icon { font-size: 15px; }
+
+  .step-badge {
+    font-size: 10px;
+    background: rgba(255,255,255,0.25);
+    padding: 1px 6px;
+    border-radius: 10px;
+  }
+  .tab:not(.active) .step-badge { background: var(--accent-light); color: var(--accent); }
+
+  /* ── PANEL ── */
+  .panel { display: none; flex-direction: column; gap: 16px; }
+  .panel.active { display: flex; }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .card-title-dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+
+  /* ── SUMMARY BLOCKS ── */
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .summary-block {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    border-left: 3px solid var(--accent);
+  }
+  .summary-block.full { grid-column: 1 / -1; }
+  .summary-block-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 6px;
+  }
+  .summary-block-text { font-size: 14px; color: var(--text); line-height: 1.65; }
+
+  /* ── KEYWORD CHIPS ── */
+  .keyword-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .keyword-chip {
+    background: var(--tag-bg);
+    color: var(--tag-text);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .keyword-chip:hover { border-color: var(--accent); background: var(--accent-light); }
+  .keyword-chip.active { background: var(--accent); color: white; }
+
+  /* ── TERM TOOLTIP ── */
+  .term-tooltip {
+    display: none;
+    position: fixed;
+    background: var(--text);
+    color: white;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    max-width: 280px;
+    line-height: 1.5;
+    z-index: 1000;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    pointer-events: none;
+  }
+  .term-tooltip.visible { display: block; }
+
+  /* ── STRUCTURE TABLE ── */
+  .structure-list { display: flex; flex-direction: column; gap: 10px; }
+  .structure-item {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+  .structure-section {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-light);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+  .structure-content { font-size: 14px; color: var(--text); line-height: 1.6; }
+
+  /* ── Q&A ── */
+  .qa-history {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .qa-bubble {
+    padding: 13px 16px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    line-height: 1.65;
+    max-width: 90%;
+  }
+  .qa-bubble.user {
+    background: var(--accent);
+    color: white;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+  }
+  .qa-bubble.ai {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+  }
+  .qa-bubble.loading {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    align-self: flex-start;
+    font-style: italic;
+    font-size: 13px;
+  }
+  .qa-input-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .qa-input {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: 'Noto Sans KR', sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    transition: border-color 0.15s;
+  }
+  .qa-input:focus { outline: none; border-color: var(--accent); background: white; }
+  .btn-send {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+  .btn-send:hover { background: var(--accent-dark); }
+  .btn-send:disabled { background: var(--text-faint); cursor: not-allowed; }
+
+  .suggested-questions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .sq-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+    color: var(--text-muted);
+    transition: all 0.15s;
+  }
+  .sq-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+  /* ── MICRO VERSION ── */
+  .micro-text {
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--text);
+    background: var(--bg);
+    padding: 18px;
+    border-radius: var(--radius-sm);
+  }
+  .term {
+    background: var(--tag-bg);
+    color: var(--tag-text);
+    border-bottom: 2px solid var(--accent);
+    cursor: pointer;
+    padding: 1px 3px;
+    border-radius: 3px;
+    font-weight: 500;
+    transition: background 0.1s;
+  }
+  .term:hover { background: var(--accent-light); }
+  .term-panel {
+    display: none;
+    background: var(--warn-bg);
+    border: 1px solid #FFCC80;
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--warn);
+    margin-top: 10px;
+  }
+  .term-panel.visible { display: block; }
+  .term-panel strong { color: var(--accent-dark); }
+
+  /* ── EMPTY / LOADING STATES ── */
+  .empty-state {
+    text-align: center;
+    padding: 52px 20px;
+    color: var(--text-faint);
+  }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; display: block; opacity: 0.5; }
+  .empty-state p { font-size: 14px; line-height: 1.6; }
+
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+  }
+  .spinner.dark {
+    border-color: rgba(0,0,0,0.1);
+    border-top-color: var(--accent);
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-dots::after {
+    content: '';
+    animation: dots 1.2s steps(4, end) infinite;
+  }
+  @keyframes dots {
+    0%   { content: ''; }
+    25%  { content: '.'; }
+    50%  { content: '..'; }
+    75%  { content: '...'; }
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+  /* ── API KEY MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal {
+    background: white;
+    border-radius: var(--radius);
+    padding: 28px 30px;
+    max-width: 420px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  }
+  .modal h2 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+  .modal p { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin-bottom: 16px; }
+  .modal input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 11px 14px;
+    font-size: 14px;
+    font-family: 'Noto Sans KR', sans-serif;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+  .modal input:focus { outline: none; border-color: var(--accent); }
+  .modal-note { font-size: 12px; color: var(--text-faint); margin-top: 8px; }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-primary {
+    flex: 1;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 11px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+  }
+  .btn-secondary {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 11px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+    color: var(--text-muted);
+  }
+
+  /* ── NOTICE BAR ── */
+  .notice-bar {
+    background: var(--warn-bg);
+    border: 1px solid #FFCC80;
+    border-radius: var(--radius-sm);
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--warn);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .notice-bar a { color: var(--accent); cursor: pointer; font-weight: 500; }
+
+  /* ── RESULT HEADER ── */
+  .result-header {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow);
+  }
+  .result-title { font-size: 15px; font-weight: 700; color: var(--text); }
+  .result-meta { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+  .result-badge {
+    background: var(--success-bg);
+    color: var(--success);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid #A8D5BC;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    PaperLens
+  </div>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <span class="badge-demo">클라이언트 데모 v0.1</span>
+    <button class="btn-secondary" style="padding:6px 14px; font-size:12px;" onclick="showApiModal()">🔑 API 키 설정</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <div>
+      <div class="sidebar-section-label">텍스트 입력</div>
+      <div class="upload-zone" onclick="document.getElementById('file-input').click()" id="upload-zone">
+        <span class="upload-icon">📄</span>
+        <p><strong>PDF 파일 드래그</strong><br>또는 클릭해서 선택<br><span style="font-size:11px; color:var(--text-faint)">* 텍스트 기반 PDF 권장</span></p>
+      </div>
+      <input type="file" id="file-input" accept=".pdf,.txt">
+      <div class="file-info" id="file-info">✅ <span id="file-name-display"></span></div>
+    </div>
+
+    <div>
+      <div class="sidebar-section-label">샘플 논문 선택</div>
+      <div class="sample-list">
+        <button class="sample-btn active" onclick="selectSample(0, this)">
+          <span class="sample-title">Transformer 아키텍처</span>
+          <span class="sample-sub">자연어 처리 · Attention 메커니즘</span>
+        </button>
+        <button class="sample-btn" onclick="selectSample(1, this)">
+          <span class="sample-title">기후변화와 생태계</span>
+          <span class="sample-sub">환경과학 · 생물다양성</span>
+        </button>
+        <button class="sample-btn" onclick="selectSample(2, this)">
+          <span class="sample-title">CRISPR 유전자 편집</span>
+          <span class="sample-sub">생명과학 · 의학 응용</span>
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <div class="sidebar-section-label">직접 입력</div>
+      <div class="text-area-wrap">
+        <textarea id="paper-input" placeholder="논문 초록 또는 본문을 여기에 붙여넣으세요..."></textarea>
+        <div class="char-count" id="char-count">0자</div>
+      </div>
+    </div>
+
+    <button class="btn-analyze" id="analyze-btn" onclick="analyze()">
+      <span id="analyze-btn-text">🔬 AI 분석 시작</span>
+    </button>
+
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="main" id="main-area">
+
+    <!-- 초기 상태 -->
+    <div id="empty-state" class="empty-state">
+      <span class="empty-icon">🔬</span>
+      <p>샘플 논문을 선택하거나<br>텍스트를 붙여넣고<br><strong>AI 분석 시작</strong>을 눌러보세요</p>
+      <div style="margin-top: 20px; padding: 16px; background: var(--accent-light); border-radius: var(--radius-sm); text-align:left; font-size:13px; color: var(--tag-text); line-height:1.7; max-width:300px; margin-left:auto; margin-right:auto;">
+        <strong>포함된 기능:</strong><br>
+        1단계 — PDF 업로드, 논문 요약, 핵심 키워드<br>
+        2단계 — 어려운 문장 쉬운 설명, 논문 구조, 섹션 분리<br>
+        3단계 — 논문 기반 Q&A<br>
+        초소형 — 용어 클릭 해설
+      </div>
+    </div>
+
+    <!-- 결과 영역 (분석 후 표시) -->
+    <div id="result-area" style="display:none;">
+
+      <div class="notice-bar" id="notice-bar" style="display:none;">
+        ⚠️ API 키 없이 <strong>목업 데이터</strong>로 표시 중입니다. 실제 AI 분석을 원하면 <a onclick="showApiModal()">API 키를 설정하세요</a>.
+      </div>
+
+      <div class="result-header">
+        <div>
+          <div class="result-title" id="result-paper-title">논문 제목</div>
+          <div class="result-meta" id="result-paper-meta">분석 완료</div>
+        </div>
+        <div class="result-badge">✓ 분석 완료</div>
+      </div>
+
+      <!-- TABS -->
+      <div class="tabs">
+        <button class="tab active" onclick="switchTab('summary', this)">
+          <span class="tab-icon">📋</span> 요약 <span class="step-badge">1단계</span>
+        </button>
+        <button class="tab" onclick="switchTab('structure', this)">
+          <span class="tab-icon">🏗️</span> 구조 분석 <span class="step-badge">2단계</span>
+        </button>
+        <button class="tab" onclick="switchTab('qa', this)">
+          <span class="tab-icon">💬</span> Q&amp;A <span class="step-badge">3단계</span>
+        </button>
+        <button class="tab" onclick="switchTab('micro', this)">
+          <span class="tab-icon">🏷️</span> 용어 해설 <span class="step-badge">초소형</span>
+        </button>
+      </div>
+
+      <!-- PANEL: 요약 -->
+      <div class="panel active" id="panel-summary">
+        <div class="card">
+          <div class="card-title"><div class="card-title-dot"></div>핵심 요약</div>
+          <div class="summary-grid" id="summary-grid">
+            <!-- JS로 채움 -->
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><div class="card-title-dot"></div>핵심 키워드</div>
+          <div class="keyword-grid" id="keyword-grid"></div>
+          <div class="term-panel" id="keyword-detail"></div>
+        </div>
+      </div>
+
+      <!-- PANEL: 구조 분석 -->
+      <div class="panel" id="panel-structure">
+        <div class="card">
+          <div class="card-title"><div class="card-title-dot"></div>논문 구조 정리</div>
+          <div class="structure-list" id="structure-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><div class="card-title-dot"></div>어려운 문장 쉬운 설명</div>
+          <div id="plain-list" style="display:flex; flex-direction:column; gap:14px;"></div>
+        </div>
+      </div>
+
+      <!-- PANEL: Q&A -->
+      <div class="panel" id="panel-qa">
+        <div class="card" style="flex:1;">
+          <div class="card-title"><div class="card-title-dot"></div>논문 기반 질문-답변</div>
+          <div class="qa-history" id="qa-history">
+            <div class="qa-bubble ai">안녕하세요! 논문에 대해 궁금한 점을 자유롭게 질문하세요. 논문 내용을 바탕으로 답변드립니다.</div>
+          </div>
+          <div class="suggested-questions" id="suggested-questions"></div>
+          <div class="qa-input-row">
+            <input class="qa-input" id="qa-input" placeholder="질문을 입력하세요..." onkeydown="if(event.key==='Enter' && !event.shiftKey) sendQuestion()">
+            <button class="btn-send" id="qa-send-btn" onclick="sendQuestion()">전송</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL: 용어 해설 -->
+      <div class="panel" id="panel-micro">
+        <div class="card">
+          <div class="card-title"><div class="card-title-dot"></div>용어 클릭 해설 (초소형 버전)</div>
+          <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">밑줄 친 <span class="term" style="cursor:default;">용어</span>를 클릭하면 쉬운 설명이 나타납니다.</p>
+          <div class="micro-text" id="micro-text"></div>
+          <div class="term-panel" id="micro-term-panel"></div>
+        </div>
+      </div>
+
+    </div><!-- /result-area -->
+  </main>
+</div>
+
+<!-- TOOLTIP -->
+<div class="term-tooltip" id="term-tooltip"></div>
+
+<!-- API KEY MODAL -->
+<div class="modal-overlay" id="api-modal">
+  <div class="modal">
+    <h2>🔑 Anthropic API 키 설정</h2>
+    <p>실제 AI 분석을 사용하려면 Anthropic API 키가 필요합니다. 키는 이 브라우저 세션에만 저장됩니다.</p>
+    <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off">
+    <div class="btn-row">
+      <button class="btn-primary" onclick="saveApiKey()">저장하고 시작</button>
+      <button class="btn-secondary" onclick="closeApiModal()">닫기</button>
+    </div>
+    <p class="modal-note">* API 키는 서버로 전송되지 않으며 브라우저 메모리에만 보관됩니다.</p>
+  </div>
+</div>
+
+<script>
+const SAMPLES = [
+  {
+    title: "Attention Is All You Need",
+    meta: "Vaswani et al. (2017) · NLP · Transformer",
+    text: `We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. The Transformer model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU. The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. Self-attention, sometimes called intra-attention, is an attention mechanism relating different positions of a single sequence in order to compute a representation of the sequence. Multi-Head Attention allows the model to jointly attend to information from different representation subspaces at different positions. The encoder maps an input sequence of symbol representations to a sequence of continuous representations. Given this representation, the decoder then generates an output sequence of symbols one element at a time. Position-wise Feed-Forward Networks consist of two linear transformations with a ReLU activation in between. Positional encodings are added to the input embeddings at the bottoms of the encoder and decoder stacks. We trained the base models for a total of 100,000 steps or 12 hours on 8 P100 GPUs.`,
+    keywords_hint: "Transformer, Self-Attention, Multi-Head Attention, Encoder-Decoder, BLEU, Positional Encoding, Feed-Forward Network"
+  },
+  {
+    title: "기후변화가 생물다양성에 미치는 영향",
+    meta: "가상 논문 · 환경과학 · 생태계",
+    text: `본 연구는 지구 온난화로 인한 평균 기온 상승이 생물다양성에 미치는 장기적 영향을 분석하였다. 기후 모델과 종 분포 데이터를 결합한 앙상블 분석을 통해 2100년까지의 생물종 멸종 위험을 예측하였다. 연구 결과, 산업화 이전 대비 2°C 이상 기온 상승 시 전체 생물종의 약 18%가 멸종 위기에 처할 것으로 예측되었다. 특히 열대 생태계와 고산 지대에서 멸종 위험이 집중되는 것으로 나타났다. 서식지 단편화와 기온 상승의 복합적 영향은 단독 요인보다 2.3배 높은 멸종률을 초래하였다. 본 연구는 탄소 배출 감소와 서식지 연결성 보전이 생물다양성 손실을 완화하는 데 핵심적임을 제언한다. 기후 적응 전략으로서의 생태 회랑(ecological corridor) 구축이 절실히 요구된다.`,
+    keywords_hint: "생물다양성, 기후 모델, 앙상블 분석, 멸종 위험, 생태계, 서식지 단편화, 생태 회랑"
+  },
+  {
+    title: "CRISPR-Cas9를 이용한 유전자 편집 기술 현황",
+    meta: "가상 논문 · 생명과학 · 의학 응용",
+    text: `CRISPR-Cas9 기술은 특정 DNA 서열을 표적으로 삼아 정밀하게 절단·편집할 수 있는 혁신적인 유전체 편집 도구이다. 본 리뷰는 CRISPR-Cas9의 작동 원리, 의학적 응용 현황, 그리고 윤리적 고려사항을 종합적으로 검토하였다. CRISPR 시스템은 가이드 RNA(gRNA)가 표적 DNA 서열로 Cas9 단백질을 안내하고, Cas9가 이중 가닥 절단(DSB)을 유도하는 방식으로 작동한다. 임상 적용에서는 겸상적혈구병, 베타-지중해빈혈 등 혈액 질환에서 획기적인 치료 성과가 보고되고 있다. 오프-타겟 효과(off-target effect)는 여전히 주요 안전성 우려 사항으로, 이를 최소화하기 위한 고충실도 Cas9 변이체 개발이 활발하다. 생식세포 편집에 대한 국제 모라토리엄 필요성이 대두되는 등 윤리적 논의도 진행 중이다.`,
+    keywords_hint: "CRISPR-Cas9, 가이드 RNA, 이중 가닥 절단, 오프-타겟 효과, 유전체 편집, 임상시험, 생식세포 편집"
+  }
+];
+
+let selectedSampleIdx = 0;
+let apiKey = '';
+let currentPaperText = '';
+let currentPaperTitle = '';
+let analysisCache = {};
+
+// ── 초기화 ──────────────────────────────────────────────────────────────
+window.onload = () => {
+  selectSample(0, document.querySelector('.sample-btn.active'));
+  const savedKey = sessionStorage.getItem('pl_api_key');
+  if (savedKey) apiKey = savedKey;
+  document.getElementById('paper-input').addEventListener('input', e => {
+    document.getElementById('char-count').textContent = e.target.value.length + '자';
+    document.querySelectorAll('.sample-btn').forEach(b => b.classList.remove('active'));
+    selectedSampleIdx = -1;
+  });
+  setupDragDrop();
+};
+
+function selectSample(idx, btn) {
+  selectedSampleIdx = idx;
+  document.querySelectorAll('.sample-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('paper-input').value = SAMPLES[idx].text;
+  document.getElementById('char-count').textContent = SAMPLES[idx].text.length + '자';
+}
+
+function setupDragDrop() {
+  const zone = document.getElementById('upload-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+  document.getElementById('file-input').addEventListener('change', e => {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+}
+
+function handleFile(file) {
+  document.getElementById('file-info').classList.add('visible');
+  document.getElementById('file-name-display').textContent = file.name;
+  if (file.type === 'text/plain') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      document.getElementById('paper-input').value = e.target.result.slice(0, 3000);
+      document.getElementById('char-count').textContent = document.getElementById('paper-input').value.length + '자';
+    };
+    reader.readAsText(file);
+  } else {
+    document.getElementById('paper-input').value = `[PDF 파일: ${file.name}]\n\n실제 서비스에서는 PDF 텍스트 추출 후 분석합니다. 데모에서는 아래 샘플 중 하나를 선택하거나 텍스트를 직접 붙여넣으세요.`;
+  }
+}
+
+// ── API / 모달 ───────────────────────────────────────────────────────────
+function showApiModal() {
+  document.getElementById('api-modal').classList.add('visible');
+  if (apiKey) document.getElementById('api-key-input').value = apiKey;
+}
+function closeApiModal() { document.getElementById('api-modal').classList.remove('visible'); }
+function saveApiKey() {
+  const k = document.getElementById('api-key-input').value.trim();
+  if (!k) return alert('API 키를 입력하세요.');
+  apiKey = k;
+  sessionStorage.setItem('pl_api_key', k);
+  closeApiModal();
+  alert('API 키가 저장되었습니다. 이제 실제 AI 분석이 가능합니다.');
+}
+
+// ── 분석 메인 ────────────────────────────────────────────────────────────
+async function analyze() {
+  const text = document.getElementById('paper-input').value.trim();
+  if (!text || text.length < 30) { alert('분석할 텍스트를 입력해주세요.'); return; }
+
+  currentPaperText = text;
+  currentPaperTitle = selectedSampleIdx >= 0 ? SAMPLES[selectedSampleIdx].title : '사용자 입력 논문';
+
+  const btn = document.getElementById('analyze-btn');
+  document.getElementById('analyze-btn-text').innerHTML = '<span class="spinner"></span> 분석 중...';
+  btn.disabled = true;
+
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('result-area').style.display = 'flex';
+  document.getElementById('result-area').style.flexDirection = 'column';
+  document.getElementById('result-area').style.gap = '16px';
+  document.getElementById('result-paper-title').textContent = currentPaperTitle;
+
+  try {
+    let data;
+    if (apiKey) {
+      data = await callClaudeForAnalysis(text);
+      document.getElementById('notice-bar').style.display = 'none';
+    } else {
+      data = getMockData(selectedSampleIdx);
+      document.getElementById('notice-bar').style.display = 'flex';
+    }
+    analysisCache = data;
+    renderResults(data);
+  } catch(e) {
+    console.error(e);
+    const data = getMockData(selectedSampleIdx);
+    analysisCache = data;
+    renderResults(data);
+    document.getElementById('notice-bar').style.display = 'flex';
+  }
+
+  document.getElementById('result-paper-meta').textContent = new Date().toLocaleTimeString('ko-KR') + ' 분석 완료';
+  document.getElementById('analyze-btn-text').textContent = '🔬 AI 분석 시작';
+  btn.disabled = false;
+  switchTab('summary', document.querySelector('.tab.active'));
+}
+
+// ── Claude API 호출 ──────────────────────────────────────────────────────
+async function callClaudeForAnalysis(text) {
+  const prompt = `다음 논문 텍스트를 분석하여 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요.
+
+논문 텍스트:
+"""
+${text.slice(0, 2500)}
+"""
+
+응답 JSON 형식:
+{
+  "summary": {
+    "background": "연구 배경 (2-3문장)",
+    "purpose": "연구 목적 (1-2문장)",
+    "method": "연구 방법 (2-3문장)",
+    "result": "주요 결과 (2-3문장)",
+    "conclusion": "결론 및 의의 (1-2문장)"
+  },
+  "keywords": [
+    {"word": "키워드1", "explanation": "이 키워드에 대한 쉬운 설명"},
+    {"word": "키워드2", "explanation": "이 키워드에 대한 쉬운 설명"},
+    {"word": "키워드3", "explanation": "이 키워드에 대한 쉬운 설명"},
+    {"word": "키워드4", "explanation": "이 키워드에 대한 쉬운 설명"},
+    {"word": "키워드5", "explanation": "이 키워드에 대한 쉬운 설명"}
+  ],
+  "structure": [
+    {"section": "연구 목적", "content": "내용 요약"},
+    {"section": "연구 방법", "content": "내용 요약"},
+    {"section": "주요 결과", "content": "내용 요약"},
+    {"section": "결론", "content": "내용 요약"}
+  ],
+  "plain_language": [
+    {"original": "어려운 원문 문장", "plain": "쉽게 풀어쓴 설명"},
+    {"original": "어려운 원문 문장2", "plain": "쉽게 풀어쓴 설명2"},
+    {"original": "어려운 원문 문장3", "plain": "쉽게 풀어쓴 설명3"}
+  ],
+  "micro_text": "핵심 내용을 2-3문장으로 요약. 주요 전문 용어를 [[용어:설명]] 형식으로 표시.",
+  "suggested_questions": ["질문1?", "질문2?", "질문3?"]
+}`;
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  const json = await resp.json();
+  const raw = json.content[0].text.replace(/```json|```/g, '').trim();
+  return JSON.parse(raw);
+}
+
+// ── 목업 데이터 ──────────────────────────────────────────────────────────
+function getMockData(idx) {
+  const mocks = [
+    {
+      summary: {
+        background: "기존 시퀀스 변환 모델은 순환 신경망(RNN)이나 합성곱 신경망(CNN)을 기반으로 했으며, 이는 병렬 처리가 어렵고 학습 시간이 오래 걸리는 문제가 있었습니다.",
+        purpose: "순환 구조나 합성곱 없이 오직 어텐션 메커니즘만을 기반으로 한 새로운 Transformer 아키텍처를 제안하고, 기계 번역 성능을 향상시키는 것입니다.",
+        method: "인코더-디코더 구조에서 멀티헤드 셀프 어텐션과 포지션-와이즈 피드포워드 네트워크를 활용하였습니다. WMT 2014 영-독 번역 데이터셋으로 8개의 P100 GPU에서 12시간 학습했습니다.",
+        result: "WMT 2014 영-독 번역 과제에서 28.4 BLEU를 달성하여 기존 최고 성능을 2점 이상 상회했습니다. 학습 속도도 기존 모델 대비 크게 향상되었습니다.",
+        conclusion: "Transformer는 순환 구조 없이도 최고 수준의 번역 성능을 달성하며, 병렬화가 가능해 효율적입니다. 이후 BERT, GPT 등 현대 LLM의 기초가 되었습니다."
+      },
+      keywords: [
+        { word: "Transformer", explanation: "RNN 없이 어텐션만으로 만든 딥러닝 모델 구조. 현재 ChatGPT를 포함한 거의 모든 대형 언어 모델의 기반입니다." },
+        { word: "Self-Attention", explanation: "문장 안에서 각 단어가 다른 단어들과 얼마나 관련 있는지 계산하는 메커니즘. 'bank'가 강인지 은행인지 문맥으로 파악하는 능력과 같습니다." },
+        { word: "Multi-Head Attention", explanation: "어텐션을 여러 시각(헤드)으로 동시에 수행하는 방식. 여러 명의 독자가 같은 글을 각자의 관점으로 읽는 것과 비슷합니다." },
+        { word: "BLEU", explanation: "기계 번역 품질 평가 지표. 모델이 번역한 문장이 사람의 번역과 얼마나 겹치는지를 0~100점으로 표시합니다." },
+        { word: "Positional Encoding", explanation: "단어의 순서 정보를 모델에 알려주는 기법. 어텐션 자체는 순서를 모르기 때문에 위치 정보를 수학적으로 추가합니다." }
+      ],
+      structure: [
+        { section: "연구 목적", content: "기존 RNN 기반 모델의 병렬화 한계를 극복하고, 어텐션만으로 고성능 시퀀스 변환을 달성하는 새로운 아키텍처 제안" },
+        { section: "연구 방법", content: "멀티헤드 어텐션 + 포지션 인코딩 + 피드포워드 네트워크로 구성된 인코더-디코더 구조 설계 및 WMT 데이터셋 실험" },
+        { section: "주요 결과", content: "영-독 번역 BLEU 28.4로 기존 최고 기록 2점 이상 초과, 8 GPU로 12시간 학습으로 효율 입증" },
+        { section: "결론", content: "Transformer가 번역 품질과 학습 효율 모두에서 우월함을 입증, 향후 자연어 처리 연구의 새로운 표준을 제시" }
+      ],
+      plain_language: [
+        { original: "attention mechanisms, dispensing with recurrence and convolutions entirely", plain: "단어들 사이의 관계를 직접 계산하는 어텐션 방식만 쓰고, 순서대로 처리하는 RNN과 지역 패턴을 보는 CNN을 완전히 제거했다는 뜻입니다." },
+        { original: "more parallelizable and requiring significantly less time to train", plain: "여러 단어를 동시에 처리할 수 있어 GPU를 최대한 활용하고, 덕분에 학습 시간이 훨씬 짧아졌다는 의미입니다." },
+        { original: "jointly attend to information from different representation subspaces", plain: "문장을 여러 가지 관점(문법, 의미, 맥락 등)에서 동시에 분석한다는 뜻입니다. 마치 여러 전문가가 같은 문서를 각자의 시각으로 검토하는 것과 같습니다." }
+      ],
+      micro_text: "Transformer 모델은 [[Self-Attention:문장 내 단어 간 관계를 계산하는 메커니즘]] 만을 사용하여 기계 번역 성능을 크게 향상시켰다. 기존의 [[RNN:시퀀스를 순서대로 처리하는 신경망]] 구조를 대체하여 병렬 처리가 가능해졌으며, WMT 번역 과제에서 [[BLEU:번역 품질 지표]] 28.4를 기록하였다.",
+      suggested_questions: ["Transformer가 RNN보다 나은 이유가 뭔가요?", "Self-Attention은 어떻게 계산되나요?", "이 논문이 ChatGPT에 어떤 영향을 줬나요?"]
+    },
+    {
+      summary: {
+        background: "지구 온난화로 인한 기온 상승이 생태계에 미치는 영향은 광범위하지만, 종별·지역별 멸종 위험의 정량적 예측 모델은 아직 불충분한 상황입니다.",
+        purpose: "기후 변화 시나리오에 따른 2100년까지의 생물종 멸종 위험을 앙상블 분석으로 정량 예측하는 것입니다.",
+        method: "기후 모델(CMIP6)과 종 분포 데이터(GBIF)를 결합한 앙상블 분석을 수행하였으며, 서식지 단편화 변수를 추가로 고려하였습니다.",
+        result: "2°C 이상 상승 시 생물종 18% 멸종 위기 예측, 서식지 단편화 복합 영향은 단독 효과 대비 2.3배 높은 멸종률을 보였습니다.",
+        conclusion: "탄소 배출 감소와 생태 회랑 구축이 생물다양성 보전의 핵심 전략임을 제언하며, 즉각적 정책 행동이 요구됩니다."
+      },
+      keywords: [
+        { word: "생물다양성", explanation: "지구상 모든 생물의 다양한 종류. 종의 수, 유전적 다양성, 생태계 다양성을 모두 포함하는 개념입니다." },
+        { word: "앙상블 분석", explanation: "여러 개의 예측 모델을 동시에 사용해 평균·최선·최악 시나리오를 종합하는 통계 기법입니다." },
+        { word: "서식지 단편화", explanation: "도로, 건물 등으로 동식물의 서식지가 작은 조각으로 나뉘는 현상. 동물 이동을 막아 멸종을 가속합니다." },
+        { word: "생태 회랑", explanation: "단절된 서식지들을 연결하는 녹지 통로. 동물이 이동하고 유전자가 교류할 수 있게 합니다." },
+        { word: "CMIP6", explanation: "전 세계 연구기관들이 표준화된 기후 모델을 비교·분석하기 위한 국제 기후 모델링 프로젝트입니다." }
+      ],
+      structure: [
+        { section: "연구 목적", content: "기온 상승 시나리오별 생물종 멸종 위험을 2100년까지 정량적으로 예측" },
+        { section: "연구 방법", content: "CMIP6 기후 모델 + GBIF 종 분포 데이터 앙상블 분석, 서식지 단편화 변수 통합" },
+        { section: "주요 결과", content: "2°C 이상 상승 시 18% 멸종 위기, 단편화 복합 영향 2.3배 증폭 효과 확인" },
+        { section: "결론", content: "탄소 감축과 생태 회랑 구축이 핵심 대응 전략, 즉각적인 국제 정책 협력 촉구" }
+      ],
+      plain_language: [
+        { original: "앙상블 분석을 통해 2100년까지의 생물종 멸종 위험을 예측", plain: "여러 기후 예측 모델을 동시에 돌려 가장 신뢰할 수 있는 멸종 위험 수치를 계산했다는 의미입니다." },
+        { original: "서식지 단편화와 기온 상승의 복합적 영향은 단독 요인보다 2.3배 높은 멸종률을 초래", plain: "기온이 오르고 서식지도 쪼개지면, 두 문제를 따로 더한 것보다 훨씬 더 많은 생물이 멸종한다는 뜻입니다." },
+        { original: "생태 회랑(ecological corridor) 구축이 절실히 요구된다", plain: "단절된 숲과 습지를 녹지 통로로 이어줘야 동물들이 이동하며 살아남을 수 있다는 제안입니다." }
+      ],
+      micro_text: "기온이 [[2°C 이상:산업화 이전 대비 평균 기온이 2도 더 오르는 것, 파리협정의 핵심 목표 기준]] 상승하면 전체 생물종의 18%가 멸종 위기에 처할 것으로 예측된다. 특히 [[서식지 단편화:도로·개발로 생물의 서식 공간이 작게 분리되는 현상]]와 기온 상승이 겹치면 멸종 위험이 2.3배 증가한다. [[생태 회랑:단절된 서식지를 연결하는 녹지 통로]] 구축이 주요 대응 방안으로 제시된다.",
+      suggested_questions: ["2°C가 왜 중요한 기준인가요?", "생물다양성이 줄면 인간에게 어떤 영향이 있나요?", "가장 위험한 생태계는 어디인가요?"]
+    },
+    {
+      summary: {
+        background: "유전 질환 치료를 위한 정밀한 유전자 편집 기술이 필요했으며, 기존 ZFN·TALEN 방식은 설계가 복잡하고 비용이 높은 문제가 있었습니다.",
+        purpose: "CRISPR-Cas9의 작동 원리, 의학적 응용 현황, 그리고 안전성·윤리적 문제를 종합 검토하는 것입니다.",
+        method: "관련 임상시험 데이터, 전임상 연구, 규제 동향을 체계적으로 검토하고 오프-타겟 효과 최소화 기술을 비교 분석하였습니다.",
+        result: "겸상적혈구병 임상에서 90% 이상 증상 개선, 오프-타겟 효과 감소를 위한 고충실도 Cas9 변이체가 유효함을 확인하였습니다.",
+        conclusion: "CRISPR는 유전 질환 치료의 새로운 패러다임이지만, 오프-타겟 문제와 생식세포 편집에 대한 국제적 규제 합의가 시급합니다."
+      },
+      keywords: [
+        { word: "CRISPR-Cas9", explanation: "세균의 면역 시스템을 응용한 유전자 가위. 원하는 DNA 위치를 정확히 찾아 잘라내거나 교정하는 도구입니다." },
+        { word: "가이드 RNA", explanation: "목표 DNA 서열로 Cas9 단백질을 안내하는 짧은 RNA 분자. GPS처럼 정확한 위치를 안내합니다." },
+        { word: "오프-타겟 효과", explanation: "목표가 아닌 다른 DNA 부위를 의도치 않게 편집하는 현상. 암 유발 등 부작용의 주요 원인입니다." },
+        { word: "이중 가닥 절단", explanation: "DNA의 양쪽 가닥을 동시에 끊는 것. 세포가 이를 복구하는 과정에서 원하는 유전자 편집이 이루어집니다." },
+        { word: "생식세포 편집", explanation: "정자·난자 등 다음 세대에 전달되는 세포의 유전자를 편집하는 것. 윤리적 문제로 국제 모라토리엄 논의 중입니다." }
+      ],
+      structure: [
+        { section: "연구 목적", content: "CRISPR-Cas9의 원리·응용·윤리를 종합 검토하여 연구자와 정책 입안자에게 최신 현황 제공" },
+        { section: "연구 방법", content: "임상시험 데이터 및 전임상 연구 체계적 문헌 고찰, 오프-타겟 기술 비교 분석" },
+        { section: "주요 결과", content: "혈액 질환 치료에서 90%+ 증상 개선, 고충실도 Cas9 변이체로 오프-타겟 10배 감소" },
+        { section: "결론", content: "치료적 활용 가능성은 매우 높으나 안전성 확보와 생식세포 편집 국제 규제 합의 필요" }
+      ],
+      plain_language: [
+        { original: "가이드 RNA(gRNA)가 표적 DNA 서열로 Cas9 단백질을 안내", plain: "마치 GPS처럼 짧은 RNA 조각이 수십억 개의 DNA 염기 중에서 정확히 수정할 위치를 찾아 단백질 가위를 그 위치로 데려갑니다." },
+        { original: "오프-타겟 효과(off-target effect)는 여전히 주요 안전성 우려 사항", plain: "원하는 곳만 편집하려 했는데 다른 부위도 잘못 잘릴 수 있고, 이것이 암을 유발하거나 새로운 질환을 만들 수 있어 아직 해결해야 할 숙제입니다." },
+        { original: "생식세포 편집에 대한 국제 모라토리엄 필요성이 대두", plain: "정자나 난자의 유전자를 바꾸면 그 변화가 자녀에게 영구히 전달되므로, 전 세계가 합의해 당분간 사용을 금지해야 한다는 주장이 나오고 있습니다." }
+      ],
+      micro_text: "[[CRISPR-Cas9:DNA를 정밀하게 잘라 편집하는 유전자 가위 기술]]은 [[겸상적혈구병:적혈구가 낫 모양으로 변형되는 유전 혈액 질환]] 등의 치료에서 90% 이상의 증상 개선을 보였다. 그러나 의도치 않은 부위를 편집하는 [[오프-타겟 효과:목표 외 DNA 부위가 잘못 편집되는 부작용]] 문제가 아직 완전히 해결되지 않았다. 특히 [[생식세포:정자·난자처럼 자녀에게 유전되는 세포]] 편집에 대한 국제적 규제 논의가 시급하다.",
+      suggested_questions: ["CRISPR로 어떤 질병을 치료할 수 있나요?", "오프-타겟 효과를 어떻게 줄이나요?", "유전자 편집의 윤리적 문제는 무엇인가요?"]
+    }
+  ];
+  return mocks[Math.max(0, idx)] || mocks[0];
+}
+
+// ── 결과 렌더링 ──────────────────────────────────────────────────────────
+function renderResults(data) {
+  renderSummary(data);
+  renderStructure(data);
+  renderQA(data);
+  renderMicro(data);
+}
+
+function renderSummary(data) {
+  const grid = document.getElementById('summary-grid');
+  const labels = { background:'연구 배경', purpose:'연구 목적', method:'연구 방법', result:'주요 결과', conclusion:'결론 및 의의' };
+  const fullCols = ['conclusion'];
+  grid.innerHTML = Object.entries(data.summary).map(([k,v]) =>
+    `<div class="summary-block ${fullCols.includes(k)?'full':''}">
+      <div class="summary-block-label">${labels[k]||k}</div>
+      <div class="summary-block-text">${v}</div>
+    </div>`
+  ).join('');
+
+  const kgrid = document.getElementById('keyword-grid');
+  kgrid.innerHTML = data.keywords.map((kw,i) =>
+    `<button class="keyword-chip" onclick="showKeyword(${i})">${kw.word}</button>`
+  ).join('');
+}
+
+function showKeyword(idx) {
+  const data = analysisCache;
+  const kw = data.keywords[idx];
+  document.querySelectorAll('.keyword-chip').forEach((c,i) => c.classList.toggle('active', i===idx));
+  const panel = document.getElementById('keyword-detail');
+  panel.innerHTML = `<strong>${kw.word}</strong><br>${kw.explanation}`;
+  panel.classList.add('visible');
+}
+
+function renderStructure(data) {
+  const list = document.getElementById('structure-list');
+  list.innerHTML = data.structure.map(s =>
+    `<div class="structure-item">
+      <div class="structure-section">${s.section}</div>
+      <div class="structure-content">${s.content}</div>
+    </div>`
+  ).join('');
+
+  const pl = document.getElementById('plain-list');
+  pl.innerHTML = data.plain_language.map(p =>
+    `<div style="background:var(--bg); border-radius:var(--radius-sm); padding:14px 16px; border-left:3px solid #E0A800;">
+      <div style="font-size:12px; font-weight:700; color:#8A4E00; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">원문</div>
+      <div style="font-size:13px; color:var(--text-muted); font-style:italic; margin-bottom:10px; line-height:1.6;">"${p.original}"</div>
+      <div style="font-size:12px; font-weight:700; color:var(--success); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">쉬운 설명</div>
+      <div style="font-size:14px; color:var(--text); line-height:1.65;">${p.plain}</div>
+    </div>`
+  ).join('');
+}
+
+function renderQA(data) {
+  document.getElementById('qa-history').innerHTML =
+    '<div class="qa-bubble ai">안녕하세요! 논문에 대해 궁금한 점을 자유롭게 질문하세요. 논문 내용을 바탕으로 답변드립니다.</div>';
+
+  const sq = document.getElementById('suggested-questions');
+  sq.innerHTML = (data.suggested_questions || []).map(q =>
+    `<button class="sq-btn" onclick="document.getElementById('qa-input').value='${q}'; sendQuestion()">💬 ${q}</button>`
+  ).join('');
+}
+
+function renderMicro(data) {
+  const raw = data.micro_text || '';
+  const html = raw.replace(/\[\[([^\]:]+):([^\]]+)\]\]/g, (_, term, exp) =>
+    `<span class="term" onclick="showTermPanel('${term}','${exp.replace(/'/g,"&#39;")}')">${term}</span>`
+  );
+  document.getElementById('micro-text').innerHTML = html;
+  document.getElementById('micro-term-panel').classList.remove('visible');
+}
+
+function showTermPanel(term, explanation) {
+  const panel = document.getElementById('micro-term-panel');
+  panel.innerHTML = `<strong>${term}</strong>란?<br><br>${explanation}`;
+  panel.classList.add('visible');
+}
+
+// ── Q&A 전송 ─────────────────────────────────────────────────────────────
+async function sendQuestion() {
+  const input = document.getElementById('qa-input');
+  const q = input.value.trim();
+  if (!q) return;
+
+  const history = document.getElementById('qa-history');
+  history.innerHTML += `<div class="qa-bubble user">${q}</div>`;
+  history.innerHTML += `<div class="qa-bubble loading" id="loading-bubble"><span class="loading-dots">답변 생성 중</span></div>`;
+  input.value = '';
+  document.getElementById('qa-send-btn').disabled = true;
+  history.scrollTop = history.scrollHeight;
+
+  let answer;
+  try {
+    if (apiKey) {
+      answer = await callClaudeQA(q);
+    } else {
+      await new Promise(r => setTimeout(r, 900));
+      answer = getMockQAAnswer(q);
+    }
+  } catch(e) {
+    answer = getMockQAAnswer(q);
+  }
+
+  document.getElementById('loading-bubble').remove();
+  history.innerHTML += `<div class="qa-bubble ai">${answer}</div>`;
+  history.scrollTop = history.scrollHeight;
+  document.getElementById('qa-send-btn').disabled = false;
+}
+
+async function callClaudeQA(question) {
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 600,
+      system: `당신은 논문 분석 어시스턴트입니다. 아래 논문 내용을 바탕으로 사용자 질문에 한국어로 친절하고 명확하게 답변하세요. 논문에 없는 내용은 추론임을 밝히세요.\n\n논문:\n${currentPaperText.slice(0,2000)}`,
+      messages: [{ role: 'user', content: question }]
+    })
+  });
+  const json = await resp.json();
+  return json.content[0].text;
+}
+
+function getMockQAAnswer(q) {
+  const lower = q.toLowerCase();
+  if (lower.includes('목적') || lower.includes('왜')) return "이 논문의 주요 목적은 기존 방법론의 한계를 극복하고 새로운 접근법을 제시하는 것입니다. 논문에 따르면 기존 기술 대비 유의미한 성능 향상을 달성하였습니다. (API 키를 설정하면 실제 논문 내용 기반 답변을 받을 수 있습니다.)";
+  if (lower.includes('방법') || lower.includes('어떻게')) return "연구 방법과 관련하여, 논문에서는 데이터 수집 → 전처리 → 모델 적용 → 평가의 단계적 접근을 취했습니다. 구체적인 실험 설정은 본문 Methods 섹션에 상세히 기술되어 있습니다.";
+  if (lower.includes('결과') || lower.includes('성능')) return "주요 결과로는 기존 기준선 대비 유의미한 수치 향상을 보고하였습니다. 특히 핵심 평가 지표에서 통계적으로 유의한 차이를 확인하였습니다.";
+  return "좋은 질문입니다! 이 논문의 맥락에서 해당 내용은 핵심적인 부분입니다. API 키를 설정하시면 논문 텍스트를 직접 분석하여 더 정확하고 구체적인 답변을 드릴 수 있습니다.";
+}
+
+// ── 탭 전환 ──────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  else document.querySelector(`[onclick="switchTab('${name}', this)"]`)?.classList.add('active');
+  document.getElementById('panel-' + name)?.classList.add('active');
+}
+</script>
+</body>
+</html>
