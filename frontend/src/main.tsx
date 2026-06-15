@@ -38,6 +38,9 @@ interface Paper {
 interface Highlight {
   id: string;
   text: string;
+  // 원문(paper.text) 내 문자 오프셋. 옛 데이터 호환을 위해 선택적.
+  start?: number;
+  end?: number;
 }
 
 interface Term {
@@ -160,6 +163,36 @@ function searchableText(paper: Paper, note: ReviewNote): string {
 // 규칙 기반 용어 힌트: 대문자 약어(2자 이상), 외래어/영문 토큰을 후보로 본다.
 // 기획서 8-2 단서대로 정확도는 제한적이며 보조 안내일 뿐이다.
 const HINT_PATTERN = /\b([A-Z]{2,}|[A-Z][a-z]+(?:-[A-Z][a-z]+)*)\b/g;
+
+// 겹치는 오프셋 구간을 정렬·병합한다(하이라이트 렌더용).
+function mergeRanges(ranges: [number, number][]): [number, number][] {
+  const sorted = ranges.filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
+  const out: [number, number][] = [];
+  for (const [s, e] of sorted) {
+    const last = out[out.length - 1];
+    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
+    else out.push([s, e]);
+  }
+  return out;
+}
+
+// 텍스트 슬라이스에 옅은 밑줄 힌트를 적용한 노드 배열. base는 원문 내 절대 오프셋(키 고유화용).
+function renderHints(text: string, base: number): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(HINT_PATTERN)) {
+    const start = m.index ?? 0;
+    if (start > last) parts.push(text.slice(last, start));
+    parts.push(
+      <span key={`hint-${base + start}`} className="border-b border-dotted border-action/60">
+        {m[0]}
+      </span>,
+    );
+    last = start + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // 리뷰 노트 내보내기 (FR-11) — 작성된 9영역을 통합. 토글과 무관하게 내용이 있는
@@ -366,8 +399,15 @@ function App() {
   const [pending, setPending] = useState(0); // 서버에 아직 반영 안 된(dirty) 노트 수
   const [search, setSearch] = useState('');
   const [activeTags, setActiveTags] = useState<string[]>([]);
-  const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [selection, setSelection] = useState<{
+    text: string;
+    start: number;
+    end: number;
+    x: number;
+    y: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const paper = activeId ? library[activeId] ?? null : null;
   const note = (activeId ? notes[activeId] : undefined) ?? EMPTY_NOTE;
@@ -691,19 +731,41 @@ function App() {
   }
 
   // ── 본문 드래그 → 하이라이트 / 용어 추가 (FS-02, FS-03) ──
+  // 컨테이너(pre-wrap, DOM 텍스트 == paper.text)에서 (node,offset) 지점의 문자 오프셋을 구한다.
+  function offsetWithin(container: HTMLElement, node: Node, offset: number): number {
+    const r = document.createRange();
+    r.setStart(container, 0);
+    r.setEnd(node, offset);
+    return r.toString().length;
+  }
+
   function onTextMouseUp(e: React.MouseEvent) {
     const sel = window.getSelection();
-    const text = sel?.toString().trim() ?? '';
-    if (text.length === 0) {
+    const text = sel?.toString() ?? '';
+    const container = bodyRef.current;
+    if (!sel || sel.isCollapsed || text.trim().length === 0 || sel.rangeCount === 0 || !container) {
       setSelection(null);
       return;
     }
-    setSelection({ text, x: e.clientX, y: e.clientY });
+    const range = sel.getRangeAt(0);
+    if (!container.contains(range.commonAncestorContainer)) {
+      setSelection(null);
+      return;
+    }
+    const a = offsetWithin(container, range.startContainer, range.startOffset);
+    const b = offsetWithin(container, range.endContainer, range.endOffset);
+    setSelection({ text, start: Math.min(a, b), end: Math.max(a, b), x: e.clientX, y: e.clientY });
   }
 
   function addHighlight() {
     if (!selection) return;
-    setNote((n) => ({ ...n, highlights: [...n.highlights, { id: uid(), text: selection.text }] }));
+    setNote((n) => ({
+      ...n,
+      highlights: [
+        ...n.highlights,
+        { id: uid(), text: selection.text, start: selection.start, end: selection.end },
+      ],
+    }));
     setSelection(null);
     window.getSelection()?.removeAllRanges();
   }
@@ -721,30 +783,32 @@ function App() {
     window.getSelection()?.removeAllRanges();
   }
 
-  // 본문에 옅은 밑줄 힌트 적용 (코어, 규칙 기반)
-  const hintedBody = useMemo(() => {
-    if (!paper) return null;
-    return paper.text.split('\n\n').map((para, pi) => {
-      const parts: React.ReactNode[] = [];
-      let last = 0;
-      for (const m of para.matchAll(HINT_PATTERN)) {
-        const start = m.index ?? 0;
-        if (start > last) parts.push(para.slice(last, start));
-        parts.push(
-          <span key={`${pi}-${start}`} className="border-b border-dotted border-action/60">
-            {m[0]}
-          </span>,
-        );
-        last = start + m[0].length;
-      }
-      if (last < para.length) parts.push(para.slice(last));
-      return (
-        <p key={pi} className="mb-4">
-          {parts}
-        </p>
+  // 원문 렌더: 하이라이트 구간은 <mark>로, 그 외 구간은 밑줄 힌트를 적용. (pre-wrap 컨테이너)
+  const bodyNodes = useMemo(() => {
+    const text = paper?.text ?? '';
+    if (!text) return null;
+    const ranges = mergeRanges(
+      (note.highlights ?? [])
+        .filter(
+          (h): h is Highlight & { start: number; end: number } =>
+            typeof h.start === 'number' && typeof h.end === 'number' && h.end <= text.length,
+        )
+        .map((h) => [h.start, h.end] as [number, number]),
+    );
+    const nodes: React.ReactNode[] = [];
+    let cursor = 0;
+    for (const [s, e] of ranges) {
+      if (s > cursor) nodes.push(...renderHints(text.slice(cursor, s), cursor));
+      nodes.push(
+        <mark key={`hl-${s}`} className="rounded bg-yellow-200/70 text-ink">
+          {text.slice(s, e)}
+        </mark>,
       );
-    });
-  }, [paper]);
+      cursor = e;
+    }
+    if (cursor < text.length) nodes.push(...renderHints(text.slice(cursor), cursor));
+    return nodes;
+  }, [paper?.text, note.highlights]);
 
   const updateNote = <K extends keyof ReviewNote>(key: K, value: ReviewNote[K]) =>
     setNote((n) => ({ ...n, [key]: value }));
@@ -952,12 +1016,13 @@ function App() {
                 옅은 밑줄은 전문용어 추정 힌트(보조)입니다.
               </p>
               <div
-                className="select-text text-sm leading-7 text-neutral-800"
+                ref={bodyRef}
+                className="select-text whitespace-pre-wrap text-sm leading-7 text-neutral-800"
                 onMouseUp={onTextMouseUp}
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 {paper.text ? (
-                  hintedBody
+                  bodyNodes
                 ) : (
                   <p className="text-xs text-muted">원문을 불러오는 중이거나 본문이 없습니다.</p>
                 )}
