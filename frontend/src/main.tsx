@@ -22,6 +22,7 @@ const API_BASE = 'http://127.0.0.1:8000/api';
 type Source = 'user' | 'ai_draft';
 
 interface Paper {
+  id: string;
   title: string;
   authors: string;
   link: string;
@@ -73,7 +74,7 @@ const TEMPLATE_QUESTIONS = [
   { key: 'q5', label: '내가 이해한 핵심은 무엇인가?' },
 ] as const;
 
-const SAMPLE_PAPER: Paper = {
+const SAMPLE_PAPER: Omit<Paper, 'id'> = {
   title: 'Attention Is All You Need',
   authors: 'Vaswani et al. (2017)',
   link: 'https://arxiv.org/abs/1706.03762',
@@ -96,6 +97,9 @@ const EMPTY_NOTE: ReviewNote = {
 };
 
 const uid = () => Math.random().toString(36).slice(2, 9);
+
+// localStorage 키: 논문 라이브러리 + 논문별 노트 + 현재 활성 논문을 한 묶음으로 보관
+const STORAGE_KEY = 'paperlens:v1';
 
 // 규칙 기반 용어 힌트: 대문자 약어(2자 이상), 외래어/영문 토큰을 후보로 본다.
 // 기획서 8-2 단서대로 정확도는 제한적이며 보조 안내일 뿐이다.
@@ -156,29 +160,78 @@ function SectionCard({
 // 앱
 // ──────────────────────────────────────────────────────────────────────────
 function App() {
-  const [paper, setPaper] = useState<Paper | null>(null);
-  const [note, setNote] = useState<ReviewNote>(EMPTY_NOTE);
+  // 논문별로 보관: library[id] = 논문, notes[id] = 그 논문의 리뷰 노트
+  const [library, setLibrary] = useState<Record<string, Paper>>({});
+  const [notes, setNotes] = useState<Record<string, ReviewNote>>({});
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [doiInput, setDoiInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── 자동 저장 (5초 debounce, NFR-05) ──
+  const paper = activeId ? library[activeId] ?? null : null;
+  const note = (activeId ? notes[activeId] : undefined) ?? EMPTY_NOTE;
+
+  // ── 시작 시 localStorage에서 복원 (#1) ──
   useEffect(() => {
-    if (!paper) return;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const data = JSON.parse(raw) as {
+          library?: Record<string, Paper>;
+          notes?: Record<string, ReviewNote>;
+          activeId?: string | null;
+        };
+        if (data.library) setLibrary(data.library);
+        if (data.notes) setNotes(data.notes);
+        if (data.activeId) setActiveId(data.activeId);
+        if (data.library && Object.keys(data.library).length > 0) setSavedAt('복원됨');
+      }
+    } catch {
+      /* 손상된 데이터는 무시하고 새로 시작 */
+    }
+    setLoaded(true);
+  }, []);
+
+  // ── 자동 저장 (5초 debounce, NFR-05) ──
+  // 복원이 끝난 뒤에만 저장해 초기 빈 상태가 기존 데이터를 덮어쓰지 않게 한다.
+  useEffect(() => {
+    if (!loaded) return;
     const handle = window.setTimeout(() => {
-      window.localStorage.setItem('paperlens:note', JSON.stringify({ paper, note }));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ library, notes, activeId }));
       setSavedAt(new Date().toLocaleTimeString('ko-KR'));
     }, 5000);
     return () => window.clearTimeout(handle);
-  }, [paper, note]);
+  }, [library, notes, activeId, loaded]);
 
-  // ── 논문 등록 ──
-  function registerPaper(next: Paper) {
-    setPaper(next);
-    setNote(EMPTY_NOTE);
+  // ── 활성 논문의 노트만 갱신 ──
+  function setNote(updater: (n: ReviewNote) => ReviewNote) {
+    if (!activeId) return;
+    setNotes((all) => ({ ...all, [activeId]: updater(all[activeId] ?? EMPTY_NOTE) }));
+  }
+
+  // ── 논문 등록 (#2: 논문별로 누적, 덮어쓰지 않음) ──
+  function registerPaper(next: Omit<Paper, 'id'>) {
+    const id = uid();
+    setLibrary((l) => ({ ...l, [id]: { ...next, id } }));
+    setNotes((n) => ({ ...n, [id]: EMPTY_NOTE }));
+    setActiveId(id);
+    setSelection(null);
     setSavedAt(null);
+  }
+
+  function openPaper(id: string) {
+    setActiveId(id);
+    setSelection(null);
+    setSavedAt('복원됨');
+  }
+
+  function deletePaper(id: string) {
+    setLibrary(({ [id]: _omitP, ...rest }) => rest);
+    setNotes(({ [id]: _omitN, ...rest }) => rest);
+    setActiveId((cur) => (cur === id ? null : cur));
   }
 
   async function handleFile(file: File) {
@@ -339,17 +392,35 @@ function App() {
           </button>
 
           <p className="mb-3 mt-7 text-xs font-semibold uppercase tracking-wide text-muted">
-            내 리뷰 노트
+            내 리뷰 노트 ({Object.keys(library).length})
           </p>
-          {paper ? (
-            <div className="rounded border border-line bg-white px-3 py-3 text-sm">
-              <div className="line-clamp-1 font-medium">{paper.title}</div>
-              <span className="mt-1 inline-block rounded bg-paper px-2 py-0.5 text-xs text-muted">
-                작성중
-              </span>
-            </div>
-          ) : (
+          {Object.keys(library).length === 0 ? (
             <p className="text-xs text-muted">아직 등록된 논문이 없습니다.</p>
+          ) : (
+            <ul className="space-y-2">
+              {Object.values(library).map((p) => (
+                <li
+                  key={p.id}
+                  className={`flex items-center gap-1 rounded border bg-white px-2 py-2 text-sm ${
+                    p.id === activeId ? 'border-action' : 'border-line'
+                  }`}
+                >
+                  <button className="min-w-0 flex-1 text-left" onClick={() => openPaper(p.id)}>
+                    <div className="line-clamp-1 font-medium">{p.title}</div>
+                    <span className="mt-1 inline-block rounded bg-paper px-2 py-0.5 text-xs text-muted">
+                      작성중
+                    </span>
+                  </button>
+                  <button
+                    className="shrink-0 p-1 text-muted hover:text-ink"
+                    title="노트 삭제"
+                    onClick={() => deletePaper(p.id)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </aside>
 
