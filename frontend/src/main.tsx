@@ -789,11 +789,25 @@ function App() {
     if (!text) return null;
     const ranges = mergeRanges(
       (note.highlights ?? [])
-        .filter(
-          (h): h is Highlight & { start: number; end: number } =>
-            typeof h.start === 'number' && typeof h.end === 'number' && h.end <= text.length,
-        )
-        .map((h) => [h.start, h.end] as [number, number]),
+        .map((h): [number, number] | null => {
+          // 오프셋이 있으면 그대로 사용
+          if (
+            typeof h.start === 'number' &&
+            typeof h.end === 'number' &&
+            h.start >= 0 &&
+            h.end <= text.length &&
+            h.end > h.start
+          ) {
+            return [h.start, h.end];
+          }
+          // 오프셋 없는(옛) 하이라이트: 본문에서 텍스트를 찾아 위치 추정(첫 출현)
+          if (h.text) {
+            const idx = text.indexOf(h.text);
+            if (idx >= 0) return [idx, idx + h.text.length];
+          }
+          return null;
+        })
+        .filter((r): r is [number, number] => r !== null),
     );
     const nodes: React.ReactNode[] = [];
     let cursor = 0;
