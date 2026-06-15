@@ -18,6 +18,7 @@
 - 프론트는 API를 **상대경로 `/api`**로 호출합니다(개발 시 Vite 프록시, 배포 시 동일 오리진). 다른 오리진의 백엔드를 가리키려면 `frontend/.env`의 `VITE_API_BASE_URL`로 오버라이드합니다.
 - 노트 목록(`GET /api/notes`)은 **본문(text)을 제외한 메타데이터**만 반환하고, 논문을 열 때 단건 조회(`GET /api/notes/{id}`)로 원문을 **지연 로드**합니다(목록 페이로드 경량화). 서버 시작은 FastAPI `lifespan`으로 DB를 초기화합니다.
 - AI 기능은 기획서 방향대로 미연동 상태를 전제로 두고, 코어 작성 UX가 먼저 동작하도록 구성했습니다.
+- 프론트엔드를 **GitHub Pages**에, 백엔드를 **Render**에 분리 배포하여 웹에서 동작을 확인했습니다(라이브). 자세한 구성은 아래 "배포" 섹션을 참고하세요.
 - 개발 서버 실행과 빌드/컴파일 검증을 완료했습니다. 검증 절차는 아래 "검증" 섹션을 참고하세요. (상세 실행 로그는 로컬 `testing.md`에 기록하며, 이 파일은 버전 관리에서 제외됩니다.)
 
 ## 프로젝트 구조
@@ -36,6 +37,8 @@
 - `backend/app/main.py`: FastAPI 앱 엔트리포인트
 - `backend/app/routers/papers.py`: PDF 텍스트 추출 API
 - `backend/requirements.txt`: 백엔드 Python 의존성
+- `.github/workflows/deploy-pages.yml`: 프론트엔드를 빌드해 GitHub Pages로 배포하는 워크플로
+- `render.yaml`: 백엔드(FastAPI)를 Render에 배포하는 Blueprint
 - `.gitignore`: 의존성, 빌드 산출물, 환경 변수 제외 설정
 
 ## 프론트엔드 실행
@@ -71,6 +74,23 @@ curl http://127.0.0.1:8000/api/health
 ```json
 {"status":"ok"}
 ```
+
+## 배포
+
+프론트엔드와 백엔드를 분리 배포합니다.
+
+- **프론트엔드 — GitHub Pages**: https://nebu-25.github.io/Paperlens_26.06/
+  - `.github/workflows/deploy-pages.yml`가 `main` push 시 `frontend`를 빌드해 Pages에 올립니다.
+  - 서브경로 배포를 위해 `frontend/vite.config.ts`에 `base: '/Paperlens_26.06/'`를 설정했습니다.
+  - 백엔드 주소는 코드에 박지 않고, 저장소 변수 `VITE_API_BASE_URL`(Settings → Secrets and variables → Actions → Variables)로 빌드 시 주입합니다(끝에 `/api`는 붙이지 않음 — 코드가 자동 추가).
+  - Pages 소스는 **"GitHub Actions"**여야 합니다(Settings → Pages). 재배포 시 자동 생성되는 *"pages build and deployment"(Jekyll)* 워크플로는 실행하지 마세요 — README가 앱을 덮어씁니다.
+- **백엔드 — Render**: 저장소 루트 `render.yaml`(Blueprint)로 배포합니다(무료 플랜).
+  - start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, health: `/api/health`.
+  - 무료 플랜은 미사용 시 잠들어, 첫 요청에서 30~50초 콜드스타트가 발생할 수 있습니다.
+  - SQLite(`paperlens.db`)는 무료 플랜에 영속 디스크가 없어 재배포/재시작 시 초기화될 수 있습니다.
+  - CORS: `backend/app/config.py` 기본값과 Render 환경변수 `CORS_ORIGINS`에 Pages 오리진을 포함합니다.
+
+> 로컬 개발에서는 프론트가 상대경로 `/api`를 Vite 프록시로 백엔드(`127.0.0.1:8000`)에 전달하므로 `VITE_API_BASE_URL` 없이 동작합니다. 위 변수는 Pages처럼 백엔드가 다른 오리진일 때만 필요합니다.
 
 ## 검증
 
