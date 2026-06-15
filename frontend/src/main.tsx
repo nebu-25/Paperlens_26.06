@@ -394,6 +394,7 @@ function App() {
   const [doiInput, setDoiInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [doiLoading, setDoiLoading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null); // 업로드 가드 오류/안내
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
   const [pending, setPending] = useState(0); // 서버에 아직 반영 안 된(dirty) 노트 수
@@ -483,7 +484,8 @@ function App() {
       const data = (await res.json()) as { paper: Paper };
       setLibrary((lib) => {
         const cur = lib[id];
-        if (!cur || cur.text) return lib; // 이미 본문이 있으면 그대로(편집 중 덮어쓰기 방지)
+        // 이미 본문이 있거나 받은 본문이 비었으면(스캔본 등) 갱신하지 않는다(무한 재요청 방지)
+        if (!cur || cur.text || !data.paper.text) return lib;
         return { ...lib, [id]: { ...cur, text: data.paper.text } };
       });
     } catch {
@@ -667,18 +669,36 @@ function App() {
   }
 
   async function handleFile(file: File) {
+    setUploadMsg(null);
+    // 클라이언트 사전 검사(50MB) — 대용량을 업로드하기 전에 차단
+    if (file.size > 50 * 1024 * 1024) {
+      setUploadMsg('PDF 파일이 너무 큽니다. 최대 50MB까지 업로드할 수 있습니다.');
+      return;
+    }
     setUploading(true);
     try {
       const form = new FormData();
       form.append('file', file);
       const res = await fetch(`${API_BASE}/papers/extract-text`, { method: 'POST', body: form });
-      if (!res.ok) throw new Error('extract failed');
+      if (!res.ok) {
+        // 입력 가드 위반(크기/암호/페이지 등): 서버 메시지를 표시하고 등록하지 않는다
+        let detail = '업로드를 처리할 수 없습니다.';
+        try {
+          detail = ((await res.json()) as { detail?: string }).detail ?? detail;
+        } catch {
+          /* ignore */
+        }
+        setUploadMsg(detail);
+        return;
+      }
       const data: {
         filename: string;
         text: string;
         title?: string;
         authors?: string;
         link?: string;
+        scanned?: boolean;
+        notice?: string | null;
       } = await res.json();
       const unknownTitle = !data.title || data.title === '(제목 없음)';
       const unknownAuthors = !data.authors || data.authors === '저자 미상';
@@ -686,15 +706,17 @@ function App() {
         title: unknownTitle ? file.name.replace(/\.pdf$/i, '') : (data.title ?? ''),
         authors: unknownAuthors ? '' : (data.authors ?? ''),
         link: data.link || '',
-        text: data.text || '(본문 텍스트가 비어 있습니다)',
+        text: data.text || '',
       });
+      // 스캔(이미지) PDF면 OCR 안내를 노출(등록은 진행 — 노트는 직접 작성 가능)
+      if (data.scanned && data.notice) setUploadMsg(data.notice);
     } catch {
-      // 백엔드 미연동 시에도 등록 흐름은 끊기지 않게 폴백
+      // 네트워크/백엔드 미연결: 등록 흐름은 끊기지 않게 폴백
       registerPaper({
         title: file.name.replace(/\.pdf$/i, ''),
-        authors: '저자 미상',
+        authors: '',
         link: '',
-        text: '[백엔드 미연동] PDF 텍스트 추출 API에 연결되지 않아 본문을 표시할 수 없습니다. 백엔드(uvicorn)를 실행하면 추출됩니다. 그동안에도 노트 작성 기능은 정상 동작합니다.',
+        text: '[백엔드 미연결] PDF 텍스트 추출 API에 연결되지 않아 본문을 표시할 수 없습니다. 백엔드(uvicorn)를 실행하면 추출됩니다. 그동안에도 노트 작성은 정상 동작합니다.',
       });
     } finally {
       setUploading(false);
@@ -704,6 +726,7 @@ function App() {
   async function registerByDoi() {
     const query = doiInput.trim();
     if (!query) return;
+    setUploadMsg(null);
     setDoiLoading(true);
     try {
       const res = await fetch(`${API_BASE}/papers/metadata?doi=${encodeURIComponent(query)}`);
@@ -940,6 +963,19 @@ function App() {
           >
             샘플 논문으로 체험하기
           </button>
+
+          {uploadMsg && (
+            <div className="mt-3 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+              <span className="flex-1">{uploadMsg}</span>
+              <button
+                className="shrink-0 leading-none hover:text-amber-950"
+                title="닫기"
+                onClick={() => setUploadMsg(null)}
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           <p className="mb-3 mt-7 text-xs font-semibold uppercase tracking-wide text-muted">
             내 리뷰 노트 ({visiblePapers.length}/{Object.keys(library).length})
