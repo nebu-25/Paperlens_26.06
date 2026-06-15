@@ -343,6 +343,7 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [doiInput, setDoiInput] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [doiLoading, setDoiLoading] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -395,6 +396,12 @@ function App() {
   const setSectionSummaries = (next: SectionSummary[]) =>
     setNote((n) => ({ ...n, sectionSummaries: next }));
 
+  // 활성 논문의 메타정보(제목/저자/링크) 직접 편집 — 자동 추출 실패 시 보완
+  function updatePaper(patch: Partial<Omit<Paper, 'id'>>) {
+    if (!activeId) return;
+    setLibrary((lib) => (lib[activeId] ? { ...lib, [activeId]: { ...lib[activeId], ...patch } } : lib));
+  }
+
   // ── 논문 등록 (#2: 논문별로 누적, 덮어쓰지 않음) ──
   function registerPaper(next: Omit<Paper, 'id'>) {
     const id = uid();
@@ -425,11 +432,19 @@ function App() {
       form.append('file', file);
       const res = await fetch(`${API_BASE}/papers/extract-text`, { method: 'POST', body: form });
       if (!res.ok) throw new Error('extract failed');
-      const data: { filename: string; text: string } = await res.json();
+      const data: {
+        filename: string;
+        text: string;
+        title?: string;
+        authors?: string;
+        link?: string;
+      } = await res.json();
+      const unknownTitle = !data.title || data.title === '(제목 없음)';
+      const unknownAuthors = !data.authors || data.authors === '저자 미상';
       registerPaper({
-        title: file.name.replace(/\.pdf$/i, ''),
-        authors: '저자 미상 (메타정보 추출 예정)',
-        link: '',
+        title: unknownTitle ? file.name.replace(/\.pdf$/i, '') : data.title,
+        authors: unknownAuthors ? '' : data.authors,
+        link: data.link || '',
         text: data.text || '(본문 텍스트가 비어 있습니다)',
       });
     } catch {
@@ -445,15 +460,33 @@ function App() {
     }
   }
 
-  function registerByDoi() {
-    if (!doiInput.trim()) return;
-    registerPaper({
-      title: doiInput.trim(),
-      authors: '저자 미상 (CrossRef 연동 예정)',
-      link: doiInput.trim(),
-      text: '[DOI/URL 등록] 메타정보 추출(CrossRef)·본문 가져오기는 백엔드 연동 후 채워집니다. 지금도 우측 리뷰 노트는 직접 작성할 수 있습니다.',
-    });
-    setDoiInput('');
+  async function registerByDoi() {
+    const query = doiInput.trim();
+    if (!query) return;
+    setDoiLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/papers/metadata?doi=${encodeURIComponent(query)}`);
+      if (!res.ok) throw new Error('metadata failed');
+      const data: { title: string; authors: string; link: string } = await res.json();
+      registerPaper({
+        title: data.title === '(제목 없음)' ? '' : data.title,
+        authors: data.authors === '저자 미상' ? '' : data.authors,
+        link: data.link,
+        text: '[DOI 등록] CrossRef에서 메타정보를 가져왔습니다. 본문 가져오기는 후속 작업이며, 지금도 리뷰 노트는 직접 작성할 수 있습니다.',
+      });
+      setDoiInput('');
+    } catch {
+      // 비DOI 입력·미연동·조회 실패 시에도 등록 흐름이 끊기지 않게 폴백
+      registerPaper({
+        title: query,
+        authors: '',
+        link: query,
+        text: '[DOI/URL 등록] 메타정보를 가져오지 못했습니다(비DOI이거나 CrossRef 미연동). 제목·저자를 직접 입력하고 리뷰 노트를 작성할 수 있습니다.',
+      });
+      setDoiInput('');
+    } finally {
+      setDoiLoading(false);
+    }
   }
 
   // ── 본문 드래그 → 하이라이트 / 용어 추가 (FS-02, FS-03) ──
@@ -593,17 +626,19 @@ function App() {
           </button>
           <div className="mt-3 flex gap-2">
             <input
-              className="w-full rounded border border-line bg-white px-3 py-2 text-sm outline-none focus:border-action"
+              className="w-full rounded border border-line bg-white px-3 py-2 text-sm outline-none focus:border-action disabled:opacity-60"
               placeholder="DOI 또는 URL"
               value={doiInput}
+              disabled={doiLoading}
               onChange={(e) => setDoiInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && registerByDoi()}
             />
             <button
-              className="shrink-0 rounded border border-line px-3 text-sm"
+              className="shrink-0 rounded border border-line px-3 text-sm disabled:opacity-60"
               onClick={registerByDoi}
+              disabled={doiLoading}
             >
-              등록
+              {doiLoading ? '조회 중…' : '등록'}
             </button>
           </div>
           <button
@@ -681,22 +716,40 @@ function App() {
               </div>
 
               <div className="space-y-4">
-                {/* 논문 메타정보 (영역 1) */}
+                {/* 논문 메타정보 (영역 1) — 자동 추출 결과를 직접 수정 가능 */}
                 <SectionCard title="논문 메타정보" icon={<FileText size={16} />}>
-                  <dl className="space-y-1 text-sm">
-                    <div className="flex gap-2">
-                      <dt className="w-12 shrink-0 text-muted">제목</dt>
-                      <dd>{paper.title}</dd>
-                    </div>
-                    <div className="flex gap-2">
-                      <dt className="w-12 shrink-0 text-muted">저자</dt>
-                      <dd>{paper.authors}</dd>
-                    </div>
-                    <div className="flex gap-2">
-                      <dt className="w-12 shrink-0 text-muted">링크</dt>
-                      <dd className="break-all text-action">{paper.link || '—'}</dd>
-                    </div>
-                  </dl>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <span className="w-10 shrink-0 text-xs text-muted">제목</span>
+                      <input
+                        className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
+                        placeholder="논문 제목을 입력하세요"
+                        value={paper.title}
+                        onChange={(e) => updatePaper({ title: e.target.value })}
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <span className="w-10 shrink-0 text-xs text-muted">저자</span>
+                      <input
+                        className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
+                        placeholder="저자를 입력하세요 (쉼표로 구분)"
+                        value={paper.authors}
+                        onChange={(e) => updatePaper({ authors: e.target.value })}
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <span className="w-10 shrink-0 text-xs text-muted">링크</span>
+                      <input
+                        className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
+                        placeholder="DOI 또는 URL"
+                        value={paper.link}
+                        onChange={(e) => updatePaper({ link: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                  <p className="mt-2 text-xs text-muted">
+                    자동 추출이 비어 있으면 직접 입력하세요. (KCI 등 CrossRef 미등재 논문)
+                  </p>
                 </SectionCard>
 
                 {/* ── 읽으며 캡처: 원문을 읽으며 바로 남기는 영역 ── */}
