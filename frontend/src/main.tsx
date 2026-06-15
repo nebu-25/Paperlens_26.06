@@ -18,8 +18,9 @@ import {
 } from 'lucide-react';
 import './styles.css';
 
-// 백엔드 PDF 텍스트 추출 API. 미연동/실패 시에도 코어는 동작한다.
-const API_BASE = 'http://127.0.0.1:8000/api';
+// API 베이스 경로. 기본은 상대경로 '/api'(개발 시 Vite 프록시, 배포 시 동일 오리진/리버스 프록시).
+// 다른 오리진의 백엔드를 직접 가리키려면 VITE_API_BASE_URL로 오버라이드한다(예: http://127.0.0.1:8000).
+const API_BASE = `${import.meta.env.VITE_API_BASE_URL ?? ''}/api`;
 
 // ──────────────────────────────────────────────────────────────────────────
 // 타입
