@@ -363,6 +363,7 @@ function App() {
   const [doiLoading, setDoiLoading] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
+  const [pending, setPending] = useState(0); // 서버에 아직 반영 안 된(dirty) 노트 수
   const [search, setSearch] = useState('');
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -379,6 +380,12 @@ function App() {
   libraryRef.current = library;
   notesRef.current = notes;
   activeIdRef.current = activeId;
+
+  const markDirty = useCallback((id: string | null) => {
+    if (!id) return;
+    dirtyRef.current.add(id);
+    setPending(dirtyRef.current.size);
+  }, []);
 
   // dirty 노트를 전부 서버에 PUT + localStorage 미러. 전환해도 직전 노트가 유실되지 않는다.
   const flush = useCallback(async () => {
@@ -417,6 +424,7 @@ function App() {
         failed = true;
       }
     }
+    setPending(dirtyRef.current.size);
     const time = new Date().toLocaleTimeString('ko-KR');
     if (failed) {
       setOnline(false);
@@ -470,6 +478,9 @@ function App() {
               notes?: Record<string, ReviewNote>;
             };
             apply(data.library ?? {}, data.notes ?? {});
+            // 서버에 미반영일 수 있는 로컬 노트를 재동기 대상으로 표시(서버 복구 시 push)
+            for (const id of Object.keys(data.library ?? {})) dirtyRef.current.add(id);
+            setPending(dirtyRef.current.size);
             if (Object.keys(data.library ?? {}).length > 0) setSavedAt('로컬 복원(오프라인)');
           }
         } catch {
@@ -494,6 +505,21 @@ function App() {
     }, 5000);
     return () => window.clearTimeout(handle);
   }, [library, notes, activeId, loaded, flush]);
+
+  // ── 오프라인→온라인 재동기화: 미동기 노트가 있으면 주기적으로/온라인 복귀 시 재시도 ──
+  // (서버 다운은 navigator.onLine으로 감지 안 되므로 폴링이 필요하다)
+  useEffect(() => {
+    if (!loaded) return;
+    const retry = () => {
+      if (dirtyRef.current.size > 0) void flush();
+    };
+    const interval = window.setInterval(retry, 10000);
+    window.addEventListener('online', retry);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('online', retry);
+    };
+  }, [loaded, flush]);
 
   // ── 탭 닫기·숨김 시 강제 저장(유실 방지): keepalive PUT + 로컬 미러 ──
   useEffect(() => {
@@ -536,7 +562,7 @@ function App() {
   // ── 활성 논문의 노트만 갱신 ──
   function setNote(updater: (n: ReviewNote) => ReviewNote) {
     if (!activeId) return;
-    dirtyRef.current.add(activeId);
+    markDirty(activeId);
     setNotes((all) => ({ ...all, [activeId]: updater(all[activeId] ?? EMPTY_NOTE) }));
   }
 
@@ -548,7 +574,7 @@ function App() {
   // 활성 논문의 메타정보(제목/저자/링크) 직접 편집 — 자동 추출 실패 시 보완
   function updatePaper(patch: Partial<Omit<Paper, 'id'>>) {
     if (!activeId) return;
-    dirtyRef.current.add(activeId);
+    markDirty(activeId);
     setLibrary((lib) => (lib[activeId] ? { ...lib, [activeId]: { ...lib[activeId], ...patch } } : lib));
   }
 
@@ -558,7 +584,7 @@ function App() {
     setLibrary((l) => ({ ...l, [id]: { ...next, id } }));
     // 논문마다 자체 섹션 배열을 갖도록 새 노트를 생성한다.
     setNotes((n) => ({ ...n, [id]: { ...EMPTY_NOTE, sectionSummaries: defaultSectionSummaries() } }));
-    dirtyRef.current.add(id);
+    markDirty(id);
     setActiveId(id);
     setSelection(null);
     setSavedAt(null);
@@ -572,6 +598,7 @@ function App() {
 
   function deletePaper(id: string) {
     dirtyRef.current.delete(id);
+    setPending(dirtyRef.current.size);
     setLibrary(({ [id]: _omitP, ...rest }) => rest);
     setNotes(({ [id]: _omitN, ...rest }) => rest);
     setActiveId((cur) => (cur === id ? null : cur));
@@ -920,10 +947,13 @@ function App() {
                   className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
                     online ? 'bg-emerald-50 text-emerald-700' : 'bg-paper text-muted'
                   }`}
-                  title={online ? '서버에 저장됩니다' : '서버 미연결 — 로컬에만 저장됩니다'}
+                  title={
+                    online ? '서버에 저장됩니다' : '서버 미연결 — 로컬에만 저장됩니다(복구 시 자동 동기화)'
+                  }
                 >
                   <Save size={12} />
                   {savedAt ?? '자동 저장 대기'}
+                  {pending > 0 && ` · 미동기 ${pending}건`}
                 </span>
               </div>
 
