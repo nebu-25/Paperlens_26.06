@@ -7,9 +7,12 @@ __pycache__/
 .env.*
 !.env.example
 
+# 기획서 파일 개발 시 참조에만 사용
+/paper_review_service_plan_v3*.1.md
 # 테스팅 기록: 로컬에서 계속 업데이트하되 버전 관리는 제외
 /testing*.md
-
+# 발표 자료: 배포와 관계없는 파일
+/presentation_content*.md
 # SQLite 데이터베이스 파일
 *.db
 *.db-journal
