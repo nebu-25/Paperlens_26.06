@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS papers (
   title      TEXT NOT NULL DEFAULT '',
   authors    TEXT NOT NULL DEFAULT '',
   link       TEXT NOT NULL DEFAULT '',
+  source_key TEXT NOT NULL DEFAULT '',
   text       TEXT NOT NULL DEFAULT '',
   note       TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL,
@@ -41,6 +42,9 @@ def init_db() -> None:
     conn = _connect()
     try:
         conn.executescript(_SCHEMA)
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(papers)").fetchall()}
+        if "source_key" not in columns:
+            conn.execute("ALTER TABLE papers ADD COLUMN source_key TEXT NOT NULL DEFAULT ''")
         conn.commit()
     finally:
         conn.close()
@@ -52,6 +56,7 @@ def _paper_of(row: sqlite3.Row, *, include_text: bool = True) -> dict[str, objec
         "title": row["title"],
         "authors": row["authors"],
         "link": row["link"],
+        "sourceKey": row["source_key"],
         # 목록 응답에서는 본문(text)을 제외해 페이로드를 줄인다. 단건 조회 시 지연 로드.
         "text": row["text"] if include_text else "",
     }
@@ -90,10 +95,11 @@ def upsert_note(note_id: str, paper: dict[str, object], note: dict[str, object])
     try:
         conn.execute(
             """
-            INSERT INTO papers (id, title, authors, link, text, note, created_at, updated_at)
-            VALUES (:id, :title, :authors, :link, :text, :note, :now, :now)
+            INSERT INTO papers (id, title, authors, link, source_key, text, note, created_at, updated_at)
+            VALUES (:id, :title, :authors, :link, :source_key, :text, :note, :now, :now)
             ON CONFLICT(id) DO UPDATE SET
               title=excluded.title, authors=excluded.authors, link=excluded.link,
+              source_key=excluded.source_key,
               -- 빈 text(지연 로드 전 상태)가 들어오면 기존 본문을 덮어쓰지 않는다
               text=CASE WHEN excluded.text = '' THEN papers.text ELSE excluded.text END,
               note=excluded.note, updated_at=excluded.updated_at
@@ -103,6 +109,7 @@ def upsert_note(note_id: str, paper: dict[str, object], note: dict[str, object])
                 "title": str(paper.get("title", "")),
                 "authors": str(paper.get("authors", "")),
                 "link": str(paper.get("link", "")),
+                "source_key": str(paper.get("sourceKey", "")),
                 "text": str(paper.get("text", "")),
                 "note": note_json,
                 "now": now,

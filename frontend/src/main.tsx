@@ -32,12 +32,16 @@ interface Paper {
   title: string;
   authors: string;
   link: string;
+  sourceKey?: string;
   text: string;
 }
+
+type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'orange';
 
 interface Highlight {
   id: string;
   text: string;
+  color?: HighlightColor;
   // 원문(paper.text) 내 문자 오프셋. 옛 데이터 호환을 위해 선택적.
   start?: number;
   end?: number;
@@ -98,6 +102,53 @@ const TEMPLATE_QUESTIONS = [
   { key: 'q5', label: '내가 이해한 핵심은 무엇인가?' },
 ] as const;
 
+const HIGHLIGHT_COLORS: {
+  value: HighlightColor;
+  label: string;
+  markClass: string;
+  listClass: string;
+  swatchClass: string;
+}[] = [
+  {
+    value: 'yellow',
+    label: '노랑',
+    markClass: 'bg-yellow-200/70',
+    listClass: 'bg-yellow-50',
+    swatchClass: 'bg-yellow-300',
+  },
+  {
+    value: 'green',
+    label: '초록',
+    markClass: 'bg-emerald-200/70',
+    listClass: 'bg-emerald-50',
+    swatchClass: 'bg-emerald-300',
+  },
+  {
+    value: 'blue',
+    label: '파랑',
+    markClass: 'bg-sky-200/70',
+    listClass: 'bg-sky-50',
+    swatchClass: 'bg-sky-300',
+  },
+  {
+    value: 'pink',
+    label: '분홍',
+    markClass: 'bg-rose-200/70',
+    listClass: 'bg-rose-50',
+    swatchClass: 'bg-rose-300',
+  },
+  {
+    value: 'orange',
+    label: '주황',
+    markClass: 'bg-orange-200/70',
+    listClass: 'bg-orange-50',
+    swatchClass: 'bg-orange-300',
+  },
+];
+
+const highlightStyle = (color?: HighlightColor) =>
+  HIGHLIGHT_COLORS.find((item) => item.value === color) ?? HIGHLIGHT_COLORS[0];
+
 const SAMPLE_PAPER: Omit<Paper, 'id'> = {
   title: 'Attention Is All You Need',
   authors: 'Vaswani et al. (2017)',
@@ -110,6 +161,7 @@ Multi-Head Attention allows the model to jointly attend to information from diff
 };
 
 const uid = () => Math.random().toString(36).slice(2, 9);
+const fileSourceKey = (file: File) => `file:${file.name}:${file.size}:${file.lastModified}`;
 
 const defaultSectionSummaries = (): SectionSummary[] =>
   SUMMARY_SECTIONS.map((section) => ({
@@ -163,18 +215,6 @@ function searchableText(paper: Paper, note: ReviewNote): string {
 // 규칙 기반 용어 힌트: 대문자 약어(2자 이상), 외래어/영문 토큰을 후보로 본다.
 // 기획서 8-2 단서대로 정확도는 제한적이며 보조 안내일 뿐이다.
 const HINT_PATTERN = /\b([A-Z]{2,}|[A-Z][a-z]+(?:-[A-Z][a-z]+)*)\b/g;
-
-// 겹치는 오프셋 구간을 정렬·병합한다(하이라이트 렌더용).
-function mergeRanges(ranges: [number, number][]): [number, number][] {
-  const sorted = ranges.filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
-  const out: [number, number][] = [];
-  for (const [s, e] of sorted) {
-    const last = out[out.length - 1];
-    if (last && s <= last[1]) last[1] = Math.max(last[1], e);
-    else out.push([s, e]);
-  }
-  return out;
-}
 
 // 텍스트 슬라이스에 옅은 밑줄 힌트를 적용한 노드 배열. base는 원문 내 절대 오프셋(키 고유화용).
 function renderHints(text: string, base: number): React.ReactNode[] {
@@ -400,6 +440,8 @@ function App() {
   const [pending, setPending] = useState(0); // 서버에 아직 반영 안 된(dirty) 노트 수
   const [search, setSearch] = useState('');
   const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [mobilePanel, setMobilePanel] = useState<'paper' | 'review'>('paper');
+  const [highlightColor, setHighlightColor] = useState<HighlightColor>('yellow');
   const [selection, setSelection] = useState<{
     text: string;
     start: number;
@@ -649,12 +691,14 @@ function App() {
     setNotes((n) => ({ ...n, [id]: { ...EMPTY_NOTE, sectionSummaries: defaultSectionSummaries() } }));
     markDirty(id);
     setActiveId(id);
+    setMobilePanel('paper');
     setSelection(null);
     setSavedAt(null);
   }
 
   function openPaper(id: string) {
     setActiveId(id);
+    setMobilePanel('paper');
     setSelection(null);
     setSavedAt('복원됨');
   }
@@ -662,14 +706,30 @@ function App() {
   function deletePaper(id: string) {
     dirtyRef.current.delete(id);
     setPending(dirtyRef.current.size);
-    setLibrary(({ [id]: _omitP, ...rest }) => rest);
-    setNotes(({ [id]: _omitN, ...rest }) => rest);
+    setLibrary((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setNotes((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     setActiveId((cur) => (cur === id ? null : cur));
     fetch(`${API_BASE}/notes/${id}`, { method: 'DELETE' }).catch(() => {});
   }
 
   async function handleFile(file: File) {
     setUploadMsg(null);
+    const sourceKey = fileSourceKey(file);
+    const duplicate = Object.values(libraryRef.current).find((p) => p.sourceKey === sourceKey);
+    if (duplicate) {
+      setActiveId(duplicate.id);
+      setMobilePanel('paper');
+      setUploadMsg('이미 등록된 PDF입니다. 기존 리뷰 노트를 열었습니다.');
+      return;
+    }
     // 클라이언트 사전 검사(50MB) — 대용량을 업로드하기 전에 차단
     if (file.size > 50 * 1024 * 1024) {
       setUploadMsg('PDF 파일이 너무 큽니다. 최대 50MB까지 업로드할 수 있습니다.');
@@ -706,6 +766,7 @@ function App() {
         title: unknownTitle ? file.name.replace(/\.pdf$/i, '') : (data.title ?? ''),
         authors: unknownAuthors ? '' : (data.authors ?? ''),
         link: data.link || '',
+        sourceKey,
         text: data.text || '',
       });
       // 스캔(이미지) PDF면 OCR 안내를 노출(등록은 진행 — 노트는 직접 작성 가능)
@@ -716,6 +777,7 @@ function App() {
         title: file.name.replace(/\.pdf$/i, ''),
         authors: '',
         link: '',
+        sourceKey,
         text: '[백엔드 미연결] PDF 텍스트 추출 API에 연결되지 않아 본문을 표시할 수 없습니다. 백엔드(uvicorn)를 실행하면 추출됩니다. 그동안에도 노트 작성은 정상 동작합니다.',
       });
     } finally {
@@ -786,7 +848,13 @@ function App() {
       ...n,
       highlights: [
         ...n.highlights,
-        { id: uid(), text: selection.text, start: selection.start, end: selection.end },
+        {
+          id: uid(),
+          text: selection.text,
+          color: highlightColor,
+          start: selection.start,
+          end: selection.end,
+        },
       ],
     }));
     setSelection(null);
@@ -810,9 +878,9 @@ function App() {
   const bodyNodes = useMemo(() => {
     const text = paper?.text ?? '';
     if (!text) return null;
-    const ranges = mergeRanges(
+    const ranges = (
       (note.highlights ?? [])
-        .map((h): [number, number] | null => {
+        .map((h): { start: number; end: number; color?: HighlightColor } | null => {
           // 오프셋이 있으면 그대로 사용
           if (
             typeof h.start === 'number' &&
@@ -821,23 +889,28 @@ function App() {
             h.end <= text.length &&
             h.end > h.start
           ) {
-            return [h.start, h.end];
+            return { start: h.start, end: h.end, color: h.color };
           }
           // 오프셋 없는(옛) 하이라이트: 본문에서 텍스트를 찾아 위치 추정(첫 출현)
           if (h.text) {
             const idx = text.indexOf(h.text);
-            if (idx >= 0) return [idx, idx + h.text.length];
+            if (idx >= 0) return { start: idx, end: idx + h.text.length, color: h.color };
           }
           return null;
         })
-        .filter((r): r is [number, number] => r !== null),
+        .filter((r): r is { start: number; end: number; color?: HighlightColor } => r !== null)
+        .sort((a, b) => a.start - b.start)
     );
     const nodes: React.ReactNode[] = [];
     let cursor = 0;
-    for (const [s, e] of ranges) {
+    for (const range of ranges) {
+      const s = Math.max(range.start, cursor);
+      const e = range.end;
+      if (e <= cursor) continue;
       if (s > cursor) nodes.push(...renderHints(text.slice(cursor, s), cursor));
+      const color = highlightStyle(range.color);
       nodes.push(
-        <mark key={`hl-${s}`} className="rounded bg-yellow-200/70 text-ink">
+        <mark key={`hl-${s}-${e}`} className={`rounded ${color.markClass} text-ink`}>
           {text.slice(s, e)}
         </mark>,
       );
@@ -903,62 +976,63 @@ function App() {
   }
 
   return (
-    <main className="min-h-screen bg-paper text-ink" onMouseDown={() => setSelection(null)}>
-      <header className="flex items-center justify-between border-b border-line bg-panel px-6 py-3">
+    <main className="flex h-screen flex-col overflow-hidden bg-paper text-ink" onMouseDown={() => setSelection(null)}>
+      <header className="shrink-0 border-b border-line bg-panel px-4 py-4 sm:px-6">
         <div className="flex items-center gap-3">
-          <div className="grid size-8 place-items-center rounded bg-action text-white">
-            <FileText size={18} />
+          <div className="grid size-11 place-items-center rounded bg-action text-white">
+            <FileText size={23} />
           </div>
-          <div>
-            <h1 className="text-lg font-semibold leading-none">PaperLens</h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold leading-none tracking-normal sm:text-3xl">PaperLens</h1>
             <p className="text-xs text-muted">사용자 주도 논문 리뷰 노트</p>
           </div>
+          <span className="hidden rounded bg-paper px-3 py-1 text-xs text-muted sm:inline-flex">
+            코어 MVP · AI 보조 준비 중
+          </span>
         </div>
-        <span className="rounded bg-paper px-3 py-1 text-xs text-muted">
-          코어 MVP · AI 보조 준비 중
-        </span>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr]">
-        {/* ── 사이드바 ── */}
-        <aside className="border-b border-line bg-panel p-5 lg:border-b-0 lg:border-r">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
-            새 논문 등록
-          </p>
+      <section className="shrink-0 border-b border-line bg-panel/95 px-4 py-4 sm:px-6">
+        <div className="mx-auto max-w-3xl">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">새 논문 등록</p>
           <input
             ref={fileInputRef}
             type="file"
             accept="application/pdf"
             className="hidden"
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.currentTarget.value = '';
+              if (file) void handleFile(file);
+            }}
           />
+          <div className="grid gap-2 sm:grid-cols-[180px_minmax(0,1fr)_86px]">
           <button
-            className="flex w-full items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+            className="flex items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
           >
             <Upload size={16} />
-            {uploading ? '추출 중…' : 'PDF 업로드'}
+            {uploading ? '추출 중...' : 'PDF 업로드'}
           </button>
-          <div className="mt-3 flex gap-2">
             <input
-              className="w-full rounded border border-line bg-white px-3 py-2 text-sm outline-none focus:border-action disabled:opacity-60"
-              placeholder="DOI 또는 URL"
+              className="min-w-0 rounded border border-line bg-white px-4 py-3 text-sm outline-none focus:border-action disabled:opacity-60"
+              placeholder="DOI 또는 URL을 입력하세요"
               value={doiInput}
               disabled={doiLoading}
               onChange={(e) => setDoiInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && registerByDoi()}
             />
             <button
-              className="shrink-0 rounded border border-line px-3 text-sm disabled:opacity-60"
+              className="rounded border border-line bg-white px-3 text-sm font-medium disabled:opacity-60"
               onClick={registerByDoi}
               disabled={doiLoading}
             >
-              {doiLoading ? '조회 중…' : '등록'}
+              {doiLoading ? '조회 중...' : '등록'}
             </button>
           </div>
           <button
-            className="mt-3 w-full rounded border border-dashed border-line px-3 py-2 text-xs text-muted"
+            className="mt-2 rounded border border-dashed border-line bg-white px-3 py-2 text-xs text-muted hover:border-action hover:text-action"
             onClick={() => registerPaper(SAMPLE_PAPER)}
           >
             샘플 논문으로 체험하기
@@ -976,8 +1050,13 @@ function App() {
               </button>
             </div>
           )}
+        </div>
+      </section>
 
-          <p className="mb-3 mt-7 text-xs font-semibold uppercase tracking-wide text-muted">
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_1fr]">
+        {/* ── 사이드바 ── */}
+        <aside className="max-h-56 overflow-y-auto border-b border-line bg-panel p-4 lg:max-h-none lg:border-b-0 lg:border-r lg:p-5">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
             내 리뷰 노트 ({visiblePapers.length}/{Object.keys(library).length})
           </p>
           {Object.keys(library).length === 0 ? (
@@ -1054,50 +1133,85 @@ function App() {
         {!paper ? (
           <EmptyState />
         ) : (
-          <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
+          <section className="flex min-h-0 flex-col">
+            <div className="flex shrink-0 border-b border-line bg-panel p-2 xl:hidden">
+              <button
+                type="button"
+                className={`flex-1 rounded px-3 py-2 text-sm font-semibold ${
+                  mobilePanel === 'paper' ? 'bg-action text-white' : 'text-muted'
+                }`}
+                onClick={() => setMobilePanel('paper')}
+              >
+                논문
+              </button>
+              <button
+                type="button"
+                className={`flex-1 rounded px-3 py-2 text-sm font-semibold ${
+                  mobilePanel === 'review' ? 'bg-action text-white' : 'text-muted'
+                }`}
+                onClick={() => setMobilePanel('review')}
+              >
+                리뷰
+              </button>
+            </div>
+            <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
             {/* 원문 패널 */}
-            <article className="border-b border-line bg-white p-6 xl:border-b-0 xl:border-r">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-base font-semibold">원문 패널</h2>
-                <span className="rounded bg-paper px-2 py-1 text-xs text-muted">AI 없이 동작</span>
+            <article
+              className={`min-h-0 flex-col border-b border-line bg-white xl:flex xl:border-b-0 xl:border-r ${
+                mobilePanel === 'paper' ? 'flex' : 'hidden'
+              }`}
+            >
+              <div className="shrink-0 p-5 pb-3 sm:p-6 sm:pb-3">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-base font-semibold">원문 패널</h2>
+                  <span className="rounded bg-paper px-2 py-1 text-xs text-muted">AI 없이 동작</span>
+                </div>
+                <p className="text-xs text-muted">
+                  문장을 드래그하면 <b>하이라이트</b> 또는 <b>용어 사전 추가</b>를 할 수 있습니다.
+                  옅은 밑줄은 전문용어 추정 힌트(보조)입니다.
+                </p>
               </div>
-              <p className="mb-4 text-xs text-muted">
-                문장을 드래그하면 <b>하이라이트</b> 또는 <b>용어 사전 추가</b>를 할 수 있습니다.
-                옅은 밑줄은 전문용어 추정 힌트(보조)입니다.
-              </p>
               <div
                 ref={bodyRef}
-                className="select-text whitespace-pre-wrap text-sm leading-7 text-neutral-800"
+                className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm leading-7 text-neutral-800 sm:px-6"
                 onMouseUp={onTextMouseUp}
                 onMouseDown={(e) => e.stopPropagation()}
               >
-                {paper.text ? (
-                  bodyNodes
-                ) : (
-                  <p className="text-xs text-muted">원문을 불러오는 중이거나 본문이 없습니다.</p>
-                )}
+                <div className="select-text whitespace-pre-wrap">
+                  {paper.text ? (
+                    bodyNodes
+                  ) : (
+                    <p className="text-xs text-muted">원문을 불러오는 중이거나 본문이 없습니다.</p>
+                  )}
+                </div>
               </div>
             </article>
 
             {/* 리뷰 노트 패널 (9영역) */}
-            <article className="bg-paper p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-base font-semibold">리뷰 노트</h2>
-                <span
-                  className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
-                    online ? 'bg-emerald-50 text-emerald-700' : 'bg-paper text-muted'
-                  }`}
-                  title={
-                    online ? '서버에 저장됩니다' : '서버 미연결 — 로컬에만 저장됩니다(복구 시 자동 동기화)'
-                  }
-                >
-                  <Save size={12} />
-                  {savedAt ?? '자동 저장 대기'}
-                  {pending > 0 && ` · 미동기 ${pending}건`}
-                </span>
+            <article
+              className={`min-h-0 flex-col bg-paper xl:flex ${
+                mobilePanel === 'review' ? 'flex' : 'hidden'
+              }`}
+            >
+              <div className="shrink-0 p-5 pb-3 sm:p-6 sm:pb-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-base font-semibold">리뷰 노트</h2>
+                  <span
+                    className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
+                      online ? 'bg-emerald-50 text-emerald-700' : 'bg-paper text-muted'
+                    }`}
+                    title={
+                      online ? '서버에 저장됩니다' : '서버 미연결 — 로컬에만 저장됩니다(복구 시 자동 동기화)'
+                    }
+                  >
+                    <Save size={12} />
+                    {savedAt ?? '자동 저장 대기'}
+                    {pending > 0 && ` · 미동기 ${pending}건`}
+                  </span>
+                </div>
               </div>
 
-              <div className="space-y-4">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 sm:px-6">
                 {/* 논문 메타정보 (영역 1) — 자동 추출 결과를 직접 수정 가능 */}
                 <SectionCard title="논문 메타정보" icon={<FileText size={16} />}>
                   <div className="space-y-2">
@@ -1156,7 +1270,9 @@ function App() {
                       {note.highlights.map((h) => (
                         <li
                           key={h.id}
-                          className="flex items-start justify-between gap-2 rounded bg-yellow-50 p-2 text-sm"
+                          className={`flex items-start justify-between gap-2 rounded p-2 text-sm ${
+                            highlightStyle(h.color).listClass
+                          }`}
                         >
                           <span>“{h.text}”</span>
                           <button
@@ -1440,6 +1556,7 @@ function App() {
                 </SectionCard>
               </div>
             </article>
+            </div>
           </section>
         )}
       </div>
@@ -1447,10 +1564,24 @@ function App() {
       {/* 드래그 선택 플로팅 툴바 */}
       {selection && (
         <div
-          className="fixed z-50 flex gap-1 rounded border border-line bg-white p-1 shadow-lg"
+          className="fixed z-50 flex flex-wrap items-center gap-1 rounded border border-line bg-white p-1 shadow-lg"
           style={{ left: selection.x, top: selection.y + 12 }}
           onMouseDown={(e) => e.stopPropagation()}
         >
+          <div className="flex items-center gap-1 border-r border-line pr-1">
+            {HIGHLIGHT_COLORS.map((color) => (
+              <button
+                key={color.value}
+                type="button"
+                className={`size-5 rounded-full border ${
+                  highlightColor === color.value ? 'border-ink ring-2 ring-action/30' : 'border-line'
+                } ${color.swatchClass}`}
+                title={`하이라이트 색상: ${color.label}`}
+                aria-label={`하이라이트 색상 ${color.label}`}
+                onClick={() => setHighlightColor(color.value)}
+              />
+            ))}
+          </div>
           <button
             className="flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-paper"
             onClick={addHighlight}
@@ -1567,16 +1698,32 @@ function QuestionsCard({
 
 function EmptyState() {
   return (
-    <section className="grid place-items-center p-16">
-      <div className="max-w-md text-center">
-        <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full bg-panel text-action">
-          <FileText size={26} />
+    <section className="min-h-0 overflow-y-auto bg-white/50 p-6 sm:p-10">
+      <div className="mx-auto grid min-h-full max-w-5xl place-items-center">
+        <div className="grid w-full gap-8 rounded border border-line bg-panel/90 p-8 shadow-sm md:grid-cols-[1fr_240px] md:items-center">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-action">
+              PaperLens 시작하기
+            </p>
+            <h2 className="mb-3 text-2xl font-bold leading-tight sm:text-3xl">
+              논문을 등록하면 원문과 리뷰 노트가 나란히 열립니다
+            </h2>
+            <p className="max-w-xl text-sm leading-6 text-muted">
+              상단의 PDF 업로드 또는 DOI/URL 입력으로 논문을 추가하세요. 등록 전에는 이 화면에서
+              흐름을 확인하고, 등록 후에는 원문과 리뷰를 독립적으로 스크롤하며 작성할 수 있습니다.
+            </p>
+            <div className="mt-5 grid gap-2 text-sm text-ink sm:grid-cols-3">
+              <div className="rounded border border-line bg-paper px-3 py-2">1. 논문 등록</div>
+              <div className="rounded border border-line bg-paper px-3 py-2">2. 문장 하이라이트</div>
+              <div className="rounded border border-line bg-paper px-3 py-2">3. 리뷰 노트 작성</div>
+            </div>
+          </div>
+          <div className="mx-auto grid size-44 place-items-center rounded-full bg-action/10 text-action">
+            <div className="grid size-32 place-items-center rounded-full bg-white shadow-sm">
+              <FileText size={54} />
+            </div>
+          </div>
         </div>
-        <h2 className="mb-2 text-lg font-semibold">논문을 등록해 리뷰 노트를 시작하세요</h2>
-        <p className="text-sm leading-6 text-muted">
-          PDF 업로드 또는 DOI/URL로 논문을 등록하면 좌측 원문 패널과 우측 리뷰 노트(9영역)가
-          열립니다. AI 보조 없이도 작성·하이라이트·메모가 모두 동작합니다.
-        </p>
       </div>
     </section>
   );

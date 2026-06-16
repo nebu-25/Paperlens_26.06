@@ -10,6 +10,7 @@ class PaperIn(BaseModel):
     title: str = ""
     authors: str = ""
     link: str = ""
+    sourceKey: str = ""
     text: str = ""
 
 
