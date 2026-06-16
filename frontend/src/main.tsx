@@ -37,6 +37,14 @@ interface Paper {
 }
 
 type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'orange';
+type UploadPhase = 'idle' | 'uploading' | 'extracting' | 'metadata' | 'creating';
+type NoticeTone = 'info' | 'warning' | 'error' | 'success';
+
+interface AppNotice {
+  tone: NoticeTone;
+  title: string;
+  message: string;
+}
 
 interface Highlight {
   id: string;
@@ -148,6 +156,34 @@ const HIGHLIGHT_COLORS: {
 
 const highlightStyle = (color?: HighlightColor) =>
   HIGHLIGHT_COLORS.find((item) => item.value === color) ?? HIGHLIGHT_COLORS[0];
+
+const noticeStyle = (tone: NoticeTone) => {
+  switch (tone) {
+    case 'error':
+      return 'border-red-300 bg-red-50 text-red-800';
+    case 'success':
+      return 'border-emerald-300 bg-emerald-50 text-emerald-800';
+    case 'info':
+      return 'border-sky-300 bg-sky-50 text-sky-800';
+    case 'warning':
+    default:
+      return 'border-amber-300 bg-amber-50 text-amber-800';
+  }
+};
+
+const uploadPhaseText: Record<UploadPhase, string> = {
+  idle: '',
+  uploading: '업로드 중',
+  extracting: '텍스트 추출 중',
+  metadata: '메타정보 확인 중',
+  creating: '노트 생성 중',
+};
+
+const needsPdfText = (paper: Paper) =>
+  !paper.text ||
+  paper.text.startsWith('[DOI 등록]') ||
+  paper.text.startsWith('[DOI/URL 등록]') ||
+  paper.text.startsWith('[백엔드 미연결]');
 
 const SAMPLE_PAPER: Omit<Paper, 'id'> = {
   title: 'Attention Is All You Need',
@@ -433,8 +469,10 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [doiInput, setDoiInput] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle');
   const [doiLoading, setDoiLoading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState<string | null>(null); // 업로드 가드 오류/안내
+  const [uploadNotice, setUploadNotice] = useState<AppNotice | null>(null); // 업로드 가드 오류/안내
+  const [uploadOpen, setUploadOpen] = useState(true);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [online, setOnline] = useState(false);
   const [pending, setPending] = useState(0); // 서버에 아직 반영 안 된(dirty) 노트 수
@@ -451,6 +489,7 @@ function App() {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const attachTargetRef = useRef<string | null>(null);
 
   const paper = activeId ? library[activeId] ?? null : null;
   const note = (activeId ? notes[activeId] : undefined) ?? EMPTY_NOTE;
@@ -692,6 +731,7 @@ function App() {
     markDirty(id);
     setActiveId(id);
     setMobilePanel('paper');
+    setUploadOpen(false);
     setSelection(null);
     setSavedAt(null);
   }
@@ -721,24 +761,37 @@ function App() {
   }
 
   async function handleFile(file: File) {
-    setUploadMsg(null);
+    setUploadNotice(null);
     const sourceKey = fileSourceKey(file);
+    const attachTargetId = attachTargetRef.current;
     const duplicate = Object.values(libraryRef.current).find((p) => p.sourceKey === sourceKey);
     if (duplicate) {
+      attachTargetRef.current = null;
       setActiveId(duplicate.id);
       setMobilePanel('paper');
-      setUploadMsg('이미 등록된 PDF입니다. 기존 리뷰 노트를 열었습니다.');
+      setUploadOpen(false);
+      setUploadNotice({
+        tone: 'info',
+        title: '이미 등록된 PDF',
+        message: '새 노트를 만들지 않고 기존 리뷰 노트를 열었습니다.',
+      });
       return;
     }
     // 클라이언트 사전 검사(50MB) — 대용량을 업로드하기 전에 차단
     if (file.size > 50 * 1024 * 1024) {
-      setUploadMsg('PDF 파일이 너무 큽니다. 최대 50MB까지 업로드할 수 있습니다.');
+      setUploadNotice({
+        tone: 'error',
+        title: '파일 크기 초과',
+        message: 'PDF 파일은 최대 50MB까지 업로드할 수 있습니다.',
+      });
       return;
     }
     setUploading(true);
+    setUploadPhase('uploading');
     try {
       const form = new FormData();
       form.append('file', file);
+      setUploadPhase('extracting');
       const res = await fetch(`${API_BASE}/papers/extract-text`, { method: 'POST', body: form });
       if (!res.ok) {
         // 입력 가드 위반(크기/암호/페이지 등): 서버 메시지를 표시하고 등록하지 않는다
@@ -748,9 +801,14 @@ function App() {
         } catch {
           /* ignore */
         }
-        setUploadMsg(detail);
+        setUploadNotice({
+          tone: 'error',
+          title: res.status === 413 ? '업로드 제한 초과' : 'PDF 처리 실패',
+          message: detail,
+        });
         return;
       }
+      setUploadPhase('metadata');
       const data: {
         filename: string;
         text: string;
@@ -762,56 +820,120 @@ function App() {
       } = await res.json();
       const unknownTitle = !data.title || data.title === '(제목 없음)';
       const unknownAuthors = !data.authors || data.authors === '저자 미상';
-      registerPaper({
-        title: unknownTitle ? file.name.replace(/\.pdf$/i, '') : (data.title ?? ''),
-        authors: unknownAuthors ? '' : (data.authors ?? ''),
-        link: data.link || '',
-        sourceKey,
-        text: data.text || '',
-      });
+      setUploadPhase('creating');
+      if (attachTargetId && libraryRef.current[attachTargetId]) {
+        setLibrary((lib) => {
+          const current = lib[attachTargetId];
+          if (!current) return lib;
+          return {
+            ...lib,
+            [attachTargetId]: {
+              ...current,
+              title: current.title || (unknownTitle ? file.name.replace(/\.pdf$/i, '') : (data.title ?? '')),
+              authors: current.authors || (unknownAuthors ? '' : (data.authors ?? '')),
+              link: current.link || data.link || '',
+              sourceKey,
+              text: data.text || current.text,
+            },
+          };
+        });
+        markDirty(attachTargetId);
+        setActiveId(attachTargetId);
+        setMobilePanel('paper');
+        setUploadOpen(false);
+      } else {
+        registerPaper({
+          title: unknownTitle ? file.name.replace(/\.pdf$/i, '') : (data.title ?? ''),
+          authors: unknownAuthors ? '' : (data.authors ?? ''),
+          link: data.link || '',
+          sourceKey,
+          text: data.text || '',
+        });
+      }
       // 스캔(이미지) PDF면 OCR 안내를 노출(등록은 진행 — 노트는 직접 작성 가능)
-      if (data.scanned && data.notice) setUploadMsg(data.notice);
+      if (data.scanned && data.notice) {
+        setUploadNotice({
+          tone: 'warning',
+          title: '스캔 PDF로 보입니다',
+          message: data.notice,
+        });
+      } else {
+        setUploadNotice({
+          tone: 'success',
+          title: attachTargetId ? 'PDF 본문 연결 완료' : 'PDF 등록 완료',
+          message: attachTargetId
+            ? '현재 리뷰 노트에 원문 텍스트를 연결했습니다.'
+            : '원문 텍스트와 메타정보를 반영해 새 리뷰 노트를 만들었습니다.',
+        });
+      }
     } catch {
       // 네트워크/백엔드 미연결: 등록 흐름은 끊기지 않게 폴백
-      registerPaper({
-        title: file.name.replace(/\.pdf$/i, ''),
-        authors: '',
-        link: '',
-        sourceKey,
-        text: '[백엔드 미연결] PDF 텍스트 추출 API에 연결되지 않아 본문을 표시할 수 없습니다. 백엔드(uvicorn)를 실행하면 추출됩니다. 그동안에도 노트 작성은 정상 동작합니다.',
+      if (!attachTargetId) {
+        registerPaper({
+          title: file.name.replace(/\.pdf$/i, ''),
+          authors: '',
+          link: '',
+          sourceKey,
+          text: '[백엔드 미연결] PDF 텍스트 추출 API에 연결되지 않아 본문을 표시할 수 없습니다. 백엔드(uvicorn)를 실행하면 추출됩니다. 그동안에도 노트 작성은 정상 동작합니다.',
+        });
+      }
+      setUploadNotice({
+        tone: 'error',
+        title: '백엔드 연결 실패',
+        message: attachTargetId
+          ? 'PDF 텍스트 추출 서버에 연결하지 못했습니다. 현재 노트는 그대로 유지됩니다.'
+          : 'PDF 텍스트 추출 서버에 연결하지 못했습니다. 노트는 생성했지만 원문은 나중에 다시 연결해야 합니다.',
       });
     } finally {
       setUploading(false);
+      setUploadPhase('idle');
+      attachTargetRef.current = null;
     }
   }
 
   async function registerByDoi() {
     const query = doiInput.trim();
     if (!query) return;
-    setUploadMsg(null);
+    setUploadNotice(null);
     setDoiLoading(true);
+    setUploadPhase('metadata');
     try {
       const res = await fetch(`${API_BASE}/papers/metadata?doi=${encodeURIComponent(query)}`);
       if (!res.ok) throw new Error('metadata failed');
       const data: { title: string; authors: string; link: string } = await res.json();
+      setUploadPhase('creating');
       registerPaper({
         title: data.title === '(제목 없음)' ? '' : data.title,
         authors: data.authors === '저자 미상' ? '' : data.authors,
         link: data.link,
+        sourceKey: `doi:${query}`,
         text: '[DOI 등록] CrossRef에서 메타정보를 가져왔습니다. 본문 가져오기는 후속 작업이며, 지금도 리뷰 노트는 직접 작성할 수 있습니다.',
+      });
+      setUploadNotice({
+        tone: 'info',
+        title: '메타정보 등록 완료',
+        message: '본문 원문은 아직 없습니다. 원문 패널에서 PDF를 연결하면 본문을 읽으며 리뷰할 수 있습니다.',
       });
       setDoiInput('');
     } catch {
       // 비DOI 입력·미연동·조회 실패 시에도 등록 흐름이 끊기지 않게 폴백
+      setUploadPhase('creating');
       registerPaper({
         title: query,
         authors: '',
         link: query,
+        sourceKey: `manual:${query}`,
         text: '[DOI/URL 등록] 메타정보를 가져오지 못했습니다(비DOI이거나 CrossRef 미연동). 제목·저자를 직접 입력하고 리뷰 노트를 작성할 수 있습니다.',
+      });
+      setUploadNotice({
+        tone: 'warning',
+        title: '메타정보 조회 실패',
+        message: 'DOI 또는 URL을 노트로 등록했습니다. 제목·저자와 PDF 본문은 직접 보완할 수 있습니다.',
       });
       setDoiInput('');
     } finally {
       setDoiLoading(false);
+      setUploadPhase('idle');
     }
   }
 
@@ -992,9 +1114,20 @@ function App() {
         </div>
       </header>
 
-      <section className="shrink-0 border-b border-line bg-panel/95 px-4 py-4 sm:px-6">
+      <section className="shrink-0 border-b border-line bg-panel/95 px-4 py-3 sm:px-6 sm:py-4">
         <div className="mx-auto max-w-3xl">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">새 논문 등록</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">새 논문 등록</p>
+            {paper && (
+              <button
+                type="button"
+                className="rounded border border-line bg-white px-2 py-1 text-xs text-muted sm:hidden"
+                onClick={() => setUploadOpen((open) => !open)}
+              >
+                {uploadOpen ? '접기' : '업로드 열기'}
+              </button>
+            )}
+          </div>
           <input
             ref={fileInputRef}
             type="file"
@@ -1006,45 +1139,79 @@ function App() {
               if (file) void handleFile(file);
             }}
           />
-          <div className="grid gap-2 sm:grid-cols-[180px_minmax(0,1fr)_86px]">
-          <button
-            className="flex items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            <Upload size={16} />
-            {uploading ? '추출 중...' : 'PDF 업로드'}
-          </button>
+          <div className={`${paper && !uploadOpen ? 'hidden sm:mt-2' : 'mt-2 grid'} gap-2 sm:grid sm:grid-cols-[180px_minmax(0,1fr)_86px]`}>
+            <button
+              className="flex items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+              onClick={() => {
+                attachTargetRef.current = null;
+                fileInputRef.current?.click();
+              }}
+              disabled={uploading}
+            >
+              <Upload size={16} />
+              {uploading ? uploadPhaseText[uploadPhase] || '처리 중' : 'PDF 업로드'}
+            </button>
             <input
               className="min-w-0 rounded border border-line bg-white px-4 py-3 text-sm outline-none focus:border-action disabled:opacity-60"
               placeholder="DOI 또는 URL을 입력하세요"
               value={doiInput}
-              disabled={doiLoading}
+              disabled={doiLoading || uploading}
               onChange={(e) => setDoiInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && registerByDoi()}
             />
             <button
               className="rounded border border-line bg-white px-3 text-sm font-medium disabled:opacity-60"
               onClick={registerByDoi}
-              disabled={doiLoading}
+              disabled={doiLoading || uploading}
             >
-              {doiLoading ? '조회 중...' : '등록'}
+              {doiLoading ? uploadPhaseText[uploadPhase] || '조회 중' : '등록'}
             </button>
           </div>
-          <button
-            className="mt-2 rounded border border-dashed border-line bg-white px-3 py-2 text-xs text-muted hover:border-action hover:text-action"
-            onClick={() => registerPaper(SAMPLE_PAPER)}
-          >
-            샘플 논문으로 체험하기
-          </button>
+          <div className={paper && !uploadOpen ? 'hidden sm:block' : ''}>
+            <button
+              className="mt-2 rounded border border-dashed border-line bg-white px-3 py-2 text-xs text-muted hover:border-action hover:text-action disabled:opacity-60"
+              onClick={() => registerPaper(SAMPLE_PAPER)}
+              disabled={uploading || doiLoading}
+            >
+              샘플 논문으로 체험하기
+            </button>
+            {(uploading || doiLoading) && (
+              <div className="mt-3 rounded border border-line bg-white px-3 py-2">
+                <div className="mb-1 flex items-center justify-between text-xs text-muted">
+                  <span>{uploadPhaseText[uploadPhase] || '처리 중'}</span>
+                  <span>잠시만 기다려 주세요</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-paper">
+                  <div
+                    className={`h-full rounded-full bg-action transition-all ${
+                      uploadPhase === 'uploading'
+                        ? 'w-1/4'
+                        : uploadPhase === 'extracting'
+                          ? 'w-1/2'
+                          : uploadPhase === 'metadata'
+                            ? 'w-3/4'
+                            : 'w-full'
+                    }`}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
 
-          {uploadMsg && (
-            <div className="mt-3 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
-              <span className="flex-1">{uploadMsg}</span>
+          {uploadNotice && (
+            <div
+              className={`mt-3 flex items-start gap-2 rounded border px-3 py-2 text-xs leading-relaxed ${
+                noticeStyle(uploadNotice.tone)
+              }`}
+            >
+              <span className="flex-1">
+                <b className="block">{uploadNotice.title}</b>
+                {uploadNotice.message}
+              </span>
               <button
-                className="shrink-0 leading-none hover:text-amber-950"
+                className="shrink-0 leading-none hover:text-ink"
                 title="닫기"
-                onClick={() => setUploadMsg(null)}
+                onClick={() => setUploadNotice(null)}
               >
                 ×
               </button>
@@ -1161,7 +1328,7 @@ function App() {
                 mobilePanel === 'paper' ? 'flex' : 'hidden'
               }`}
             >
-              <div className="shrink-0 p-5 pb-3 sm:p-6 sm:pb-3">
+              <div className="sticky top-0 z-10 shrink-0 border-b border-line bg-paper/95 p-5 pb-3 sm:p-6 sm:pb-3">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-base font-semibold">원문 패널</h2>
                   <span className="rounded bg-paper px-2 py-1 text-xs text-muted">AI 없이 동작</span>
@@ -1170,6 +1337,28 @@ function App() {
                   문장을 드래그하면 <b>하이라이트</b> 또는 <b>용어 사전 추가</b>를 할 수 있습니다.
                   옅은 밑줄은 전문용어 추정 힌트(보조)입니다.
                 </p>
+                {needsPdfText(paper) && (
+                  <div className="mt-3 rounded border border-sky-300 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
+                    <div className="mb-2 font-semibold">원문 PDF가 아직 연결되지 않았습니다</div>
+                    <p>
+                      DOI/URL 등록만으로는 본문 텍스트가 없습니다. PDF를 연결하면 현재 리뷰 노트에
+                      원문을 붙여 읽으며 하이라이트할 수 있습니다.
+                    </p>
+                    <button
+                      type="button"
+                      className="mt-3 inline-flex items-center gap-1 rounded bg-action px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                      disabled={uploading}
+                      onClick={() => {
+                        attachTargetRef.current = paper.id;
+                        setUploadOpen(true);
+                        fileInputRef.current?.click();
+                      }}
+                    >
+                      <Upload size={13} />
+                      PDF 본문 연결
+                    </button>
+                  </div>
+                )}
               </div>
               <div
                 ref={bodyRef}
@@ -1193,7 +1382,7 @@ function App() {
                 mobilePanel === 'review' ? 'flex' : 'hidden'
               }`}
             >
-              <div className="shrink-0 p-5 pb-3 sm:p-6 sm:pb-3">
+              <div className="sticky top-0 z-10 shrink-0 border-b border-line bg-paper/95 p-5 pb-3 sm:p-6 sm:pb-3">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-base font-semibold">리뷰 노트</h2>
                   <span
