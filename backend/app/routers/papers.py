@@ -12,6 +12,7 @@ router = APIRouter(prefix="/papers", tags=["papers"])
 
 # DOI 패턴 (Crossref 권장 정규식 기반). DOI 또는 DOI URL 어디에 묻어 있어도 추출한다.
 DOI_PATTERN = re.compile(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+", re.IGNORECASE)
+TRAILING_DOI_CHARS = ".,;:)]}>"
 
 # 입력 가드 (기획서 FS-01)
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50MB
@@ -26,6 +27,33 @@ def _format_authors(authors: list[dict]) -> str:
     return ", ".join(name for name in names if name)
 
 
+def _clean_doi(raw: str) -> str:
+    return raw.strip().rstrip(TRAILING_DOI_CHARS)
+
+
+def _clean_text_line(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _metadata_text(metadata: dict) -> str:
+    return " ".join(str(value) for value in metadata.values() if value)
+
+
+def _unique_tags(values: list[str], *, limit: int = 8) -> list[str]:
+    seen: set[str] = set()
+    tags: list[str] = []
+    for value in values:
+        tag = _clean_text_line(value).strip(" .,/;:")
+        key = tag.casefold()
+        if not tag or key in seen:
+            continue
+        seen.add(key)
+        tags.append(tag)
+        if len(tags) >= limit:
+            break
+    return tags
+
+
 def _crossref_meta(clean_doi: str) -> dict[str, object]:
     """CrossRef에서 메타정보를 조회한다. 실패 시 urllib/JSON 예외를 그대로 던진다."""
     url = f"https://api.crossref.org/works/{urllib.parse.quote(clean_doi)}"
@@ -34,11 +62,146 @@ def _crossref_meta(clean_doi: str) -> dict[str, object]:
         payload = json.loads(response.read().decode("utf-8"))
     message = payload.get("message", {})
     title_list = message.get("title") or []
+    subjects = [str(subject) for subject in message.get("subject") or []]
+    containers = [str(title) for title in message.get("container-title") or []]
     return {
         "doi": clean_doi,
         "title": title_list[0] if title_list else "(제목 없음)",
         "authors": _format_authors(message.get("author") or []) or "저자 미상",
         "link": message.get("URL") or f"https://doi.org/{clean_doi}",
+        "suggested_tags": _unique_tags(subjects + containers),
+    }
+
+
+def _find_doi(text: str, pdf_meta: dict) -> str | None:
+    candidates = [_metadata_text(pdf_meta), text]
+    for candidate in candidates:
+        match = DOI_PATTERN.search(candidate or "")
+        if match:
+            return _clean_doi(match.group(0))
+    return None
+
+
+def _is_metadata_noise(line: str) -> bool:
+    lowered = line.casefold()
+    noise_words = (
+        "abstract",
+        "keywords",
+        "introduction",
+        "doi:",
+        "arxiv:",
+        "copyright",
+        "received",
+        "accepted",
+        "published",
+        "journal",
+        "proceedings",
+        "conference",
+    )
+    return any(word in lowered for word in noise_words)
+
+
+def _looks_like_affiliation(line: str) -> bool:
+    lowered = line.casefold()
+    affiliation_words = (
+        "university",
+        "institute",
+        "department",
+        "school of",
+        "college",
+        "laboratory",
+        "centre",
+        "center",
+        "faculty",
+        "email",
+        "@",
+    )
+    return any(word in lowered for word in affiliation_words)
+
+
+def _first_page_metadata(document) -> dict[str, object]:
+    """첫 페이지 레이아웃에서 제목/저자 후보를 추정한다.
+
+    PDF 내장 metadata가 비어 있거나 논문 제목과 무관한 경우를 보완하기 위한
+    휴리스틱이다. 신뢰도는 CrossRef보다 낮으므로 confidence를 별도로 반환한다.
+    """
+    if document.page_count == 0:
+        return {"title": "", "authors": "", "confidence": "none", "warnings": []}
+
+    page = document[0]
+    page_height = float(page.rect.height)
+    raw = page.get_text("dict")
+    lines: list[dict[str, object]] = []
+    for block in raw.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            text = _clean_text_line(" ".join(span.get("text", "") for span in spans))
+            if len(text) < 4:
+                continue
+            sizes = [float(span.get("size", 0)) for span in spans if span.get("text", "").strip()]
+            if not sizes:
+                continue
+            bbox = line.get("bbox") or [0, 0, 0, 0]
+            lines.append(
+                {
+                    "text": text,
+                    "size": max(sizes),
+                    "y0": float(bbox[1]),
+                    "y1": float(bbox[3]),
+                }
+            )
+
+    top_lines = [
+        line
+        for line in sorted(lines, key=lambda item: (item["y0"], -item["size"]))
+        if float(line["y0"]) <= page_height * 0.55 and not _is_metadata_noise(str(line["text"]))
+    ]
+    if not top_lines:
+        return {"title": "", "authors": "", "confidence": "none", "warnings": []}
+
+    title_seed = max(top_lines, key=lambda item: (float(item["size"]), -float(item["y0"])))
+    title_size = float(title_seed["size"])
+    seed_index = top_lines.index(title_seed)
+    title_parts: list[str] = []
+    title_end = seed_index
+    for index in range(seed_index, min(len(top_lines), seed_index + 5)):
+        line = top_lines[index]
+        text = str(line["text"])
+        if float(line["size"]) < title_size * 0.82 or _looks_like_affiliation(text):
+            break
+        title_parts.append(text)
+        title_end = index
+
+    title = _clean_text_line(" ".join(title_parts))
+    if len(title) > 280:
+        title = title[:280].rsplit(" ", 1)[0]
+
+    author_parts: list[str] = []
+    for line in top_lines[title_end + 1 : title_end + 7]:
+        text = str(line["text"])
+        if _is_metadata_noise(text):
+            break
+        if _looks_like_affiliation(text):
+            continue
+        if len(text) > 220:
+            continue
+        author_parts.append(text)
+        if len(author_parts) >= 2:
+            break
+    authors = _clean_text_line(", ".join(author_parts))
+
+    warnings: list[str] = []
+    if title:
+        warnings.append("CrossRef DOI 매칭 없이 첫 페이지 레이아웃에서 제목 후보를 추정했습니다.")
+    if authors:
+        warnings.append("CrossRef DOI 매칭 없이 첫 페이지 레이아웃에서 저자 후보를 추정했습니다.")
+    return {
+        "title": title,
+        "authors": authors,
+        "confidence": "low" if (title or authors) else "none",
+        "warnings": warnings,
     }
 
 
@@ -78,6 +241,7 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
     try:
         page_text = [page.get_text("text") for page in document]
         pdf_meta = document.metadata or {}
+        layout_meta = _first_page_metadata(document)
     except Exception as exc:  # pragma: no cover - library-specific parse failures
         raise HTTPException(status_code=422, detail="PDF 텍스트를 추출하지 못했습니다.") from exc
 
@@ -85,28 +249,47 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
     # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 OCR이 필요하다(기획서 FS-01).
     scanned = len(text.strip()) == 0
 
-    # 메타정보 추출: ① 본문에서 DOI를 찾아 CrossRef 조회 → ② PDF 내장 메타데이터 → ③ 파일명
+    # 메타정보 추출: ① DOI(CrossRef) → ② 첫 페이지 레이아웃 → ③ PDF 내장 metadata → ④ 파일명
     cross: dict[str, object] | None = None
-    doi_match = DOI_PATTERN.search(text[:8000])
-    if doi_match:
+    metadata_warnings: list[str] = []
+    detected_doi = _find_doi("\n\n".join(page_text[:3]) + "\n\n" + text, pdf_meta)
+    if detected_doi:
         try:
-            cross = _crossref_meta(doi_match.group(0).rstrip("."))
+            cross = _crossref_meta(detected_doi)
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+            metadata_warnings.append("DOI는 찾았지만 CrossRef 메타정보 조회에 실패했습니다.")
             cross = None
 
     pdf_title = (pdf_meta.get("title") or "").strip()
     pdf_author = (pdf_meta.get("author") or "").strip()
     filename_title = (file.filename or "").rsplit(".", 1)[0]
+    layout_title = str(layout_meta.get("title") or "")
+    layout_authors = str(layout_meta.get("authors") or "")
+    if not cross:
+        metadata_warnings.extend(str(item) for item in layout_meta.get("warnings", []))
+
+    title = (cross or {}).get("title") or layout_title or pdf_title or filename_title or "(제목 없음)"
+    authors = (cross or {}).get("authors") or layout_authors or pdf_author or "저자 미상"
+    suggested_tags = (cross or {}).get("suggested_tags") or []
+    metadata_source = (
+        "crossref"
+        if cross
+        else ("layout" if (layout_title or layout_authors) else ("pdf" if (pdf_title or pdf_author) else "none"))
+    )
+    metadata_confidence = "high" if cross else str(layout_meta.get("confidence") or "low")
 
     return {
         "filename": file.filename,
         "page_count": len(page_text),
         "text": text,
-        "title": (cross or {}).get("title") or pdf_title or filename_title or "(제목 없음)",
-        "authors": (cross or {}).get("authors") or pdf_author or "저자 미상",
+        "title": title,
+        "authors": authors,
         "link": (cross or {}).get("link") or "",
-        "doi": (cross or {}).get("doi"),
-        "metadata_source": "crossref" if cross else ("pdf" if (pdf_title or pdf_author) else "none"),
+        "doi": (cross or {}).get("doi") or detected_doi,
+        "suggested_tags": suggested_tags,
+        "metadata_source": metadata_source,
+        "metadata_confidence": metadata_confidence,
+        "metadata_warnings": metadata_warnings,
         "scanned": scanned,
         "notice": (
             "텍스트가 추출되지 않았습니다. 스캔(이미지) PDF로 보이며 OCR이 필요합니다. "
@@ -126,7 +309,7 @@ def metadata(doi: str) -> dict[str, object]:
             status_code=400,
             detail="유효한 DOI를 찾을 수 없습니다. DOI 또는 DOI URL을 입력해 주세요.",
         )
-    clean_doi = match.group(0).rstrip(".")
+    clean_doi = _clean_doi(match.group(0))
 
     try:
         return _crossref_meta(clean_doi)

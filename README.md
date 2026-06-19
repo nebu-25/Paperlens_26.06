@@ -15,6 +15,7 @@
 - 리뷰 노트 패널은 작성 흐름에 맞춰 **읽으며 캡처**(하이라이트·용어·질문·섹션 메모)와 **내 언어로 정리**(한 줄 요약·요약) 두 묶음으로 그룹화했습니다. 섹션별 요약과 5문항 템플릿은 **토글로 택1**(양쪽 데이터 보존), 각 영역은 **접기/펼치기**, 하단 **완성도 체크리스트**로 작성 진행도를 표시합니다.
 - 완성한 리뷰 노트는 **Markdown 다운로드** 또는 **PDF로 저장**(인쇄 대화상자)으로 내보낼 수 있습니다(FR-11). 추가 라이브러리 없이 동작하며, 요약 토글과 무관하게 작성된 섹션별 요약·템플릿을 모두 포함합니다.
 - 논문 메타정보 자동 추출(FR-02): DOI/URL 등록 시 **CrossRef** 조회, PDF 업로드 시 **본문 DOI 탐지 → CrossRef → PDF 내장 메타데이터** 순으로 제목·저자를 채웁니다. CrossRef 미등재(KCI 등)·추출 실패 시에는 메타정보 영역에서 **제목·저자·링크를 직접 편집**할 수 있습니다.
+- PDF 메타정보 추출을 보강했습니다. DOI 탐색 범위를 PDF 내장 metadata와 본문으로 확장하고, CrossRef 응답의 `subject`·`container-title`을 **추천 태그**로 저장합니다. DOI/CrossRef 매칭이 실패하면 첫 페이지 레이아웃(상단 큰 글자 블록과 그 아래 저자 후보)을 휴리스틱으로 분석해 제목·저자 후보를 보완합니다. 추출 결과는 `doi`, `suggestedTags`, `metadataSource`, `metadataConfidence`, `metadataWarnings`로 노트 저장 모델에 함께 보존됩니다.
 - PDF 업로드 입력 가드(FS-01): **50MB·200페이지 초과**와 **암호 보호 PDF**는 오류로 거절하고, **스캔(이미지) PDF**는 텍스트가 없으면 OCR 안내를 표시합니다(등록은 진행, 노트 직접 작성 가능). 같은 PDF 파일은 파일명·크기·수정시간 기반 식별자로 중복 등록을 막고 기존 노트를 엽니다. 오류·안내는 상단 등록 영역의 배너로 노출됩니다.
 - 백엔드는 FastAPI 기반으로, PDF 텍스트 추출(`/api/papers/extract-text`)·CrossRef 메타정보 조회(`/api/papers/metadata`)·리뷰 노트 영속화(`/api/notes` CRUD, SQLite) API를 제공합니다.
 - 프론트는 API를 **상대경로 `/api`**로 호출합니다(개발 시 Vite 프록시, 배포 시 동일 오리진). 다른 오리진의 백엔드를 가리키려면 `frontend/.env`의 `VITE_API_BASE_URL`로 오버라이드합니다.
@@ -55,6 +56,8 @@ npm run dev
 
 ## 백엔드 실행
 
+런타임 서버만 실행할 때는 `requirements.txt`만 설치합니다.
+
 ```bash
 cd backend
 python3 -m venv .venv
@@ -64,6 +67,16 @@ uvicorn app.main:app --reload
 ```
 
 기본 API 주소는 `http://127.0.0.1:8000`입니다.
+
+백엔드 테스트를 작성하거나 실행할 때는 `pyproject.toml`의 dev extra를 설치합니다.
+
+```bash
+cd backend
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+`fastapi.testclient.TestClient`는 FastAPI가 Starlette의 테스트 클라이언트를 편의상 다시 노출하는 API입니다. 현재 FastAPI/Starlette 조합에서는 Starlette `TestClient`가 `httpx2`를 요구하므로, 테스트용 의존성에만 `httpx2`를 둡니다. `httpx2`는 서버 실행에는 필요하지 않으므로 `requirements.txt`에는 추가하지 않습니다.
 
 ## API 확인
 

@@ -10,7 +10,12 @@ class PaperIn(BaseModel):
     title: str = ""
     authors: str = ""
     link: str = ""
+    doi: str = ""
     sourceKey: str = ""
+    suggestedTags: list[str] = Field(default_factory=list)
+    metadataSource: str = ""
+    metadataConfidence: str = ""
+    metadataWarnings: list[str] = Field(default_factory=list)
     text: str = ""
 
 

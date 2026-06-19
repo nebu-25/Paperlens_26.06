@@ -32,7 +32,12 @@ interface Paper {
   title: string;
   authors: string;
   link: string;
+  doi?: string;
   sourceKey?: string;
+  suggestedTags?: string[];
+  metadataSource?: string;
+  metadataConfidence?: string;
+  metadataWarnings?: string[];
   text: string;
 }
 
@@ -238,7 +243,15 @@ function normalizeNote(raw: Partial<ReviewNote>): ReviewNote {
 
 // 지식베이스 검색 대상 텍스트: 메타·태그·작성 내용 전체를 합쳐 소문자로 만든다.
 function searchableText(paper: Paper, note: ReviewNote): string {
-  const parts: string[] = [paper.title, paper.authors, paper.link, (note.tags ?? []).join(' '), note.oneLineSummary];
+  const parts: string[] = [
+    paper.title,
+    paper.authors,
+    paper.link,
+    paper.doi ?? '',
+    (paper.suggestedTags ?? []).join(' '),
+    (note.tags ?? []).join(' '),
+    note.oneLineSummary,
+  ];
   for (const s of note.sectionSummaries ?? []) parts.push(s.section, s.content);
   parts.push(...Object.values(note.template ?? {}));
   for (const t of note.terms ?? []) parts.push(t.term, t.explanation);
@@ -246,6 +259,19 @@ function searchableText(paper: Paper, note: ReviewNote): string {
   for (const h of note.highlights ?? []) parts.push(h.text);
   parts.push(...Object.values(note.memos ?? {}));
   return parts.join(' ').toLowerCase();
+}
+
+function mergeTags(current: string[], suggested: string[] = []): string[] {
+  const seen = new Set(current.map((tag) => tag.trim().toLowerCase()).filter(Boolean));
+  const next = current.filter((tag) => tag.trim());
+  for (const raw of suggested) {
+    const tag = raw.trim();
+    const key = tag.toLowerCase();
+    if (!tag || seen.has(key)) continue;
+    seen.add(key);
+    next.push(tag);
+  }
+  return next;
 }
 
 // 규칙 기반 용어 힌트: 대문자 약어(2자 이상), 외래어/영문 토큰을 후보로 본다.
@@ -723,11 +749,18 @@ function App() {
   }
 
   // ── 논문 등록 (#2: 논문별로 누적, 덮어쓰지 않음) ──
-  function registerPaper(next: Omit<Paper, 'id'>) {
+  function registerPaper(next: Omit<Paper, 'id'>, initialTags: string[] = []) {
     const id = uid();
     setLibrary((l) => ({ ...l, [id]: { ...next, id } }));
     // 논문마다 자체 섹션 배열을 갖도록 새 노트를 생성한다.
-    setNotes((n) => ({ ...n, [id]: { ...EMPTY_NOTE, sectionSummaries: defaultSectionSummaries() } }));
+    setNotes((n) => ({
+      ...n,
+      [id]: {
+        ...EMPTY_NOTE,
+        tags: mergeTags([], initialTags),
+        sectionSummaries: defaultSectionSummaries(),
+      },
+    }));
     markDirty(id);
     setActiveId(id);
     setMobilePanel('paper');
@@ -815,11 +848,17 @@ function App() {
         title?: string;
         authors?: string;
         link?: string;
+        doi?: string;
+        suggested_tags?: string[];
+        metadata_source?: string;
+        metadata_confidence?: string;
+        metadata_warnings?: string[];
         scanned?: boolean;
         notice?: string | null;
       } = await res.json();
       const unknownTitle = !data.title || data.title === '(제목 없음)';
       const unknownAuthors = !data.authors || data.authors === '저자 미상';
+      const suggestedTags = data.suggested_tags ?? [];
       setUploadPhase('creating');
       if (attachTargetId && libraryRef.current[attachTargetId]) {
         setLibrary((lib) => {
@@ -832,10 +871,19 @@ function App() {
               title: current.title || (unknownTitle ? file.name.replace(/\.pdf$/i, '') : (data.title ?? '')),
               authors: current.authors || (unknownAuthors ? '' : (data.authors ?? '')),
               link: current.link || data.link || '',
+              doi: current.doi || data.doi || '',
               sourceKey,
+              suggestedTags: mergeTags(current.suggestedTags ?? [], suggestedTags),
+              metadataSource: data.metadata_source,
+              metadataConfidence: data.metadata_confidence,
+              metadataWarnings: data.metadata_warnings ?? [],
               text: data.text || current.text,
             },
           };
+        });
+        setNotes((all) => {
+          const current = all[attachTargetId] ?? EMPTY_NOTE;
+          return { ...all, [attachTargetId]: { ...current, tags: mergeTags(current.tags ?? [], suggestedTags) } };
         });
         markDirty(attachTargetId);
         setActiveId(attachTargetId);
@@ -846,9 +894,14 @@ function App() {
           title: unknownTitle ? file.name.replace(/\.pdf$/i, '') : (data.title ?? ''),
           authors: unknownAuthors ? '' : (data.authors ?? ''),
           link: data.link || '',
+          doi: data.doi || '',
           sourceKey,
+          suggestedTags,
+          metadataSource: data.metadata_source,
+          metadataConfidence: data.metadata_confidence,
+          metadataWarnings: data.metadata_warnings ?? [],
           text: data.text || '',
-        });
+        }, suggestedTags);
       }
       // 스캔(이미지) PDF면 OCR 안내를 노출(등록은 진행 — 노트는 직접 작성 가능)
       if (data.scanned && data.notice) {
@@ -900,15 +953,27 @@ function App() {
     try {
       const res = await fetch(`${API_BASE}/papers/metadata?doi=${encodeURIComponent(query)}`);
       if (!res.ok) throw new Error('metadata failed');
-      const data: { title: string; authors: string; link: string } = await res.json();
+      const data: {
+        title: string;
+        authors: string;
+        link: string;
+        doi?: string;
+        suggested_tags?: string[];
+      } = await res.json();
+      const suggestedTags = data.suggested_tags ?? [];
       setUploadPhase('creating');
       registerPaper({
         title: data.title === '(제목 없음)' ? '' : data.title,
         authors: data.authors === '저자 미상' ? '' : data.authors,
         link: data.link,
+        doi: data.doi || '',
         sourceKey: `doi:${query}`,
+        suggestedTags,
+        metadataSource: 'crossref',
+        metadataConfidence: 'high',
+        metadataWarnings: [],
         text: '[DOI 등록] CrossRef에서 메타정보를 가져왔습니다. 본문 가져오기는 후속 작업이며, 지금도 리뷰 노트는 직접 작성할 수 있습니다.',
-      });
+      }, suggestedTags);
       setUploadNotice({
         tone: 'info',
         title: '메타정보 등록 완료',
@@ -922,7 +987,12 @@ function App() {
         title: query,
         authors: '',
         link: query,
+        doi: '',
         sourceKey: `manual:${query}`,
+        suggestedTags: [],
+        metadataSource: 'manual',
+        metadataConfidence: 'none',
+        metadataWarnings: [],
         text: '[DOI/URL 등록] 메타정보를 가져오지 못했습니다(비DOI이거나 CrossRef 미연동). 제목·저자를 직접 입력하고 리뷰 노트를 작성할 수 있습니다.',
       });
       setUploadNotice({
