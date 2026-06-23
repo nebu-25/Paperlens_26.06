@@ -25,7 +25,7 @@
 - 로컬 SQLite는 **WAL 저널 모드 + `busy_timeout`(기본 5초, `SQLITE_BUSY_TIMEOUT_MS`로 조정)**으로 연다. 잦은 자동 저장 `PUT`이 동시에 들어와도 읽기가 쓰기를 막지 않고, 잠금 경합 시 즉시 실패하는 대신 재시도해 `database is locked` 오류를 줄입니다(WAL 미지원 파일시스템에서는 안전하게 기존 모드 유지). 배포 환경에서는 `DATABASE_URL`을 설정해 동일 API를 PostgreSQL에 저장할 수 있습니다.
 - 프론트 상태 관리를 정리했습니다. `useReviewStore`에서 하이라이트 렌더링·검색/태그 필터·완성도 체크리스트·저장/동기화 로직을 분리해 `usePaperBodyNodes`, `lib/library`, `lib/reviewProgress`, `useReviewPersistence`로 옮겼습니다. 기존 UI/API 동작은 유지하면서 테스트 가능한 순수 로직을 늘렸습니다.
 - 백엔드 저장소 계층을 분리했습니다. `app.db`는 라우터 호환 facade로 유지하고, 실제 구현은 `repositories/` 아래 `SQLiteNotesRepository`와 `PostgreSQLNotesRepository`로 나눴습니다. 로컬 기본값은 SQLite이고, `DATABASE_URL` 설정 시 PostgreSQL을 자동 선택합니다.
-- PostgreSQL 전환 검증 자산을 추가했습니다. `docker-compose.postgres.yml`은 로컬 PostgreSQL 16 컨테이너를 띄우며, `backend/scripts/smoke_postgres.py`는 repository CRUD를, `backend/scripts/smoke_api.py`는 실행 중인 백엔드 `/api/notes` CRUD를 검증합니다. Docker Desktop 설치 후 재시작이 필요해 실제 compose 실행은 다음 세션에서 진행합니다.
+- PostgreSQL 전환 검증 자산을 추가했습니다. `docker-compose.postgres.yml`로 로컬 PostgreSQL 16 컨테이너를 띄우고, `backend/scripts/smoke_postgres.py` repository CRUD와 `backend/scripts/smoke_api.py` 실행 중 백엔드 `/api/notes` CRUD smoke test를 통과했습니다.
 - AI 기능은 기획서 방향대로 미연동 상태를 전제로 두고, 코어 작성 UX가 먼저 동작하도록 구성했습니다.
 - 프론트엔드를 **GitHub Pages**에, 백엔드를 **Render**에 분리 배포하여 웹에서 동작을 확인했습니다(라이브). 자세한 구성은 아래 "배포" 섹션을 참고하세요.
 - 개발 서버 실행과 빌드/컴파일 검증을 완료했습니다. 검증 절차는 아래 "검증" 섹션을 참고하세요. (상세 실행 로그는 로컬 `testing.md`에 기록하며, 이 파일은 버전 관리에서 제외됩니다.)
@@ -85,6 +85,12 @@ uvicorn app.main:app --reload
 
 ```bash
 docker compose -f docker-compose.postgres.yml up -d
+```
+
+WSL에서 Linux Docker CLI가 Docker Desktop 소켓 권한 문제를 내면 Windows Docker CLI로 같은 Compose 파일을 실행할 수 있습니다.
+
+```bash
+docker.exe compose -f docker-compose.postgres.yml up -d
 ```
 
 그 다음 백엔드에서 `DATABASE_URL`을 설정하고 smoke test와 서버를 실행합니다.
@@ -147,7 +153,7 @@ API_BASE_URL=http://127.0.0.1:8000 python scripts/smoke_api.py
   - start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`, health: `/api/health`.
   - 무료 플랜은 미사용 시 잠들어, 첫 요청에서 30~50초 콜드스타트가 발생할 수 있습니다.
   - 운영 배포에서는 외부 PostgreSQL을 권장합니다. Render 환경변수 `DATABASE_URL`에 연결 문자열을 설정합니다. 비워두면 SQLite로 동작하지만, 무료 플랜에서는 재배포/재시작 시 `paperlens.db`가 초기화될 수 있습니다.
-  - 설정 후 `backend/scripts/smoke_postgres.py`와 `backend/scripts/smoke_api.py`로 저장소/API 연결을 확인합니다.
+  - Render `DATABASE_URL` 설정 후 재배포와 `backend/scripts/smoke_api.py` 배포 API smoke test를 통과했습니다.
   - CORS: `backend/app/config.py` 기본값과 Render 환경변수 `CORS_ORIGINS`에 Pages 오리진을 포함합니다.
 
 > 로컬 개발에서는 프론트가 상대경로 `/api`를 Vite 프록시로 백엔드(`127.0.0.1:8000`)에 전달하므로 `VITE_API_BASE_URL` 없이 동작합니다. 위 변수는 Pages처럼 백엔드가 다른 오리진일 때만 필요합니다.
