@@ -45,6 +45,7 @@ function App() {
     savedAt,
     online,
     pending,
+    syncNotice,
     search,
     activeTags,
     allTags,
@@ -65,6 +66,7 @@ function App() {
     setMobilePanel,
     setHighlightColor,
     setSelection,
+    setSyncNotice,
     setNote,
     setSectionSummaries,
     setTags,
@@ -186,6 +188,8 @@ function App() {
 
           {uploadNotice && (
             <div
+              role={uploadNotice.tone === 'error' ? 'alert' : 'status'}
+              aria-live={uploadNotice.tone === 'error' ? 'assertive' : 'polite'}
               className={`mt-3 flex items-start gap-2 rounded border px-3 py-2 text-xs leading-relaxed ${
                 noticeStyle(uploadNotice.tone)
               }`}
@@ -197,6 +201,7 @@ function App() {
               <button
                 className="shrink-0 leading-none hover:text-ink"
                 title="닫기"
+                aria-label="알림 닫기"
                 onClick={() => setUploadNotice(null)}
               >
                 ×
@@ -270,6 +275,7 @@ function App() {
                   <button
                     className="shrink-0 p-1 text-muted hover:text-ink"
                     title="노트 삭제"
+                    aria-label={`${p.title || '제목 없는 노트'} 삭제`}
                     onClick={() => deletePaper(p.id)}
                   >
                     <Trash2 size={14} />
@@ -372,6 +378,8 @@ function App() {
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-base font-semibold">리뷰 노트</h2>
                   <span
+                    role="status"
+                    aria-live="polite"
                     className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
                       online ? 'bg-emerald-50 text-emerald-700' : 'bg-paper text-muted'
                     }`}
@@ -384,6 +392,29 @@ function App() {
                     {pending > 0 && ` · 미동기 ${pending}건`}
                   </span>
                 </div>
+                {syncNotice && (
+                  <div
+                    role={syncNotice.tone === 'error' || syncNotice.tone === 'warning' ? 'alert' : 'status'}
+                    aria-live={syncNotice.tone === 'error' || syncNotice.tone === 'warning' ? 'assertive' : 'polite'}
+                    className={`mt-3 flex items-start gap-2 rounded border px-3 py-2 text-xs leading-relaxed ${
+                      noticeStyle(syncNotice.tone)
+                    }`}
+                  >
+                    <span className="flex-1">
+                      <b className="block">{syncNotice.title}</b>
+                      {syncNotice.message}
+                    </span>
+                    <button
+                      type="button"
+                      className="shrink-0 leading-none hover:text-ink"
+                      title="닫기"
+                      aria-label="동기화 알림 닫기"
+                      onClick={() => setSyncNotice(null)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 sm:px-6">

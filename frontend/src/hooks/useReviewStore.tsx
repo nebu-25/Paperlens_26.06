@@ -54,7 +54,21 @@ export function useReviewStore() {
   const paper = activeId ? library[activeId] ?? null : null;
   const note = (activeId ? notes[activeId] : undefined) ?? EMPTY_NOTE;
 
-  const { savedAt, setSavedAt, online, pending, libraryRef, markDirty, forgetDirty } =
+  const {
+    savedAt,
+    setSavedAt,
+    online,
+    pending,
+    syncNotice,
+    setSyncNotice,
+    libraryRef,
+    notesRef,
+    activeIdRef,
+    markDirty,
+    forgetDirty,
+    queueDelete,
+    flush,
+  } =
     useReviewPersistence({
       library,
       notes,
@@ -114,18 +128,24 @@ export function useReviewStore() {
 
   function deletePaper(id: string) {
     forgetDirty(id);
-    setLibrary((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-    setNotes((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
+    const nextLibrary = { ...libraryRef.current };
+    const nextNotes = { ...notesRef.current };
+    delete nextLibrary[id];
+    delete nextNotes[id];
+    libraryRef.current = nextLibrary;
+    notesRef.current = nextNotes;
+    if (activeIdRef.current === id) activeIdRef.current = null;
+    queueDelete(id);
+    setLibrary(nextLibrary);
+    setNotes(nextNotes);
     setActiveId((cur) => (cur === id ? null : cur));
-    fetch(`${API_BASE}/notes/${id}`, { method: 'DELETE' }).catch(() => {});
+    setSavedAt('삭제 대기 중');
+    setSyncNotice({
+      tone: 'info',
+      title: '노트 삭제 예약',
+      message: '서버에 삭제 요청을 보냅니다. 연결이 불안정하면 자동으로 다시 시도합니다.',
+    });
+    void flush();
   }
 
   async function handleFile(file: File) {
@@ -477,6 +497,7 @@ export function useReviewStore() {
     savedAt,
     online,
     pending,
+    syncNotice,
     search,
     activeTags,
     allTags,
@@ -499,6 +520,7 @@ export function useReviewStore() {
     setMobilePanel,
     setHighlightColor,
     setSelection,
+    setSyncNotice,
     // 액션
     setNote,
     setSectionSummaries,
