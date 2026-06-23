@@ -116,8 +116,16 @@ curl http://127.0.0.1:8000/api/health
 cd frontend
 npm run lint
 npm run build
+npm test          # Vitest 단위 테스트 (lib 순수 로직)
 
 cd ../backend
 source .venv/bin/activate
 python -m compileall app
+pip install -e ".[dev]"   # 최초 1회: pytest 등 dev 의존성
+pytest                    # papers.py 순수 함수(섹션 분류·DOI 추출 등) 테스트
 ```
+
+### 자동 테스트 (#15)
+
+- **프론트엔드 (Vitest)**: `src/lib/*.test.ts` — `lib/notes`(섹션 자동 분류 매핑·태그 병합·노트 정규화·검색 인덱스), `lib/export`(Markdown/PDF 빌드·HTML 이스케이프·파일명 보호)의 순수 로직을 검증합니다. DOM이 필요 없어 node 환경에서 실행합니다.
+- **백엔드 (pytest)**: `backend/tests/test_papers.py` — DOI 추출/정규화, CrossRef 저자·태그 포맷, **섹션 헤딩 자동 분류**(`_detect_sections`/`_canonical_section`)의 인식·중복 제거·오탐 방지를 검증합니다(네트워크·PyMuPDF 비의존).
