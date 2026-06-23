@@ -168,8 +168,53 @@ def _looks_like_affiliation(line: str) -> bool:
         "faculty",
         "email",
         "@",
+        # 한글 소속(KCI 등): 대학/학과/연구소 등
+        "대학교",
+        "대학",
+        "학과",
+        "연구소",
+        "연구원",
+        "대학원",
+        "병원",
+        "교수",
     )
     return any(word in lowered for word in affiliation_words)
+
+
+# 저자명에 붙는 소속/각주 표식: 기호 + 위첨자 숫자 + 이름에 붙은 일반 숫자(소속 인덱스).
+_FOOTNOTE_MARKS = "*∗⁎⋆†‡§¶"
+_SUPERSCRIPT_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+
+
+def _strip_author_markers(value: str) -> str:
+    """저자 후보 문자열에서 소속/각주 표식(∗ † ‡, 위첨자·인덱스 숫자)을 떼고 구분자를 정리한다."""
+    kept = [
+        ch
+        for ch in value
+        if ch not in _FOOTNOTE_MARKS and ch not in _SUPERSCRIPT_DIGITS and not ch.isdigit()
+    ]
+    cleaned = "".join(kept)
+    cleaned = re.sub(r"\s+([,;])", r"\1", cleaned)  # " ," → ","
+    cleaned = re.sub(r"([,;·∙])\s*[,;·∙]+", r"\1", cleaned)  # 중복 구분자 축약
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    return cleaned.strip(" ,;·∙•")
+
+
+def _looks_like_authors(line: str) -> bool:
+    """한 줄이 저자 이름 목록처럼 보이는지 판단한다(소속/이메일/날짜/문장형 제외)."""
+    stripped = line.strip()
+    if not 2 <= len(stripped) <= 120:
+        return False
+    if _is_metadata_noise(stripped) or _looks_like_affiliation(stripped):
+        return False
+    if re.search(r"https?://|www\.|@", stripped):
+        return False
+    if re.fullmatch(r"[\d.,\-/()\s]+", stripped):  # 날짜·숫자만 있는 줄
+        return False
+    if len(stripped.split()) > 12:  # 문장처럼 단어가 너무 많음
+        return False
+    core = _strip_author_markers(stripped)
+    return bool(re.search(r"[A-Za-z가-힣]", core))
 
 
 def _first_page_metadata(document) -> dict[str, object]:
@@ -231,19 +276,20 @@ def _first_page_metadata(document) -> dict[str, object]:
     if len(title) > 280:
         title = title[:280].rsplit(" ", 1)[0]
 
+    # 제목 다음의 연속된 '저자처럼 보이는' 줄을 모은다. 소속/초록/이메일 등 비-저자 줄을
+    # 만나면 멈춰 저자 블록만 잡는다(KCI·일반 PDF는 보통 저자가 1~2줄). 각 줄에서 소속/각주
+    # 표식을 떼어내 깔끔한 이름만 남긴다.
     author_parts: list[str] = []
-    for line in top_lines[title_end + 1 : title_end + 7]:
+    for line in top_lines[title_end + 1 : title_end + 9]:
         text = str(line["text"])
-        if _is_metadata_noise(text):
+        if not _looks_like_authors(text):
             break
-        if _looks_like_affiliation(text):
-            continue
-        if len(text) > 220:
-            continue
-        author_parts.append(text)
-        if len(author_parts) >= 2:
+        cleaned = _strip_author_markers(text)
+        if cleaned:
+            author_parts.append(cleaned)
+        if len(author_parts) >= 4:
             break
-    authors = _clean_text_line(", ".join(author_parts))
+    authors = re.sub(r"\s*,\s*", ", ", ", ".join(author_parts)).strip(", ")
 
     warnings: list[str] = []
     if title:

@@ -207,3 +207,35 @@ class TestParseArxivAtom:
         empty = '<feed xmlns="http://www.w3.org/2005/Atom"></feed>'
         with pytest.raises(ValueError):
             papers._parse_arxiv_atom(empty)
+
+
+class TestStripAuthorMarkers:
+    def test_removes_footnote_symbols(self):
+        assert papers._strip_author_markers("Younghee Lee∗") == "Younghee Lee"
+
+    def test_removes_affiliation_indices(self):
+        assert papers._strip_author_markers("Gildong Hong1, Cheolsu Kim2") == "Gildong Hong, Cheolsu Kim"
+
+    def test_korean_middot_preserved_indices_removed(self):
+        assert papers._strip_author_markers("홍길동1·김철수2·이영희1") == "홍길동·김철수·이영희"
+
+    def test_dagger_and_stray_space(self):
+        assert papers._strip_author_markers("A. Kim † , B. Lee ‡") == "A. Kim, B. Lee"
+
+
+class TestLooksLikeAuthors:
+    def test_accepts_name_lists(self):
+        assert papers._looks_like_authors("Gildong Hong1, Cheolsu Kim2, Younghee Lee1∗") is True
+        assert papers._looks_like_authors("홍길동1·김철수2") is True
+
+    def test_rejects_affiliation(self):
+        assert papers._looks_like_authors("Department of Computer Science, Seoul National University") is False
+        assert papers._looks_like_authors("서울대학교 컴퓨터공학과") is False
+
+    def test_rejects_email_and_date(self):
+        assert papers._looks_like_authors("avaswani@google.com") is False
+        assert papers._looks_like_authors("2023. 8. 2.") is False
+
+    def test_rejects_sentence(self):
+        sentence = "This paper presents a novel approach to image segmentation in clinical settings today."
+        assert papers._looks_like_authors(sentence) is False
