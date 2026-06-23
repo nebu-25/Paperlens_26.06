@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: paperlens-postgres
+    environment:
+      POSTGRES_DB: paperlens
+      POSTGRES_USER: paperlens
+      POSTGRES_PASSWORD: paperlens_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - paperlens-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U paperlens -d paperlens"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  paperlens-postgres-data:

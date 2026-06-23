@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     crossref_mailto: str = ""
     # 리뷰 노트 SQLite 파일 경로 (백엔드 작업 디렉터리 기준)
     database_path: str = "paperlens.db"
+    # 설정 시 SQLite 대신 PostgreSQL을 사용한다. 예: postgresql://user:pass@host:5432/db
+    database_url: str = ""
     # 잠긴 DB를 만났을 때 즉시 실패하지 않고 재시도할 최대 대기 시간(ms). 동시 쓰기 견고화용.
     sqlite_busy_timeout_ms: int = 5000
 
@@ -27,4 +29,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

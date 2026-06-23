@@ -1,19 +1,18 @@
 // PaperLens 핵심 상태/영속화/액션 훅. App 컴포넌트의 모든 비-뷰 로직을 담는다.
 // 논문 라이브러리·노트 상태, 서버/로컬 동기화, 업로드·등록·하이라이트·내보내기 액션을 제공한다.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { API_BASE, STORAGE_KEY } from '../constants';
-import { highlightStyle, renderHints } from '../lib/format';
+import React, { useRef, useState } from 'react';
+import { API_BASE } from '../constants';
 import { buildMarkdown, buildPrintHtml, safeFilename } from '../lib/export';
+import { collectTags, filterPapers } from '../lib/library';
 import {
   EMPTY_NOTE,
   detectedSectionNames,
   fileSourceKey,
   mergeTags,
-  normalizeNote,
-  searchableText,
   sectionSummariesFromDetected,
   uid,
 } from '../lib/notes';
+import { buildChecklist, countDone } from '../lib/reviewProgress';
 import type {
   AppNotice,
   DetectedSection,
@@ -23,22 +22,20 @@ import type {
   SectionSummary,
   UploadPhase,
 } from '../types';
+import { usePaperBodyNodes } from './usePaperBodyNodes';
+import { useReviewPersistence } from './useReviewPersistence';
 
 export function useReviewStore() {
   // 논문별로 보관: library[id] = 논문, notes[id] = 그 논문의 리뷰 노트
   const [library, setLibrary] = useState<Record<string, Paper>>({});
   const [notes, setNotes] = useState<Record<string, ReviewNote>>({});
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
   const [doiInput, setDoiInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle');
   const [doiLoading, setDoiLoading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<AppNotice | null>(null); // 업로드 가드 오류/안내
   const [uploadOpen, setUploadOpen] = useState(true);
-  const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [online, setOnline] = useState(false);
-  const [pending, setPending] = useState(0); // 서버에 아직 반영 안 된(dirty) 노트 수
   const [search, setSearch] = useState('');
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [mobilePanel, setMobilePanel] = useState<'paper' | 'review'>('paper');
@@ -57,214 +54,15 @@ export function useReviewStore() {
   const paper = activeId ? library[activeId] ?? null : null;
   const note = (activeId ? notes[activeId] : undefined) ?? EMPTY_NOTE;
 
-  // 저장 유실 방지: 변경된 노트를 dirty로 추적하고, 최신 상태를 ref로 보관(언로드/flush 참조용)
-  const libraryRef = useRef(library);
-  const notesRef = useRef(notes);
-  const activeIdRef = useRef(activeId);
-  const dirtyRef = useRef<Set<string>>(new Set());
-  libraryRef.current = library;
-  notesRef.current = notes;
-  activeIdRef.current = activeId;
-
-  const markDirty = useCallback((id: string | null) => {
-    if (!id) return;
-    dirtyRef.current.add(id);
-    setPending(dirtyRef.current.size);
-  }, []);
-
-  // dirty 노트를 전부 서버에 PUT + localStorage 미러. 전환해도 직전 노트가 유실되지 않는다.
-  const flush = useCallback(async () => {
-    try {
-      window.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          library: libraryRef.current,
-          notes: notesRef.current,
-          activeId: activeIdRef.current,
-        }),
-      );
-    } catch {
-      /* ignore */
-    }
-    const ids = Array.from(dirtyRef.current);
-    if (ids.length === 0) return;
-    let savedAny = false;
-    let failed = false;
-    for (const id of ids) {
-      const p = libraryRef.current[id];
-      if (!p) {
-        dirtyRef.current.delete(id);
-        continue;
-      }
-      try {
-        const res = await fetch(`${API_BASE}/notes/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paper: p, note: notesRef.current[id] ?? EMPTY_NOTE }),
-        });
-        if (!res.ok) throw new Error('save failed');
-        dirtyRef.current.delete(id);
-        savedAny = true;
-      } catch {
-        failed = true;
-      }
-    }
-    setPending(dirtyRef.current.size);
-    const time = new Date().toLocaleTimeString('ko-KR');
-    if (failed) {
-      setOnline(false);
-      setSavedAt(`로컬 저장 ${time} (오프라인)`);
-    } else if (savedAny) {
-      setOnline(true);
-      setSavedAt(`서버 저장 ${time}`);
-    }
-  }, []);
-
-  // 목록 응답은 본문(text)을 제외하므로, 논문을 열 때 단건 조회로 원문을 지연 로드한다(#10).
-  const ensureText = useCallback(async (id: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/notes/${id}`);
-      if (!res.ok) return;
-      const data = (await res.json()) as { paper: Paper };
-      setLibrary((lib) => {
-        const cur = lib[id];
-        // 이미 본문이 있거나 받은 본문이 비었으면(스캔본 등) 갱신하지 않는다(무한 재요청 방지)
-        if (!cur || cur.text || !data.paper.text) return lib;
-        return { ...lib, [id]: { ...cur, text: data.paper.text } };
-      });
-    } catch {
-      /* 오프라인이면 원문은 비표시 */
-    }
-  }, []);
-
-  // ── 시작 시 서버에서 불러오고, 실패하면 localStorage로 폴백 ──
-  useEffect(() => {
-    let cancelled = false;
-    // 마지막으로 열어둔 논문 힌트만 localStorage에서 미리 읽는다(activeId는 서버에 저장 안 함).
-    let activeHint: string | null = null;
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) activeHint = (JSON.parse(raw) as { activeId?: string | null }).activeId ?? null;
-    } catch {
-      /* ignore */
-    }
-
-    const apply = (lib: Record<string, Paper>, rawNotes: Record<string, ReviewNote>) => {
-      const fixed: Record<string, ReviewNote> = {};
-      for (const [id, n] of Object.entries(rawNotes)) fixed[id] = normalizeNote(n);
-      setLibrary(lib);
-      setNotes(fixed);
-      const ids = Object.keys(lib);
-      setActiveId(activeHint && ids.includes(activeHint) ? activeHint : null);
-    };
-
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/notes`);
-        if (!res.ok) throw new Error('server unavailable');
-        const data = (await res.json()) as {
-          library?: Record<string, Paper>;
-          notes?: Record<string, ReviewNote>;
-        };
-        if (cancelled) return;
-        apply(data.library ?? {}, data.notes ?? {});
-        setOnline(true);
-        if (Object.keys(data.library ?? {}).length > 0) setSavedAt('서버에서 불러옴');
-      } catch {
-        // 오프라인: localStorage 캐시로 폴백
-        try {
-          const raw = window.localStorage.getItem(STORAGE_KEY);
-          if (raw && !cancelled) {
-            const data = JSON.parse(raw) as {
-              library?: Record<string, Paper>;
-              notes?: Record<string, ReviewNote>;
-            };
-            apply(data.library ?? {}, data.notes ?? {});
-            // 서버에 미반영일 수 있는 로컬 노트를 재동기 대상으로 표시(서버 복구 시 push)
-            for (const id of Object.keys(data.library ?? {})) dirtyRef.current.add(id);
-            setPending(dirtyRef.current.size);
-            if (Object.keys(data.library ?? {}).length > 0) setSavedAt('로컬 복원(오프라인)');
-          }
-        } catch {
-          /* 손상된 캐시는 무시 */
-        }
-        if (!cancelled) setOnline(false);
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // ── 자동 저장 (5초 debounce, NFR-05): dirty 노트를 전부 저장. 복원 후에만 동작 ──
-  useEffect(() => {
-    if (!loaded) return;
-    const handle = window.setTimeout(() => {
-      void flush();
-    }, 5000);
-    return () => window.clearTimeout(handle);
-  }, [library, notes, activeId, loaded, flush]);
-
-  // ── 오프라인→온라인 재동기화: 미동기 노트가 있으면 주기적으로/온라인 복귀 시 재시도 ──
-  // (서버 다운은 navigator.onLine으로 감지 안 되므로 폴링이 필요하다)
-  useEffect(() => {
-    if (!loaded) return;
-    const retry = () => {
-      if (dirtyRef.current.size > 0) void flush();
-    };
-    const interval = window.setInterval(retry, 10000);
-    window.addEventListener('online', retry);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener('online', retry);
-    };
-  }, [loaded, flush]);
-
-  // ── 활성 논문의 원문 지연 로드(#10): 목록엔 본문이 없으므로 열릴 때 단건 조회 ──
-  useEffect(() => {
-    if (activeId && online && !library[activeId]?.text) void ensureText(activeId);
-  }, [activeId, online, library, ensureText]);
-
-  // ── 탭 닫기·숨김 시 강제 저장(유실 방지): keepalive PUT + 로컬 미러 ──
-  useEffect(() => {
-    const flushOnHide = () => {
-      try {
-        window.localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            library: libraryRef.current,
-            notes: notesRef.current,
-            activeId: activeIdRef.current,
-          }),
-        );
-      } catch {
-        /* ignore */
-      }
-      for (const id of Array.from(dirtyRef.current)) {
-        const p = libraryRef.current[id];
-        if (!p) continue;
-        // keepalive: 페이지가 언로드되는 중에도 요청이 완료되도록 한다.
-        void fetch(`${API_BASE}/notes/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paper: p, note: notesRef.current[id] ?? EMPTY_NOTE }),
-          keepalive: true,
-        }).catch(() => {});
-      }
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') flushOnHide();
-    };
-    window.addEventListener('pagehide', flushOnHide);
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      window.removeEventListener('pagehide', flushOnHide);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, []);
+  const { savedAt, setSavedAt, online, pending, libraryRef, markDirty, forgetDirty } =
+    useReviewPersistence({
+      library,
+      notes,
+      activeId,
+      setLibrary,
+      setNotes,
+      setActiveId,
+    });
 
   // ── 활성 논문의 노트만 갱신 ──
   function setNote(updater: (n: ReviewNote) => ReviewNote) {
@@ -315,8 +113,7 @@ export function useReviewStore() {
   }
 
   function deletePaper(id: string) {
-    dirtyRef.current.delete(id);
-    setPending(dirtyRef.current.size);
+    forgetDirty(id);
     setLibrary((prev) => {
       const next = { ...prev };
       delete next[id];
@@ -627,81 +424,17 @@ export function useReviewStore() {
     window.getSelection()?.removeAllRanges();
   }
 
-  // 원문 렌더: 하이라이트 구간은 <mark>로, 그 외 구간은 밑줄 힌트를 적용. (pre-wrap 컨테이너)
-  const bodyNodes = useMemo(() => {
-    const text = paper?.text ?? '';
-    if (!text) return null;
-    const ranges = (
-      (note.highlights ?? [])
-        .map((h): { start: number; end: number; color?: HighlightColor } | null => {
-          // 오프셋이 있으면 그대로 사용
-          if (
-            typeof h.start === 'number' &&
-            typeof h.end === 'number' &&
-            h.start >= 0 &&
-            h.end <= text.length &&
-            h.end > h.start
-          ) {
-            return { start: h.start, end: h.end, color: h.color };
-          }
-          // 오프셋 없는(옛) 하이라이트: 본문에서 텍스트를 찾아 위치 추정(첫 출현)
-          if (h.text) {
-            const idx = text.indexOf(h.text);
-            if (idx >= 0) return { start: idx, end: idx + h.text.length, color: h.color };
-          }
-          return null;
-        })
-        .filter((r): r is { start: number; end: number; color?: HighlightColor } => r !== null)
-        .sort((a, b) => a.start - b.start)
-    );
-    const nodes: React.ReactNode[] = [];
-    let cursor = 0;
-    for (const range of ranges) {
-      const s = Math.max(range.start, cursor);
-      const e = range.end;
-      if (e <= cursor) continue;
-      if (s > cursor) nodes.push(...renderHints(text.slice(cursor, s), cursor));
-      const color = highlightStyle(range.color);
-      nodes.push(
-        <mark key={`hl-${s}-${e}`} className={`rounded ${color.markClass} text-ink`}>
-          {text.slice(s, e)}
-        </mark>,
-      );
-      cursor = e;
-    }
-    if (cursor < text.length) nodes.push(...renderHints(text.slice(cursor), cursor));
-    return nodes;
-  }, [paper?.text, note.highlights]);
+  const bodyNodes = usePaperBodyNodes(paper, note);
 
   const updateNote = <K extends keyof ReviewNote>(key: K, value: ReviewNote[K]) =>
     setNote((n) => ({ ...n, [key]: value }));
 
-  // ⑨ 전체 리뷰 노트 완성도 체크리스트
-  const summaryDone =
-    note.summaryMode === 'section'
-      ? note.sectionSummaries.some((s) => s.content.trim().length > 0)
-      : Object.values(note.template).some((v) => v.trim().length > 0);
-  const checklist = [
-    { label: '한 줄 요약', done: note.oneLineSummary.trim().length > 0 },
-    { label: note.summaryMode === 'section' ? '섹션별 요약' : '5문항 템플릿', done: summaryDone },
-    { label: '핵심 문장 하이라이트', done: note.highlights.length > 0 },
-    { label: '핵심 용어 사전', done: note.terms.length > 0 },
-    { label: '읽으며 생긴 질문', done: note.questions.length > 0 },
-    { label: '섹션별 메모', done: Object.values(note.memos).some((v) => v.trim().length > 0) },
-  ];
-  const doneCount = checklist.filter((c) => c.done).length;
+  const checklist = buildChecklist(note);
+  const doneCount = countDone(checklist);
 
   // ── 지식베이스 검색·태그 필터 (FR-09) ──
-  const allTags = Array.from(
-    new Set(Object.values(notes).flatMap((n) => n.tags ?? [])),
-  ).sort((a, b) => a.localeCompare(b, 'ko'));
-  const query = search.trim().toLowerCase();
-  const visiblePapers = Object.values(library).filter((p) => {
-    const n = notes[p.id] ?? EMPTY_NOTE;
-    if (activeTags.length > 0 && !activeTags.every((t) => (n.tags ?? []).includes(t))) return false;
-    if (query && !searchableText(p, n).includes(query)) return false;
-    return true;
-  });
+  const allTags = collectTags(notes);
+  const visiblePapers = filterPapers(library, notes, search, activeTags);
   const toggleTagFilter = (tag: string) =>
     setActiveTags((cur) => (cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag]));
 

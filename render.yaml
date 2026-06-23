@@ -18,3 +18,6 @@ services:
       - key: CROSSREF_MAILTO
         # 선택: CrossRef polite pool용 이메일. 개인정보라 커밋하지 않고 대시보드에서 입력한다.
         sync: false
+      - key: DATABASE_URL
+        # 선택: 외부 PostgreSQL 연결 문자열. 비워두면 SQLite(paperlens.db)를 사용한다.
+        sync: false
