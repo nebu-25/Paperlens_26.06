@@ -1,9 +1,11 @@
 import json
 import re
+import statistics
 import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import Counter
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
@@ -406,23 +408,46 @@ def _detect_sections(text: str) -> list[dict[str, object]]:
     return sections
 
 
-def _join_block_lines(block_text: str) -> str:
-    """한 블록(문단) 안의 시각적 줄들을 하나의 자연스러운 문단으로 합친다.
+def _is_cjk(ch: str) -> bool:
+    """한글/한자 등 CJK 문자 여부(공백 없이 줄을 잇기 위한 판단)."""
+    return (
+        "가" <= ch <= "힣"  # 한글 음절
+        or "一" <= ch <= "鿿"  # CJK 한자
+        or "぀" <= ch <= "ヿ"  # 가나
+    )
 
-    줄 끝 하이픈으로 끊긴 단어는 다음 조각이 소문자면 하이픈을 제거해 잇고
-    (architec-/ture→architecture), 아니면 하이픈을 유지해 잇는다(self-/Attention→self-Attention).
-    그 외에는 공백으로 연결한다.
+
+def _join_lines(parts: list[str]) -> str:
+    """시각적 줄들을 하나의 자연스러운 문단으로 합친다.
+
+    - 줄 끝 하이픈으로 끊긴 단어: 다음 조각이 소문자면 하이픈 제거(architec-/ture→architecture),
+      아니면 유지(self-/Attention→self-Attention).
+    - CJK(한글 등)–CJK 경계: 공백 없이 잇는다. 한글은 한 단어(어절) 중간에서도 자주 줄바꿈되어
+      공백을 넣으면 단어가 쪼개져 보이기 때문(번/역사→번역사). 어절 사이 공백이 줄 끝에서
+      사라지는 손실은 있으나, 단어가 쪼개지는 것보다 가독성이 낫다.
+    - 그 외(라틴/혼합): 공백으로 연결.
     """
-    lines = [line.strip() for line in block_text.splitlines() if line.strip()]
-    if not lines:
-        return ""
-    out = lines[0]
-    for line in lines[1:]:
-        if len(out) >= 2 and out.endswith("-") and out[-2].isalpha():
-            out = out[:-1] + line if line[:1].islower() else out + line
+    out = ""
+    for raw in parts:
+        line = raw.strip()
+        if not line:
+            continue
+        if not out:
+            out = line
+            continue
+        last, first = out[-1], line[0]
+        if len(out) >= 2 and last == "-" and out[-2].isalpha():
+            out = out[:-1] + line if first.islower() else out + line
+        elif _is_cjk(last) and _is_cjk(first):
+            out = out + line
         else:
             out = out + " " + line
     return out
+
+
+def _join_block_lines(block_text: str) -> str:
+    """블록 텍스트(개행 포함)를 한 문단으로 합친다. (테스트·호환용 래퍼)"""
+    return _join_lines(block_text.splitlines())
 
 
 def _is_noise_block(para: str) -> bool:
@@ -437,24 +462,111 @@ def _is_noise_block(para: str) -> bool:
     return False
 
 
-def _reflow_document(document) -> str:
-    """블록 단위로 줄을 재결합해 자연스러운 문단 텍스트를 만든다.
-
-    PyMuPDF 'text' 모드는 PDF의 시각적 줄마다 \\n을 넣어 문장이 토막난다. 'blocks'
-    모드는 문단/헤딩을 블록으로 분리하므로 블록 안의 줄을 한 문단으로 합치고, 블록
-    사이는 빈 줄로 구분한다. 섹션 헤딩은 보통 독립 블록이라 한 줄로 남아 _detect_sections가
-    그대로 인식한다. 페이지 번호·arXiv 스탬프 같은 noise 블록은 제외한다.
-    """
-    paragraphs: list[str] = []
-    for page in document:
-        for block in page.get_text("blocks", sort=True):
-            # block = (x0, y0, x1, y1, text, block_no, block_type); type 0만 텍스트 블록.
-            if len(block) >= 7 and block[6] != 0:
+def _page_text_lines(page) -> list[dict[str, object]]:
+    """페이지의 텍스트 줄을 (텍스트·x0·y0·y1·글자크기)로 모아 읽기 순서로 정렬한다."""
+    lines: list[dict[str, object]] = []
+    for block in page.get_text("dict").get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for ln in block.get("lines", []):
+            spans = ln.get("spans", [])
+            text = _clean_text_line(" ".join(span.get("text", "") for span in spans))
+            if not text:
                 continue
-            para = _join_block_lines(str(block[4]))
-            if para and not _is_noise_block(para):
-                paragraphs.append(para)
-    return "\n\n".join(paragraphs)
+            sizes = [float(s.get("size", 0)) for s in spans if s.get("text", "").strip()]
+            bbox = ln.get("bbox") or [0, 0, 0, 0]
+            lines.append(
+                {
+                    "text": text,
+                    "x0": float(bbox[0]),
+                    "y0": float(bbox[1]),
+                    "y1": float(bbox[3]),
+                    "size": max(sizes) if sizes else 0.0,
+                }
+            )
+    lines.sort(key=lambda item: (round(float(item["y0"])), float(item["x0"])))
+    return lines
+
+
+def _norm_running(text: str) -> str:
+    """러닝 헤더/푸터 비교용 정규화: 숫자(페이지 번호 등) 제거."""
+    return re.sub(r"\d+", "", text).strip()
+
+
+def _detect_running_lines(pages_lines: list[list[dict[str, object]]], page_count: int) -> set[str]:
+    """여러 페이지에 반복 등장하는 줄(러닝 헤더/푸터)을 찾아낸다(숫자 무시 비교)."""
+    counts: Counter[str] = Counter()
+    for lines in pages_lines:
+        seen = {
+            norm for line in lines if len(norm := _norm_running(str(line["text"]))) >= 6
+        }
+        counts.update(seen)
+    threshold = max(3, int(page_count * 0.4))
+    return {norm for norm, count in counts.items() if count >= threshold}
+
+
+def _reflow_document(document) -> str:
+    """줄 단위로 문단을 재구성해 자연스럽게 읽히는 텍스트를 만든다.
+
+    PyMuPDF의 'text'/'blocks' 모드는 PDF에 따라 시각적 줄마다(또는 줄 블록마다) 끊겨
+    문장이 토막난다. 여기서는 줄의 좌표·글자크기를 보고 한 문단에 속한 줄들을 이어 붙인다.
+    문단 경계는 (a) 들여쓰기된 첫 줄, (b) 평소보다 큰 세로 간격, (c) 큰 글자(헤딩)로 판단한다.
+    페이지 번호·arXiv 스탬프 같은 noise와 여러 페이지에 반복되는 러닝 헤더/푸터는 제외한다.
+    (2단 컬럼은 best-effort: 한 컬럼 기준으로 동작한다.)
+    """
+    pages_lines = [_page_text_lines(page) for page in document]
+    running = _detect_running_lines(pages_lines, document.page_count)
+
+    paragraphs: list[str] = []
+    for lines in pages_lines:
+        body = [
+            line
+            for line in lines
+            if not _is_noise_block(str(line["text"]))
+            and _norm_running(str(line["text"])) not in running
+        ]
+        if not body:
+            continue
+        left = Counter(round(float(line["x0"])) for line in body).most_common(1)[0][0]
+        heights = [float(line["y1"]) - float(line["y0"]) for line in body if line["y1"] > line["y0"]]
+        line_h = statistics.median(heights) if heights else 12.0
+
+        current: list[str] = []
+        prev: dict[str, object] | None = None
+        for line in body:
+            if prev is None:
+                start_new = True
+            else:
+                gap = float(line["y0"]) - float(prev["y1"])
+                # 단락 내 줄 간격은 작고 단락 사이는 크다 → 간격이 주 신호.
+                big_gap = gap > line_h * 0.8
+                # 큰 글자(헤딩)는 새 문단.
+                heading = float(line["size"]) > float(prev["size"]) * 1.2
+                # 들여쓰기는 '작은(1~2em) 들여쓰기'일 때만 단락 시작으로 본다. 수식·다열 등 큰
+                # x0 점프는 무시해 arXiv류 본문이 과편화되지 않게 한다.
+                indent = float(line["x0"]) - left
+                small_indent = line_h * 0.4 <= indent <= line_h * 2.0
+                start_new = big_gap or heading or small_indent
+            if start_new and current:
+                paragraphs.append(_join_lines(current))
+                current = []
+            current.append(str(line["text"]))
+            prev = line
+        if current:
+            paragraphs.append(_join_lines(current))
+    return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p)
+
+
+# 구두점 앞 공백 정리(스팬 분리로 생긴 "있다 ." → "있다.") 및 닫는 괄호/따옴표 앞 공백 제거.
+_SPACE_BEFORE_PUNCT = re.compile(r"\s+([,.;:!?)\]}»”’】」』])")
+# 문장부호 뒤 한글이 바로 붙은 경우(줄 잇기로 공백 소실) 공백 보강: "이다.번역" → "이다. 번역".
+_PUNCT_BEFORE_HANGUL = re.compile(r"([.?!])([가-힣])")
+
+
+def _tidy_spacing(text: str) -> str:
+    text = _SPACE_BEFORE_PUNCT.sub(r"\1", text)
+    text = _PUNCT_BEFORE_HANGUL.sub(r"\1 \2", text)
+    return text
 
 
 @router.post("/extract-text")

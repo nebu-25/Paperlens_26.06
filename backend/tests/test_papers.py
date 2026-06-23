@@ -151,6 +151,29 @@ class TestJoinBlockLines:
         assert papers._join_block_lines("   \n\n") == ""
 
 
+class TestJoinLinesCjk:
+    def test_korean_lines_join_without_space(self):
+        # 한글은 어절 중간에서도 줄바꿈되므로 CJK–CJK 경계는 공백 없이 잇는다.
+        assert papers._join_lines(["주체가 번", "역사라는 점"]) == "주체가 번역사라는 점"
+
+    def test_latin_lines_join_with_space(self):
+        assert papers._join_lines(["We propose a", "new model"]) == "We propose a new model"
+
+    def test_latin_dehyphenation_unaffected(self):
+        assert papers._join_lines(["represen-", "tation"]) == "representation"
+
+
+class TestTidySpacing:
+    def test_removes_space_before_punctuation(self):
+        assert papers._tidy_spacing("할 수 있다 .") == "할 수 있다."
+
+    def test_adds_space_after_sentence_punctuation_before_hangul(self):
+        assert papers._tidy_spacing("제한적이다.번역사로") == "제한적이다. 번역사로"
+
+    def test_keeps_decimal_numbers(self):
+        assert papers._tidy_spacing("3.14 model") == "3.14 model"
+
+
 class TestNoiseBlock:
     def test_page_number_is_noise(self):
         assert papers._is_noise_block("3") is True
