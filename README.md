@@ -164,7 +164,7 @@ API_BASE_URL=http://127.0.0.1:8000 python scripts/smoke_api.py
   - 운영 배포에서는 외부 PostgreSQL을 권장합니다. Render 환경변수 `DATABASE_URL`에 연결 문자열을 설정합니다. 비워두면 SQLite로 동작하지만, 무료 플랜에서는 재배포/재시작 시 `paperlens.db`가 초기화될 수 있습니다.
   - Render `DATABASE_URL` 설정 후 재배포와 `backend/scripts/smoke_api.py` 배포 API smoke test를 통과했습니다.
   - CORS: `backend/app/config.py` 기본값과 Render 환경변수 `CORS_ORIGINS`에 Pages 오리진을 포함합니다.
-  - Phase 2 AI 보조를 켜려면 Render 환경변수 `AI_API_KEY`에 OpenRouter API 키를 설정합니다. 선택적으로 `AI_MODEL`로 모델을 바꿀 수 있습니다(기본 `openai/gpt-5.2`). `AI_SITE_URL`, `AI_APP_NAME`은 OpenRouter 앱 표시용 선택 값입니다.
+  - Phase 2 AI 보조를 켜려면 Render 환경변수 `AI_API_KEY`에 OpenRouter API 키를 설정합니다. 선택적으로 `AI_MODEL`로 모델을 바꿀 수 있습니다(기본 `openai/gpt-5.2`). `AI_SITE_URL`, `AI_APP_NAME`은 OpenRouter 앱 표시용 선택 값입니다. 배포 환경에서 `/api/ai/status`와 용어 설명 smoke 호출을 통과했습니다.
 
 > 로컬 개발에서는 프론트가 상대경로 `/api`를 Vite 프록시로 백엔드(`127.0.0.1:8000`)에 전달하므로 `VITE_API_BASE_URL` 없이 동작합니다. 위 변수는 Pages처럼 백엔드가 다른 오리진일 때만 필요합니다.
 
