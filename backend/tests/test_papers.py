@@ -1,7 +1,9 @@
 """papers.py 순수 함수 단위 테스트 (네트워크·PyMuPDF 비의존).
 
-DOI 추출, 메타 정규화, 섹션 헤딩 자동 분류(#6) 로직을 검증한다.
+DOI 추출, 메타 정규화, 섹션 헤딩 자동 분류(#6), arXiv 메타·reflow noise 로직을 검증한다.
 """
+
+import pytest
 
 from app.routers import papers
 
@@ -147,3 +149,61 @@ class TestJoinBlockLines:
 
     def test_blank_block(self):
         assert papers._join_block_lines("   \n\n") == ""
+
+
+class TestNoiseBlock:
+    def test_page_number_is_noise(self):
+        assert papers._is_noise_block("3") is True
+        assert papers._is_noise_block("  12 ") is True
+
+    def test_arxiv_stamp_is_noise(self):
+        assert papers._is_noise_block("arXiv:1706.03762v7  [cs.CL]  2 Aug 2023") is True
+
+    def test_blank_is_noise(self):
+        assert papers._is_noise_block("   ") is True
+
+    def test_real_paragraph_is_not_noise(self):
+        assert papers._is_noise_block("We propose a new architecture.") is False
+
+
+class TestArxivId:
+    def test_new_style(self):
+        assert papers._find_arxiv_id("see arXiv:1706.03762v7 [cs.CL]", {}) == "1706.03762v7"
+
+    def test_with_space_and_no_version(self):
+        assert papers._find_arxiv_id("arXiv: 2301.00001", {}) == "2301.00001"
+
+    def test_old_style(self):
+        assert papers._find_arxiv_id("arXiv:cs.CL/0701001", {}) == "cs.CL/0701001"
+
+    def test_from_metadata(self):
+        assert papers._find_arxiv_id("body", {"subject": "arXiv:1234.56789"}) == "1234.56789"
+
+    def test_none(self):
+        assert papers._find_arxiv_id("no identifier", {}) is None
+
+
+class TestParseArxivAtom:
+    ATOM = """<?xml version="1.0" encoding="UTF-8"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <entry>
+        <title>Attention Is All You Need</title>
+        <author><name>Ashish Vaswani</name></author>
+        <author><name>Noam Shazeer</name></author>
+        <link href="http://arxiv.org/abs/1706.03762v7" rel="alternate" type="text/html"/>
+        <category term="cs.CL"/>
+        <category term="cs.LG"/>
+      </entry>
+    </feed>"""
+
+    def test_parses_title_authors_tags_link(self):
+        meta = papers._parse_arxiv_atom(self.ATOM)
+        assert meta["title"] == "Attention Is All You Need"
+        assert meta["authors"] == "Ashish Vaswani, Noam Shazeer"
+        assert meta["suggested_tags"] == ["cs.CL", "cs.LG"]
+        assert meta["link"] == "http://arxiv.org/abs/1706.03762v7"
+
+    def test_no_entry_raises(self):
+        empty = '<feed xmlns="http://www.w3.org/2005/Atom"></feed>'
+        with pytest.raises(ValueError):
+            papers._parse_arxiv_atom(empty)

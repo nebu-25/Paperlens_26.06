@@ -3,6 +3,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
@@ -80,6 +81,58 @@ def _find_doi(text: str, pdf_meta: dict) -> str | None:
         if match:
             return _clean_doi(match.group(0))
     return None
+
+
+# arXiv ID: 신형(2107.12345[v2]) 또는 구형(cs.CL/0701001). CrossRef DOI가 없는 arXiv 논문
+# (및 다수 프리프린트)에서 저자·분류(태그)를 정확히 얻기 위한 보조 식별자.
+ARXIV_PATTERN = re.compile(
+    r"arXiv:\s*(\d{4}\.\d{4,5}(?:v\d+)?|[a-z\-]+(?:\.[A-Za-z]{2})?/\d{7}(?:v\d+)?)",
+    re.IGNORECASE,
+)
+
+
+def _find_arxiv_id(text: str, pdf_meta: dict) -> str | None:
+    for candidate in (_metadata_text(pdf_meta), text):
+        match = ARXIV_PATTERN.search(candidate or "")
+        if match:
+            return match.group(1)
+    return None
+
+
+def _parse_arxiv_atom(payload: bytes | str) -> dict[str, object]:
+    """arXiv API(Atom feed)에서 제목·저자·분류를 파싱한다. HTTP와 분리해 테스트 가능하게 둔다."""
+    ns = {"a": "http://www.w3.org/2005/Atom"}
+    root = ET.fromstring(payload)
+    entry = root.find("a:entry", ns)
+    if entry is None:
+        raise ValueError("arXiv 응답에 entry가 없습니다.")
+    title = _clean_text_line(entry.findtext("a:title", default="", namespaces=ns))
+    authors = [_clean_text_line(name.text or "") for name in entry.findall("a:author/a:name", ns)]
+    categories = [c.get("term", "") for c in entry.findall("a:category", ns)]
+    link = ""
+    for node in entry.findall("a:link", ns):
+        if node.get("rel") == "alternate":
+            link = node.get("href", "")
+            break
+    return {
+        "title": title or "(제목 없음)",
+        "authors": ", ".join(a for a in authors if a) or "저자 미상",
+        "link": link,
+        "suggested_tags": _unique_tags(categories),
+    }
+
+
+def _arxiv_meta(arxiv_id: str) -> dict[str, object]:
+    """arXiv에서 메타정보를 조회한다. 실패 시 urllib/XML 예외를 그대로 던진다."""
+    query = urllib.parse.urlencode({"id_list": arxiv_id, "max_results": 1})
+    url = f"http://export.arxiv.org/api/query?{query}"
+    request = urllib.request.Request(url, headers={"User-Agent": settings.crossref_user_agent})
+    with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310 - trusted host
+        payload = response.read()
+    meta = _parse_arxiv_atom(payload)
+    if not meta.get("link"):
+        meta["link"] = f"https://arxiv.org/abs/{arxiv_id}"
+    return meta
 
 
 def _is_metadata_noise(line: str) -> bool:
@@ -313,13 +366,25 @@ def _join_block_lines(block_text: str) -> str:
     return out
 
 
+def _is_noise_block(para: str) -> bool:
+    """읽기 흐름을 끊는 페이지 furniture를 걸러낸다(페이지 번호, 측면 arXiv 스탬프 등)."""
+    stripped = para.strip()
+    if not stripped:
+        return True
+    if stripped.isdigit() and len(stripped) <= 4:  # 단독 페이지 번호
+        return True
+    if stripped.casefold().startswith("arxiv:"):  # 측면 세로 arXiv 스탬프(식별자는 따로 추출)
+        return True
+    return False
+
+
 def _reflow_document(document) -> str:
     """블록 단위로 줄을 재결합해 자연스러운 문단 텍스트를 만든다.
 
     PyMuPDF 'text' 모드는 PDF의 시각적 줄마다 \\n을 넣어 문장이 토막난다. 'blocks'
     모드는 문단/헤딩을 블록으로 분리하므로 블록 안의 줄을 한 문단으로 합치고, 블록
     사이는 빈 줄로 구분한다. 섹션 헤딩은 보통 독립 블록이라 한 줄로 남아 _detect_sections가
-    그대로 인식한다.
+    그대로 인식한다. 페이지 번호·arXiv 스탬프 같은 noise 블록은 제외한다.
     """
     paragraphs: list[str] = []
     for page in document:
@@ -328,7 +393,7 @@ def _reflow_document(document) -> str:
             if len(block) >= 7 and block[6] != 0:
                 continue
             para = _join_block_lines(str(block[4]))
-            if para:
+            if para and not _is_noise_block(para):
                 paragraphs.append(para)
     return "\n\n".join(paragraphs)
 
@@ -379,34 +444,49 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
     scanned = len(text.strip()) == 0
     sections = [] if scanned else _detect_sections(text)
 
-    # 메타정보 추출: ① DOI(CrossRef) → ② 첫 페이지 레이아웃 → ③ PDF 내장 metadata → ④ 파일명
+    # 메타정보 추출: ① DOI(CrossRef) → ② arXiv API → ③ 첫 페이지 레이아웃 → ④ PDF 내장 → ⑤ 파일명
     cross: dict[str, object] | None = None
+    arxiv: dict[str, object] | None = None
     metadata_warnings: list[str] = []
-    detected_doi = _find_doi(text, pdf_meta)
+    # 식별자(DOI·arXiv ID)는 머리쪽 원문에 있다. noise 필터 전 원문(앞 2페이지)도 함께 탐색한다.
+    header_raw = "\n".join(document[i].get_text("text") for i in range(min(2, page_count)))
+    identifier_text = f"{header_raw}\n{text}"
+    detected_doi = _find_doi(identifier_text, pdf_meta)
     if detected_doi:
         try:
             cross = _crossref_meta(detected_doi)
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
             metadata_warnings.append("DOI는 찾았지만 CrossRef 메타정보 조회에 실패했습니다.")
             cross = None
+    if not cross:
+        arxiv_id = _find_arxiv_id(identifier_text, pdf_meta)
+        if arxiv_id:
+            try:
+                arxiv = _arxiv_meta(arxiv_id)
+            except (urllib.error.URLError, TimeoutError, ET.ParseError, ValueError):
+                metadata_warnings.append("arXiv ID를 찾았지만 arXiv 메타정보 조회에 실패했습니다.")
+                arxiv = None
 
+    primary = cross or arxiv or {}
     pdf_title = (pdf_meta.get("title") or "").strip()
     pdf_author = (pdf_meta.get("author") or "").strip()
     filename_title = (file.filename or "").rsplit(".", 1)[0]
     layout_title = str(layout_meta.get("title") or "")
     layout_authors = str(layout_meta.get("authors") or "")
-    if not cross:
+    if not primary:
         metadata_warnings.extend(str(item) for item in layout_meta.get("warnings", []))
 
-    title = (cross or {}).get("title") or layout_title or pdf_title or filename_title or "(제목 없음)"
-    authors = (cross or {}).get("authors") or layout_authors or pdf_author or "저자 미상"
-    suggested_tags = (cross or {}).get("suggested_tags") or []
+    title = primary.get("title") or layout_title or pdf_title or filename_title or "(제목 없음)"
+    authors = primary.get("authors") or layout_authors or pdf_author or "저자 미상"
+    suggested_tags = primary.get("suggested_tags") or []
     metadata_source = (
         "crossref"
         if cross
+        else "arxiv"
+        if arxiv
         else ("layout" if (layout_title or layout_authors) else ("pdf" if (pdf_title or pdf_author) else "none"))
     )
-    metadata_confidence = "high" if cross else str(layout_meta.get("confidence") or "low")
+    metadata_confidence = "high" if primary else str(layout_meta.get("confidence") or "low")
 
     return {
         "filename": file.filename,
@@ -414,7 +494,7 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
         "text": text,
         "title": title,
         "authors": authors,
-        "link": (cross or {}).get("link") or "",
+        "link": primary.get("link") or "",
         "doi": (cross or {}).get("doi") or detected_doi,
         "sections": sections,
         "suggested_tags": suggested_tags,
