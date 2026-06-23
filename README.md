@@ -36,10 +36,15 @@
 ## 주요 추가 파일
 
 - `frontend/package.json`: 프론트엔드 의존성 및 실행 스크립트
-- `frontend/src/main.tsx`: PaperLens 초기 앱 화면
+- `frontend/src/main.tsx`: 앱 엔트리(루트 렌더만 담당)
+- `frontend/src/components/App.tsx`: 앱 화면(뷰) — 사이드바·업로드·원문/리뷰 2분할 렌더
+- `frontend/src/hooks/useReviewStore.tsx`: 상태·서버/로컬 동기화·업로드/등록/하이라이트/내보내기 등 모든 액션 로직
+- `frontend/src/lib/`: 순수 헬퍼 — `notes.ts`(노트 유틸·섹션 분류 매핑), `format.tsx`(표시 헬퍼), `export.ts`(Markdown/PDF)
+- `frontend/src/types.ts`·`constants.ts`: 도메인 타입과 전역 상수
 - `frontend/src/styles.css`: Tailwind 엔트리 스타일
 - `backend/app/main.py`: FastAPI 앱 엔트리포인트
-- `backend/app/routers/papers.py`: PDF 텍스트 추출 API
+- `backend/app/routers/papers.py`: PDF 텍스트 추출·섹션 분류·메타 추출 API
+- `backend/tests/`·`frontend/src/lib/*.test.ts`: 자동 테스트(pytest / Vitest)
 - `backend/requirements.txt`: 백엔드 Python 의존성
 - `.github/workflows/deploy-pages.yml`: 프론트엔드를 빌드해 GitHub Pages로 배포하는 워크플로
 - `render.yaml`: 백엔드(FastAPI)를 Render에 배포하는 Blueprint
