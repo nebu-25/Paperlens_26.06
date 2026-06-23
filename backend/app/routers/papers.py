@@ -294,6 +294,45 @@ def _detect_sections(text: str) -> list[dict[str, object]]:
     return sections
 
 
+def _join_block_lines(block_text: str) -> str:
+    """한 블록(문단) 안의 시각적 줄들을 하나의 자연스러운 문단으로 합친다.
+
+    줄 끝 하이픈으로 끊긴 단어는 다음 조각이 소문자면 하이픈을 제거해 잇고
+    (architec-/ture→architecture), 아니면 하이픈을 유지해 잇는다(self-/Attention→self-Attention).
+    그 외에는 공백으로 연결한다.
+    """
+    lines = [line.strip() for line in block_text.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    out = lines[0]
+    for line in lines[1:]:
+        if len(out) >= 2 and out.endswith("-") and out[-2].isalpha():
+            out = out[:-1] + line if line[:1].islower() else out + line
+        else:
+            out = out + " " + line
+    return out
+
+
+def _reflow_document(document) -> str:
+    """블록 단위로 줄을 재결합해 자연스러운 문단 텍스트를 만든다.
+
+    PyMuPDF 'text' 모드는 PDF의 시각적 줄마다 \\n을 넣어 문장이 토막난다. 'blocks'
+    모드는 문단/헤딩을 블록으로 분리하므로 블록 안의 줄을 한 문단으로 합치고, 블록
+    사이는 빈 줄로 구분한다. 섹션 헤딩은 보통 독립 블록이라 한 줄로 남아 _detect_sections가
+    그대로 인식한다.
+    """
+    paragraphs: list[str] = []
+    for page in document:
+        for block in page.get_text("blocks", sort=True):
+            # block = (x0, y0, x1, y1, text, block_no, block_type); type 0만 텍스트 블록.
+            if len(block) >= 7 and block[6] != 0:
+                continue
+            para = _join_block_lines(str(block[4]))
+            if para:
+                paragraphs.append(para)
+    return "\n\n".join(paragraphs)
+
+
 @router.post("/extract-text")
 async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
     if file.content_type != "application/pdf":
@@ -328,13 +367,14 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
         )
 
     try:
-        page_text = [page.get_text("text") for page in document]
+        # 블록 단위 reflow로 시각적 줄바꿈을 문단으로 재결합해 자연스럽게 읽히게 한다.
+        text = _reflow_document(document)
         pdf_meta = document.metadata or {}
         layout_meta = _first_page_metadata(document)
     except Exception as exc:  # pragma: no cover - library-specific parse failures
         raise HTTPException(status_code=422, detail="PDF 텍스트를 추출하지 못했습니다.") from exc
 
-    text = "\n\n".join(page_text)
+    page_count = document.page_count
     # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 OCR이 필요하다(기획서 FS-01).
     scanned = len(text.strip()) == 0
     sections = [] if scanned else _detect_sections(text)
@@ -342,7 +382,7 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
     # 메타정보 추출: ① DOI(CrossRef) → ② 첫 페이지 레이아웃 → ③ PDF 내장 metadata → ④ 파일명
     cross: dict[str, object] | None = None
     metadata_warnings: list[str] = []
-    detected_doi = _find_doi("\n\n".join(page_text[:3]) + "\n\n" + text, pdf_meta)
+    detected_doi = _find_doi(text, pdf_meta)
     if detected_doi:
         try:
             cross = _crossref_meta(detected_doi)
@@ -370,7 +410,7 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
 
     return {
         "filename": file.filename,
-        "page_count": len(page_text),
+        "page_count": page_count,
         "text": text,
         "title": title,
         "authors": authors,

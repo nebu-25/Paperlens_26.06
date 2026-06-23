@@ -130,3 +130,20 @@ class TestDetectSections:
 
     def test_empty_text(self):
         assert papers._detect_sections("") == []
+
+
+class TestJoinBlockLines:
+    def test_joins_wrapped_lines_with_space(self):
+        block = "We propose a new\narchitecture based on\nattention."
+        assert papers._join_block_lines(block) == "We propose a new architecture based on attention."
+
+    def test_dehyphenates_lowercase_continuation(self):
+        # 줄 끝 하이픈 + 다음 줄 소문자 → 하이픈 제거하고 단어를 잇는다.
+        assert papers._join_block_lines("represen-\ntation matters") == "representation matters"
+
+    def test_keeps_hyphen_before_uppercase(self):
+        # 고유 합성어가 줄 끝에서 끊긴 경우(다음 조각 대문자)는 하이픈을 유지한다.
+        assert papers._join_block_lines("self-\nAttention") == "self-Attention"
+
+    def test_blank_block(self):
+        assert papers._join_block_lines("   \n\n") == ""
