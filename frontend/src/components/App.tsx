@@ -17,6 +17,7 @@ import {
   MEMO_SECTIONS,
   SAMPLE_PAPER,
   TEMPLATE_QUESTIONS,
+  resolveApiUrl,
   uploadPhaseText,
 } from '../constants';
 import { highlightStyle, needsPdfText, noticeStyle } from '../lib/format';
@@ -87,6 +88,7 @@ function App() {
     exportMarkdown,
     exportPdf,
   } = useReviewStore();
+  const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-paper text-ink" onMouseDown={() => setSelection(null)}>
@@ -354,7 +356,7 @@ function App() {
                     </button>
                   </div>
                 )}
-                {paper.pdfUrl && (
+                {paperPdfUrl && (
                   <div className="mt-3 rounded border border-line bg-white p-3">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <div className="min-w-0">
@@ -365,7 +367,7 @@ function App() {
                       </div>
                       <a
                         className="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
-                        href={paper.pdfUrl}
+                        href={paperPdfUrl}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -375,7 +377,7 @@ function App() {
                     <iframe
                       className="h-[520px] w-full rounded border border-line bg-paper"
                       title={`${paper.title || '논문'} PDF 원본`}
-                      src={paper.pdfUrl}
+                      src={paperPdfUrl}
                     />
                   </div>
                 )}

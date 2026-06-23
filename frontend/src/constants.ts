@@ -3,7 +3,16 @@ import type { HighlightColor, Paper, UploadPhase } from './types';
 
 // API 베이스 경로. 기본은 상대경로 '/api'(개발 시 Vite 프록시, 배포 시 동일 오리진/리버스 프록시).
 // 다른 오리진의 백엔드를 직접 가리키려면 VITE_API_BASE_URL로 오버라이드한다(예: http://127.0.0.1:8000).
-export const API_BASE = `${import.meta.env.VITE_API_BASE_URL ?? ''}/api`;
+const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+export const API_BASE = `${API_ORIGIN}/api`;
+
+export function resolveApiUrl(path: string): string {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  if (path.startsWith('/api/')) return `${API_ORIGIN}${path}`;
+  if (path.startsWith('/')) return `${API_BASE}${path}`;
+  return `${API_BASE}/${path}`;
+}
 
 export const MEMO_SECTIONS = ['Abstract', 'Introduction', 'Method', 'Result', 'Discussion'] as const;
 

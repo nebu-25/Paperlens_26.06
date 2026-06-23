@@ -1,7 +1,7 @@
 // PaperLens 핵심 상태/영속화/액션 훅. App 컴포넌트의 모든 비-뷰 로직을 담는다.
 // 논문 라이브러리·노트 상태, 서버/로컬 동기화, 업로드·등록·하이라이트·내보내기 액션을 제공한다.
 import React, { useEffect, useRef, useState } from 'react';
-import { API_BASE } from '../constants';
+import { API_BASE, resolveApiUrl } from '../constants';
 import { buildMarkdown, buildPrintHtml, safeFilename } from '../lib/export';
 import { collectTags, filterPapers } from '../lib/library';
 import {
@@ -237,6 +237,7 @@ export function useReviewStore() {
       const unknownTitle = !data.title || data.title === '(제목 없음)';
       const unknownAuthors = !data.authors || data.authors === '저자 미상';
       const suggestedTags = data.suggested_tags ?? [];
+      const pdfUrl = data.pdf_url ? resolveApiUrl(data.pdf_url) : '';
       setUploadPhase('creating');
       if (attachTargetId && libraryRef.current[attachTargetId]) {
         setLibrary((lib) => {
@@ -255,7 +256,7 @@ export function useReviewStore() {
               metadataSource: data.metadata_source,
               metadataConfidence: data.metadata_confidence,
               metadataWarnings: data.metadata_warnings ?? [],
-              pdfUrl: data.pdf_url || current.pdfUrl || '',
+              pdfUrl: pdfUrl || current.pdfUrl || '',
               pdfFilename: data.pdf_filename || current.pdfFilename || '',
               sections: data.sections ?? current.sections,
               text: data.text || current.text,
@@ -294,7 +295,7 @@ export function useReviewStore() {
           metadataSource: data.metadata_source,
           metadataConfidence: data.metadata_confidence,
           metadataWarnings: data.metadata_warnings ?? [],
-          pdfUrl: data.pdf_url || '',
+          pdfUrl,
           pdfFilename: data.pdf_filename || '',
           sections: data.sections ?? [],
           text: data.text || '',
