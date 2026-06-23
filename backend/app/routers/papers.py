@@ -205,6 +205,95 @@ def _first_page_metadata(document) -> dict[str, object]:
     }
 
 
+# 섹션 헤딩 자동 분류 (#6). 표준 섹션명 → 정규화 카테고리. 별칭은 긴 것부터 매칭한다.
+SECTION_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Abstract", ("abstract",)),
+    ("Introduction", ("introduction",)),
+    ("Related Work", ("related work", "related works", "background", "prior work", "literature review")),
+    (
+        "Method",
+        (
+            "materials and methods",
+            "methodology",
+            "proposed method",
+            "proposed approach",
+            "method",
+            "methods",
+            "approach",
+            "model",
+        ),
+    ),
+    ("Experiment", ("experimental setup", "experimental results", "experiments", "experiment", "evaluation")),
+    ("Result", ("results", "result", "findings")),
+    ("Analysis", ("ablation study", "ablation", "analysis")),
+    ("Discussion", ("discussion",)),
+    ("Conclusion", ("conclusions", "conclusion", "concluding remarks", "summary and conclusions", "summary")),
+    ("References", ("references", "bibliography")),
+    ("Acknowledgments", ("acknowledgments", "acknowledgements", "acknowledgment", "acknowledgement")),
+    ("Appendix", ("appendix", "appendices")),
+)
+
+# 헤딩 후보 라인: (선택)섹션 번호 + 짧은 제목.
+HEADING_PATTERN = re.compile(r"^(?P<num>\d+(?:\.\d+)*\.?)?\s*(?P<name>[A-Za-z][A-Za-z0-9 \-&:/,]{2,70})$")
+
+
+def _canonical_section(name: str) -> str:
+    lowered = name.casefold().strip(" .:-")
+    for canonical, aliases in SECTION_ALIASES:
+        for alias in aliases:
+            if lowered == alias or lowered.startswith(alias + " "):
+                return canonical
+    return ""
+
+
+def _detect_sections(text: str) -> list[dict[str, object]]:
+    """원문 텍스트에서 섹션 헤딩을 추정해 등장 순서대로 반환한다(#6, FS-01).
+
+    - 번호가 붙은 헤딩("1 Introduction", "3.2 Multi-Head Attention") 또는 알려진
+      섹션 키워드(Abstract, Conclusion 등)만 헤딩으로 인정해 오탐을 줄인다.
+    - 같은 정규화 섹션(canonical)이 머리글/꼬리글로 반복되면 첫 등장만 남긴다.
+    - start: 원문 내 문자 오프셋(향후 본문 점프용). text는 "\\n"으로만 구분되므로
+      split("\\n") 누적 길이로 오프셋을 정확히 복원할 수 있다.
+    """
+    sections: list[dict[str, object]] = []
+    seen_titles: set[str] = set()
+    seen_canonical: set[str] = set()
+    offset = 0
+    for raw_line in text.split("\n"):
+        line_start = offset
+        offset += len(raw_line) + 1
+        stripped = raw_line.strip()
+        if not 4 <= len(stripped) <= 80:
+            continue
+        match = HEADING_PATTERN.match(stripped)
+        if not match:
+            continue
+        number = match.group("num")
+        name = _clean_text_line(match.group("name"))
+        canonical = _canonical_section(name)
+        # 번호 없는 라인은 알려진 섹션 키워드일 때만 헤딩으로 인정(오탐 방지).
+        if not number and not canonical:
+            continue
+        # 번호만 있는 비표준 헤딩: 대문자로 시작하고 본문 문장이 아닌 짧은 제목만 허용.
+        if not canonical and (len(name.split()) > 6 or not name[:1].isupper()):
+            continue
+        title = canonical or name
+        if canonical:
+            if canonical in seen_canonical:
+                continue
+            seen_canonical.add(canonical)
+        else:
+            key = title.casefold()
+            if key in seen_titles:
+                continue
+            seen_titles.add(key)
+        lead = len(raw_line) - len(raw_line.lstrip())
+        sections.append({"title": title, "canonical": canonical, "start": line_start + lead})
+        if len(sections) >= 40:
+            break
+    return sections
+
+
 @router.post("/extract-text")
 async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
     if file.content_type != "application/pdf":
@@ -248,6 +337,7 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
     text = "\n\n".join(page_text)
     # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 OCR이 필요하다(기획서 FS-01).
     scanned = len(text.strip()) == 0
+    sections = [] if scanned else _detect_sections(text)
 
     # 메타정보 추출: ① DOI(CrossRef) → ② 첫 페이지 레이아웃 → ③ PDF 내장 metadata → ④ 파일명
     cross: dict[str, object] | None = None
@@ -286,6 +376,7 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
         "authors": authors,
         "link": (cross or {}).get("link") or "",
         "doi": (cross or {}).get("doi") or detected_doi,
+        "sections": sections,
         "suggested_tags": suggested_tags,
         "metadata_source": metadata_source,
         "metadata_confidence": metadata_confidence,
