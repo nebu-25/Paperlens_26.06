@@ -117,8 +117,7 @@ export function useReviewStore() {
   }
 
   // ── 논문 등록 (#2: 논문별로 누적, 덮어쓰지 않음) ──
-  function registerPaper(next: Omit<Paper, 'id'>, initialTags: string[] = []) {
-    const id = uid();
+  function registerPaper(next: Omit<Paper, 'id'>, initialTags: string[] = [], id = uid()) {
     setLibrary((l) => ({ ...l, [id]: { ...next, id } }));
     // 논문마다 자체 섹션 배열을 갖도록 새 노트를 생성한다.
     // 자동 감지된 섹션이 있으면 그것으로 요약 카드를 시드한다(#6).
@@ -197,7 +196,9 @@ export function useReviewStore() {
     setUploadPhase('uploading');
     try {
       const form = new FormData();
+      const uploadPaperId = attachTargetId ?? uid();
       form.append('file', file);
+      form.append('paper_id', uploadPaperId);
       setUploadPhase('extracting');
       const res = await fetch(`${API_BASE}/papers/extract-text`, { method: 'POST', body: form });
       if (!res.ok) {
@@ -228,6 +229,8 @@ export function useReviewStore() {
         metadata_source?: string;
         metadata_confidence?: string;
         metadata_warnings?: string[];
+        pdf_url?: string;
+        pdf_filename?: string;
         scanned?: boolean;
         notice?: string | null;
       } = await res.json();
@@ -252,6 +255,8 @@ export function useReviewStore() {
               metadataSource: data.metadata_source,
               metadataConfidence: data.metadata_confidence,
               metadataWarnings: data.metadata_warnings ?? [],
+              pdfUrl: data.pdf_url || current.pdfUrl || '',
+              pdfFilename: data.pdf_filename || current.pdfFilename || '',
               sections: data.sections ?? current.sections,
               text: data.text || current.text,
             },
@@ -289,9 +294,11 @@ export function useReviewStore() {
           metadataSource: data.metadata_source,
           metadataConfidence: data.metadata_confidence,
           metadataWarnings: data.metadata_warnings ?? [],
+          pdfUrl: data.pdf_url || '',
+          pdfFilename: data.pdf_filename || '',
           sections: data.sections ?? [],
           text: data.text || '',
-        }, suggestedTags);
+        }, suggestedTags, uploadPaperId);
       }
       // 스캔(이미지) PDF면 OCR 안내를 노출(등록은 진행 — 노트는 직접 작성 가능)
       if (data.scanned && data.notice) {

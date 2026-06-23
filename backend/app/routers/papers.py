@@ -7,8 +7,10 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from collections import Counter
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
+from fastapi.responses import Response as FastAPIResponse
 
+from app import db
 from app.config import settings
 
 router = APIRouter(prefix="/papers", tags=["papers"])
@@ -570,7 +572,10 @@ def _tidy_spacing(text: str) -> str:
 
 
 @router.post("/extract-text")
-async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
+async def extract_text(
+    file: UploadFile = File(...),
+    paper_id: str = Form(""),
+) -> dict[str, object]:
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
 
@@ -611,6 +616,13 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
         raise HTTPException(status_code=422, detail="PDF 텍스트를 추출하지 못했습니다.") from exc
 
     page_count = document.page_count
+    pdf_url = ""
+    pdf_filename = ""
+    if paper_id.strip():
+        pdf_filename = file.filename or "paper.pdf"
+        db.store_pdf(paper_id.strip(), pdf_filename, content)
+        pdf_url = f"/api/papers/{paper_id.strip()}/pdf"
+
     # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 OCR이 필요하다(기획서 FS-01).
     scanned = len(text.strip()) == 0
     sections = [] if scanned else _detect_sections(text)
@@ -662,6 +674,8 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
     return {
         "filename": file.filename,
         "page_count": page_count,
+        "pdf_url": pdf_url,
+        "pdf_filename": pdf_filename,
         "text": text,
         "title": title,
         "authors": authors,
@@ -680,6 +694,25 @@ async def extract_text(file: UploadFile = File(...)) -> dict[str, object]:
             else None
         ),
     }
+
+
+@router.get("/{paper_id}/pdf")
+def get_pdf(paper_id: str) -> Response:
+    result = db.get_pdf(paper_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="저장된 PDF를 찾을 수 없습니다.")
+    filename, content = result
+    ascii_filename = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._") or "paper.pdf"
+    encoded_filename = urllib.parse.quote(filename)
+    return FastAPIResponse(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{ascii_filename}"; filename*=UTF-8\'\'{encoded_filename}'
+            )
+        },
+    )
 
 
 @router.get("/metadata")

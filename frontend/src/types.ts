@@ -20,6 +20,8 @@ export interface Paper {
   metadataSource?: string;
   metadataConfidence?: string;
   metadataWarnings?: string[];
+  pdfUrl?: string;
+  pdfFilename?: string;
   sections?: DetectedSection[];
   text: string;
 }

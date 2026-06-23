@@ -36,5 +36,13 @@ def upsert_note(
     return _repository.upsert_note(note_id, paper, note)
 
 
+def store_pdf(note_id: str, filename: str, content: bytes) -> None:
+    _repository.store_pdf(note_id, filename, content)
+
+
+def get_pdf(note_id: str) -> tuple[str, bytes] | None:
+    return _repository.get_pdf(note_id)
+
+
 def delete_note(note_id: str) -> None:
     _repository.delete_note(note_id)

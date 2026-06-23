@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS papers (
   metadata_source TEXT NOT NULL DEFAULT '',
   metadata_confidence TEXT NOT NULL DEFAULT '',
   metadata_warnings TEXT NOT NULL DEFAULT '[]',
+  pdf_filename TEXT NOT NULL DEFAULT '',
+  pdf_content  BLOB,
   text       TEXT NOT NULL DEFAULT '',
   note       TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL,
@@ -74,6 +76,8 @@ class SQLiteNotesRepository:
                 "metadata_warnings": (
                     "ALTER TABLE papers ADD COLUMN metadata_warnings TEXT NOT NULL DEFAULT '[]'"
                 ),
+                "pdf_filename": "ALTER TABLE papers ADD COLUMN pdf_filename TEXT NOT NULL DEFAULT ''",
+                "pdf_content": "ALTER TABLE papers ADD COLUMN pdf_content BLOB",
             }
             for column, statement in migrations.items():
                 if column not in columns:
@@ -159,6 +163,39 @@ class SQLiteNotesRepository:
             conn.close()
         return {"id": note_id, "updated_at": now}
 
+    def store_pdf(self, note_id: str, filename: str, content: bytes) -> None:
+        now = _now()
+        conn = self.connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO papers (
+                  id, pdf_filename, pdf_content, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  pdf_filename=excluded.pdf_filename,
+                  pdf_content=excluded.pdf_content,
+                  updated_at=excluded.updated_at
+                """,
+                (note_id, filename, content, now, now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_pdf(self, note_id: str) -> tuple[str, bytes] | None:
+        conn = self.connect()
+        try:
+            row = conn.execute(
+                "SELECT pdf_filename, pdf_content FROM papers WHERE id = ?", (note_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if row is None or row["pdf_content"] is None:
+            return None
+        return row["pdf_filename"] or "paper.pdf", bytes(row["pdf_content"])
+
     def delete_note(self, note_id: str) -> None:
         conn = self.connect()
         try:
@@ -179,6 +216,8 @@ class SQLiteNotesRepository:
             "metadataSource": row["metadata_source"],
             "metadataConfidence": row["metadata_confidence"],
             "metadataWarnings": json.loads(row["metadata_warnings"] or "[]"),
+            "pdfFilename": row["pdf_filename"],
+            "pdfUrl": f"/api/papers/{row['id']}/pdf" if row["pdf_filename"] else "",
             # 목록 응답에서는 본문(text)을 제외해 페이로드를 줄인다. 단건 조회 시 지연 로드.
             "text": row["text"] if include_text else "",
         }

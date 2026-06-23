@@ -16,6 +16,8 @@ class PaperIn(BaseModel):
     metadataSource: str = ""
     metadataConfidence: str = ""
     metadataWarnings: list[str] = Field(default_factory=list)
+    pdfUrl: str = ""
+    pdfFilename: str = ""
     text: str = ""
 
 

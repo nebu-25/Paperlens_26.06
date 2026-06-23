@@ -354,6 +354,31 @@ function App() {
                     </button>
                   </div>
                 )}
+                {paper.pdfUrl && (
+                  <div className="mt-3 rounded border border-line bg-white p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-ink">PDF 원본</div>
+                        <div className="truncate text-xs text-muted">
+                          {paper.pdfFilename || '저장된 PDF'}
+                        </div>
+                      </div>
+                      <a
+                        className="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
+                        href={paper.pdfUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        새 창
+                      </a>
+                    </div>
+                    <iframe
+                      className="h-[520px] w-full rounded border border-line bg-paper"
+                      title={`${paper.title || '논문'} PDF 원본`}
+                      src={paper.pdfUrl}
+                    />
+                  </div>
+                )}
               </div>
               <div
                 ref={bodyRef}

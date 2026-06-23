@@ -52,6 +52,16 @@ class TestRoundTrip:
         assert got["paper"]["text"] == "original"
         assert got["paper"]["title"] == "T2"
 
+    def test_store_get_pdf(self, db):
+        db.store_pdf("n1", "paper.pdf", b"%PDF-1.4\nbody")
+        got = db.get_pdf("n1")
+        assert got == ("paper.pdf", b"%PDF-1.4\nbody")
+
+        note = db.get_note("n1")
+        assert note is not None
+        assert note["paper"]["pdfFilename"] == "paper.pdf"
+        assert note["paper"]["pdfUrl"] == "/api/papers/n1/pdf"
+
 
 class TestRepositoryFactory:
     def test_defaults_to_sqlite(self, monkeypatch):

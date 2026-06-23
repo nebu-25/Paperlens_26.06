@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS papers (
   metadata_source     TEXT NOT NULL DEFAULT '',
   metadata_confidence TEXT NOT NULL DEFAULT '',
   metadata_warnings   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  pdf_filename        TEXT NOT NULL DEFAULT '',
+  pdf_content         BYTEA,
   text                TEXT NOT NULL DEFAULT '',
   note                JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at          TIMESTAMPTZ NOT NULL,
@@ -45,6 +47,8 @@ class PostgreSQLNotesRepository:
     def init(self) -> None:
         with self.connect() as conn:
             conn.execute(_SCHEMA)
+            conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS pdf_filename TEXT NOT NULL DEFAULT ''")
+            conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS pdf_content BYTEA")
 
     def list_notes(self) -> dict[str, object]:
         with self.connect() as conn:
@@ -110,6 +114,33 @@ class PostgreSQLNotesRepository:
             )
         return {"id": note_id, "updated_at": now}
 
+    def store_pdf(self, note_id: str, filename: str, content: bytes) -> None:
+        now = _now()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO papers (
+                  id, pdf_filename, pdf_content, created_at, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT(id) DO UPDATE SET
+                  pdf_filename=excluded.pdf_filename,
+                  pdf_content=excluded.pdf_content,
+                  updated_at=excluded.updated_at
+                """,
+                (note_id, filename, content, now, now),
+            )
+
+    def get_pdf(self, note_id: str) -> tuple[str, bytes] | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT pdf_filename, pdf_content FROM papers WHERE id = %s", (note_id,)
+            ).fetchone()
+        if row is None or row.get("pdf_content") is None:
+            return None
+        content = row["pdf_content"]
+        return row.get("pdf_filename") or "paper.pdf", bytes(content)
+
     def delete_note(self, note_id: str) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM papers WHERE id = %s", (note_id,))
@@ -126,5 +157,7 @@ class PostgreSQLNotesRepository:
             "metadataSource": row["metadata_source"],
             "metadataConfidence": row["metadata_confidence"],
             "metadataWarnings": row.get("metadata_warnings") or [],
+            "pdfFilename": row.get("pdf_filename") or "",
+            "pdfUrl": f"/api/papers/{row['id']}/pdf" if row.get("pdf_filename") else "",
             "text": row["text"] if include_text else "",
         }
