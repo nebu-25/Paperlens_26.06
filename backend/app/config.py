@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     database_url: str = ""
     # 잠긴 DB를 만났을 때 즉시 실패하지 않고 재시도할 최대 대기 시간(ms). 동시 쓰기 견고화용.
     sqlite_busy_timeout_ms: int = 5000
+    # Phase 2 AI 보조 레이어(OpenRouter). 키가 없으면 AI API는 비활성 상태로 응답한다.
+    ai_api_key: str = ""
+    ai_model: str = "openai/gpt-5.2"
+    ai_site_url: str = "https://nebu-25.github.io/Paperlens_26.06/"
+    ai_app_name: str = "PaperLens"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -26,6 +31,10 @@ class Settings(BaseSettings):
     def crossref_user_agent(self) -> str:
         contact = f" (mailto:{self.crossref_mailto})" if self.crossref_mailto else ""
         return f"PaperLens/0.1{contact}"
+
+    @property
+    def ai_enabled(self) -> bool:
+        return bool(self.ai_api_key.strip())
 
 
 settings = Settings()

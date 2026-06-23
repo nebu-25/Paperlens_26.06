@@ -46,6 +46,8 @@ function App() {
     online,
     pending,
     syncNotice,
+    aiEnabled,
+    aiLoadingTermId,
     search,
     activeTags,
     allTags,
@@ -80,6 +82,7 @@ function App() {
     onTextMouseUp,
     addHighlight,
     addTerm,
+    explainTerm,
     toggleTagFilter,
     exportMarkdown,
     exportPdf,
@@ -511,7 +514,19 @@ function App() {
                           <div className="mb-1 flex items-center justify-between gap-2">
                             <span className="text-sm font-semibold">{t.term}</span>
                             <div className="flex items-center gap-2">
-                              {t.explanation.length === 0 && <AiDraftButton label="설명 받기" />}
+                              {t.explanation.length === 0 && (
+                                <AiDraftButton
+                                  label="설명 받기"
+                                  disabled={!aiEnabled}
+                                  loading={aiLoadingTermId === t.id}
+                                  title={
+                                    aiEnabled
+                                      ? 'AI가 이 용어의 설명 초안을 생성합니다'
+                                      : 'AI 보조 기능은 백엔드 AI_API_KEY 설정 후 사용할 수 있습니다'
+                                  }
+                                  onClick={() => void explainTerm(t.id)}
+                                />
+                              )}
                               <button
                                 className="text-muted hover:text-ink"
                                 onClick={() =>

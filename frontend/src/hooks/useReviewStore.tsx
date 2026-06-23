@@ -1,6 +1,6 @@
 // PaperLens 핵심 상태/영속화/액션 훅. App 컴포넌트의 모든 비-뷰 로직을 담는다.
 // 논문 라이브러리·노트 상태, 서버/로컬 동기화, 업로드·등록·하이라이트·내보내기 액션을 제공한다.
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../constants';
 import { buildMarkdown, buildPrintHtml, safeFilename } from '../lib/export';
 import { collectTags, filterPapers } from '../lib/library';
@@ -40,6 +40,8 @@ export function useReviewStore() {
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [mobilePanel, setMobilePanel] = useState<'paper' | 'review'>('paper');
   const [highlightColor, setHighlightColor] = useState<HighlightColor>('yellow');
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiLoadingTermId, setAiLoadingTermId] = useState<string | null>(null);
   const [selection, setSelection] = useState<{
     text: string;
     start: number;
@@ -89,6 +91,23 @@ export function useReviewStore() {
     setNote((n) => ({ ...n, sectionSummaries: next }));
 
   const setTags = (next: string[]) => setNote((n) => ({ ...n, tags: next }));
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/ai/status`);
+        if (!res.ok) throw new Error('AI status unavailable');
+        const data = (await res.json()) as { enabled?: boolean };
+        if (!cancelled) setAiEnabled(Boolean(data.enabled));
+      } catch {
+        if (!cancelled) setAiEnabled(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // 활성 논문의 메타정보(제목/저자/링크) 직접 편집 — 자동 추출 실패 시 보완
   function updatePaper(patch: Partial<Omit<Paper, 'id'>>) {
@@ -446,6 +465,61 @@ export function useReviewStore() {
 
   const bodyNodes = usePaperBodyNodes(paper, note);
 
+  function contextForTerm(term: string): string {
+    if (!paper?.text) return '';
+    const index = paper.text.toLocaleLowerCase().indexOf(term.toLocaleLowerCase());
+    if (index < 0) return paper.text.slice(0, 1200);
+    return paper.text.slice(Math.max(0, index - 500), Math.min(paper.text.length, index + term.length + 700));
+  }
+
+  async function explainTerm(termId: string) {
+    const target = note.terms.find((t) => t.id === termId);
+    if (!target || !paper) return;
+    setAiLoadingTermId(termId);
+    try {
+      const res = await fetch(`${API_BASE}/ai/term-explanation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          term: target.term,
+          paperTitle: paper.title,
+          context: contextForTerm(target.term),
+        }),
+      });
+      if (!res.ok) {
+        let detail = 'AI 설명을 생성하지 못했습니다.';
+        try {
+          detail = ((await res.json()) as { detail?: string }).detail ?? detail;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail);
+      }
+      const data = (await res.json()) as { explanation?: string };
+      const explanation = data.explanation?.trim();
+      if (!explanation) throw new Error('AI 설명이 비어 있습니다.');
+      setNote((n) => ({
+        ...n,
+        terms: n.terms.map((t) =>
+          t.id === termId ? { ...t, explanation, aiExplained: true } : t,
+        ),
+      }));
+      setSyncNotice({
+        tone: 'success',
+        title: 'AI 설명 초안 생성',
+        message: '생성된 설명을 검토하고 필요하면 직접 수정하세요.',
+      });
+    } catch (error) {
+      setSyncNotice({
+        tone: 'warning',
+        title: 'AI 설명 실패',
+        message: error instanceof Error ? error.message : 'AI 설명을 생성하지 못했습니다.',
+      });
+    } finally {
+      setAiLoadingTermId(null);
+    }
+  }
+
   const updateNote = <K extends keyof ReviewNote>(key: K, value: ReviewNote[K]) =>
     setNote((n) => ({ ...n, [key]: value }));
 
@@ -498,6 +572,8 @@ export function useReviewStore() {
     online,
     pending,
     syncNotice,
+    aiEnabled,
+    aiLoadingTermId,
     search,
     activeTags,
     allTags,
@@ -535,6 +611,7 @@ export function useReviewStore() {
     onTextMouseUp,
     addHighlight,
     addTerm,
+    explainTerm,
     toggleTagFilter,
     exportMarkdown,
     exportPdf,
