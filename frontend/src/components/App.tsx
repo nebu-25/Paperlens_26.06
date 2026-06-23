@@ -102,7 +102,7 @@ function App() {
             <p className="text-xs text-muted">사용자 주도 논문 리뷰 노트</p>
           </div>
           <span className="hidden rounded bg-paper px-3 py-1 text-xs text-muted sm:inline-flex">
-            코어 MVP · AI 보조 준비 중
+            코어 MVP · {aiEnabled ? 'AI 용어 설명 활성' : 'AI 보조 준비 중'}
           </span>
         </div>
       </header>
