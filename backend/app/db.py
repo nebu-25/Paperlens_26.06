@@ -37,8 +37,17 @@ def _now() -> str:
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(settings.database_path)
+    # timeout: sqlite3 드라이버 레벨에서 잠긴 DB를 만났을 때 대기할 초. busy_timeout PRAGMA와
+    # 함께 둬 동시 접근 시 "database is locked" 즉시 실패를 막는다.
+    conn = sqlite3.connect(settings.database_path, timeout=settings.sqlite_busy_timeout_ms / 1000)
     conn.row_factory = sqlite3.Row
+    # WAL: 읽기가 쓰기를 막지 않아 동시성이 좋아진다(자동저장 PUT이 잦은 워크로드에 유리).
+    #   - 지원하지 않는 파일시스템에서는 PRAGMA가 오류 없이 기존 모드를 유지하므로 안전하다.
+    # busy_timeout: 잠금 경합 시 즉시 실패 대신 지정 시간만큼 재시도한다.
+    # synchronous=NORMAL: WAL과 함께 쓰면 내구성을 크게 해치지 않으면서 쓰기 비용을 낮춘다.
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute(f"PRAGMA busy_timeout = {int(settings.sqlite_busy_timeout_ms)}")
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 

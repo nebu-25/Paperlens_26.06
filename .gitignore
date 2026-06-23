@@ -15,7 +15,9 @@ __pycache__/
 /presentation_content*.md
 # 로드맵/백로그: 로컬 참조용
 /ROADMAP.md
-# SQLite 데이터베이스 파일
+# SQLite 데이터베이스 파일 (WAL 모드의 사이드카 -wal/-shm 포함)
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 
