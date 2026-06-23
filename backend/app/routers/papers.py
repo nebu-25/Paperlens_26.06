@@ -150,6 +150,14 @@ def _is_metadata_noise(line: str) -> bool:
         "journal",
         "proceedings",
         "conference",
+        # 한글 구조어(KCI 등): 초록/요약/서론/참고문헌 등은 저자·제목이 아니다.
+        "초록",
+        "요약",
+        "서론",
+        "본론",
+        "결론",
+        "참고문헌",
+        "목차",
     )
     return any(word in lowered for word in noise_words)
 
@@ -194,6 +202,9 @@ def _strip_author_markers(value: str) -> str:
         if ch not in _FOOTNOTE_MARKS and ch not in _SUPERSCRIPT_DIGITS and not ch.isdigit()
     ]
     cleaned = "".join(kept)
+    # 괄호 소속/주석 제거: "이승재 (경희대)" → "이승재", "( 경희대 )" → "". 남은 짝없는 괄호도 정리.
+    cleaned = re.sub(r"\([^)]*\)", "", cleaned)
+    cleaned = cleaned.replace("(", "").replace(")", "")
     cleaned = re.sub(r"\s+([,;])", r"\1", cleaned)  # " ," → ","
     cleaned = re.sub(r"([,;·∙])\s*[,;·∙]+", r"\1", cleaned)  # 중복 구분자 축약
     cleaned = re.sub(r"\s{2,}", " ", cleaned)
@@ -210,6 +221,8 @@ def _looks_like_authors(line: str) -> bool:
     if re.search(r"https?://|www\.|@", stripped):
         return False
     if re.fullmatch(r"[\d.,\-/()\s]+", stripped):  # 날짜·숫자만 있는 줄
+        return False
+    if re.match(r"^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ0-9]+\s*[.․]", stripped):  # 섹션 헤딩(Ⅰ. 서론 / 1. ...)
         return False
     if len(stripped.split()) > 12:  # 문장처럼 단어가 너무 많음
         return False
@@ -236,7 +249,7 @@ def _first_page_metadata(document) -> dict[str, object]:
         for line in block.get("lines", []):
             spans = line.get("spans", [])
             text = _clean_text_line(" ".join(span.get("text", "") for span in spans))
-            if len(text) < 4:
+            if len(text) < 2:  # 한글 이름은 2~3자라 너무 높이면 저자가 누락된다
                 continue
             sizes = [float(span.get("size", 0)) for span in spans if span.get("text", "").strip()]
             if not sizes:

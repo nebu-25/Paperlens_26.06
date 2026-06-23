@@ -222,6 +222,11 @@ class TestStripAuthorMarkers:
     def test_dagger_and_stray_space(self):
         assert papers._strip_author_markers("A. Kim † , B. Lee ‡") == "A. Kim, B. Lee"
 
+    def test_removes_parenthetical_affiliation(self):
+        # KCI: 저자 옆/아래 괄호 소속 제거
+        assert papers._strip_author_markers("이승재 (경희대)") == "이승재"
+        assert papers._strip_author_markers("( 경희대 )") == ""
+
 
 class TestLooksLikeAuthors:
     def test_accepts_name_lists(self):
@@ -239,3 +244,12 @@ class TestLooksLikeAuthors:
     def test_rejects_sentence(self):
         sentence = "This paper presents a novel approach to image segmentation in clinical settings today."
         assert papers._looks_like_authors(sentence) is False
+
+    def test_rejects_parenthetical_affiliation_and_section_heading(self):
+        # KCI: 괄호만 있는 소속 줄과 한글/로마숫자 섹션 헤딩은 저자가 아니다.
+        assert papers._looks_like_authors("( 경희대 )") is False
+        assert papers._looks_like_authors("Ⅰ. 서론") is False
+        assert papers._looks_like_authors("1. Introduction") is False
+
+    def test_accepts_short_korean_name(self):
+        assert papers._looks_like_authors("이승재") is True
