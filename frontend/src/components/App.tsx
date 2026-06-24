@@ -91,6 +91,39 @@ function App() {
   } = useReviewStore();
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
   const uploadPercent = uploadPhasePercent[uploadPhase] ?? 0;
+  const reviewRoadmap = [
+    {
+      label: '문제 파악',
+      helper: '초록(Abstract)의 첫 1~3문단에서 이 논문이 해결하려는 문제를 찾으세요.',
+      done: note.template.q1.trim().length > 0 || note.oneLineSummary.trim().length > 0,
+    },
+    {
+      label: '접근법 파악',
+      helper: '사용한 방법론, 데이터, 비교 기준을 확인하세요.',
+      done:
+        note.template.q2.trim().length > 0 ||
+        Boolean(note.memos.Method?.trim()) ||
+        note.sectionSummaries.some((s) => /method|방법|approach/i.test(s.section) && s.content.trim()),
+    },
+    {
+      label: '결과 확인',
+      helper: '내 주장과 같은 결과인지, 반대 결과인지, 인용 근거가 되는지 표시하세요.',
+      done:
+        note.template.q3.trim().length > 0 ||
+        Boolean(note.memos.Result?.trim()) ||
+        note.highlights.length > 0,
+    },
+    {
+      label: '비판적 검토',
+      helper: '한계, 반대 해석, 방법론상 약점을 정리하세요.',
+      done: note.template.q4.trim().length > 0 || note.questions.length > 0,
+    },
+    {
+      label: '정리',
+      helper: '내가 이 논문을 인용하는 이유와 핵심 문장을 남기세요.',
+      done: note.template.q5.trim().length > 0 || note.oneLineSummary.trim().length > 0,
+    },
+  ];
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-paper text-ink" onMouseDown={() => setSelection(null)}>
@@ -494,6 +527,39 @@ function App() {
                     자동 추출이 비어 있으면 직접 입력하세요. (KCI 등 CrossRef 미등재 논문)
                   </p>
                 </SectionCard>
+
+                <section className="rounded border border-line bg-white p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold">리뷰 진행 로드맵</h3>
+                    <span className="rounded bg-paper px-2 py-0.5 text-xs text-muted">
+                      {reviewRoadmap.filter((step) => step.done).length}/{reviewRoadmap.length} 단계
+                    </span>
+                  </div>
+                  <ol className="space-y-2">
+                    {reviewRoadmap.map((step, index) => (
+                      <li key={step.label} className="flex gap-2 text-sm">
+                        <span
+                          className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-xs font-semibold ${
+                            step.done ? 'bg-emerald-500 text-white' : 'bg-paper text-muted'
+                          }`}
+                        >
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className={step.done ? 'font-semibold text-ink' : 'font-semibold text-muted'}>
+                            {step.label}
+                          </div>
+                          <p className="mt-0.5 text-xs leading-relaxed text-muted">{step.helper}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                  <div className="mt-4 rounded bg-paper p-3 text-xs leading-relaxed text-muted">
+                    <b className="mb-1 block text-ink">인용 목적 점검</b>
+                    이 논문을 인용하는 이유는 무엇인가요? 내 주장과 같은 결과인지, 반대 결과인지,
+                    또는 방법론을 참고하려는지 먼저 정하면 리뷰 방향이 선명해집니다.
+                  </div>
+                </section>
 
                 {/* ── 읽으며 캡처: 원문을 읽으며 바로 남기는 영역 ── */}
                 <p className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">

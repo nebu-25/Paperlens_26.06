@@ -602,8 +602,8 @@ def _text_quality_notice(text: str) -> str | None:
     if broken < 3 or broken_ratio < 0.01:
         return None
     return (
-        "PDF 원문 텍스트 일부가 깨진 문자로 추출되었습니다. PDF 원본 보기는 정상적으로 사용할 수 있지만, "
-        "하이라이트 가능한 원문은 부정확할 수 있습니다. 필요한 문장은 리뷰 노트에 직접 보완해 주세요."
+        "PDF의 수식·특수기호 일부가 텍스트로 정확히 추출되지 않았습니다. "
+        "본문 문장 하이라이트는 사용할 수 있지만, 수식은 PDF 원본 보기에서 확인해 주세요."
     )
 
 
