@@ -58,8 +58,6 @@ function App() {
     highlightColor,
     selection,
     bodyNodes,
-    checklist,
-    doneCount,
     fileInputRef,
     bodyRef,
     attachTargetRef,
@@ -124,6 +122,10 @@ function App() {
       done: note.template.q5.trim().length > 0 || note.oneLineSummary.trim().length > 0,
     },
   ];
+  const reviewDoneCount = reviewRoadmap.filter((step) => step.done).length;
+  const nextRoadmapStep = reviewRoadmap.find((step) => !step.done);
+  const currentRoadmapStep = nextRoadmapStep ?? reviewRoadmap[reviewRoadmap.length - 1];
+  const reviewProgressPercent = Math.round((reviewDoneCount / reviewRoadmap.length) * 100);
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-paper text-ink" onMouseDown={() => setSelection(null)}>
@@ -460,6 +462,21 @@ function App() {
                     {pending > 0 && ` · 미동기 ${pending}건`}
                   </span>
                 </div>
+                <div className="mt-3 rounded border border-line bg-white p-2">
+                  <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                    <span className="font-semibold text-ink">리뷰 진행률</span>
+                    <span className="text-muted">
+                      {reviewDoneCount}/{reviewRoadmap.length} ·{' '}
+                      {nextRoadmapStep ? `다음: ${nextRoadmapStep.label}` : '완료'}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-paper">
+                    <div
+                      className="h-full rounded-full bg-action transition-all"
+                      style={{ width: `${reviewProgressPercent}%` }}
+                    />
+                  </div>
+                </div>
                 {syncNotice && (
                   <div
                     role={syncNotice.tone === 'error' || syncNotice.tone === 'warning' ? 'alert' : 'status'}
@@ -532,22 +549,40 @@ function App() {
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h3 className="text-sm font-semibold">리뷰 진행 로드맵</h3>
                     <span className="rounded bg-paper px-2 py-0.5 text-xs text-muted">
-                      {reviewRoadmap.filter((step) => step.done).length}/{reviewRoadmap.length} 단계
+                      {reviewDoneCount}/{reviewRoadmap.length} 단계
                     </span>
                   </div>
                   <ol className="space-y-2">
                     {reviewRoadmap.map((step, index) => (
-                      <li key={step.label} className="flex gap-2 text-sm">
+                      <li
+                        key={step.label}
+                        className={`flex gap-2 rounded p-2 text-sm ${
+                          step === nextRoadmapStep
+                            ? 'border border-action/40 bg-action/5'
+                            : ''
+                        }`}
+                      >
                         <span
                           className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-xs font-semibold ${
-                            step.done ? 'bg-emerald-500 text-white' : 'bg-paper text-muted'
+                            step.done
+                              ? 'bg-emerald-500 text-white'
+                              : step === nextRoadmapStep
+                                ? 'bg-action text-white'
+                                : 'bg-paper text-muted'
                           }`}
                         >
-                          {index + 1}
+                          {step.done ? <Check size={12} /> : index + 1}
                         </span>
                         <div className="min-w-0">
-                          <div className={step.done ? 'font-semibold text-ink' : 'font-semibold text-muted'}>
-                            {step.label}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={step.done ? 'font-semibold text-ink' : 'font-semibold text-muted'}>
+                              {step.label}
+                            </span>
+                            {step === nextRoadmapStep && (
+                              <span className="rounded bg-action px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                                다음 단계
+                              </span>
+                            )}
                           </div>
                           <p className="mt-0.5 text-xs leading-relaxed text-muted">{step.helper}</p>
                         </div>
@@ -833,43 +868,51 @@ function App() {
                   icon={<FileText size={16} />}
                   action={
                     <span className="rounded bg-paper px-2 py-0.5 text-xs text-muted">
-                      {doneCount}/{checklist.length} 작성
+                      {reviewDoneCount}/{reviewRoadmap.length} 단계
                     </span>
                   }
                 >
-                  <ul className="space-y-1.5">
-                    {checklist.map((c) => (
-                      <li key={c.label} className="flex items-center gap-2 text-sm">
-                        <span
-                          className={`grid size-4 shrink-0 place-items-center rounded-full ${
-                            c.done ? 'bg-emerald-500 text-white' : 'border border-line text-transparent'
-                          }`}
-                        >
-                          <Check size={11} />
-                        </span>
-                        <span className={c.done ? 'text-ink' : 'text-muted'}>{c.label}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="rounded bg-white text-sm">
+                    <div className="mb-2 flex items-center justify-between text-xs text-muted">
+                      <span>로드맵 기준 리뷰 완성도</span>
+                      <span>{reviewProgressPercent}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-paper">
+                      <div
+                        className="h-full rounded-full bg-action transition-all"
+                        style={{ width: `${reviewProgressPercent}%` }}
+                      />
+                    </div>
+                    <p className="mt-3 text-xs leading-relaxed text-muted">
+                      {nextRoadmapStep ? (
+                        <>
+                          다음으로 <b className="text-ink">{currentRoadmapStep.label}</b> 단계를 보완하면
+                          리뷰가 더 완성됩니다. 완료 기준은 위 로드맵과 동일합니다.
+                        </>
+                      ) : (
+                        <>로드맵 기준 필수 리뷰 단계가 모두 채워졌습니다. 내보내기 전에 문장을 다듬어 주세요.</>
+                      )}
+                    </p>
+                  </div>
                   <div className="mt-4 flex gap-2">
                     <button
                       className="flex flex-1 items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
                       onClick={exportMarkdown}
-                      disabled={doneCount === 0}
+                      disabled={reviewDoneCount === 0}
                     >
                       <Download size={15} /> Markdown
                     </button>
                     <button
                       className="flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm disabled:opacity-50"
                       onClick={exportPdf}
-                      disabled={doneCount === 0}
+                      disabled={reviewDoneCount === 0}
                     >
                       <Printer size={15} /> PDF로 저장
                     </button>
                   </div>
-                  {doneCount === 0 && (
+                  {reviewDoneCount === 0 && (
                     <p className="mt-2 text-xs text-muted">
-                      한 가지 이상 작성하면 내보낼 수 있습니다.
+                      로드맵의 한 단계를 시작하면 내보낼 수 있습니다.
                     </p>
                   )}
                 </SectionCard>
