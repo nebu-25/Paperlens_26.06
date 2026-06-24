@@ -79,6 +79,14 @@ export const uploadPhaseText: Record<UploadPhase, string> = {
   creating: '노트 생성 중',
 };
 
+export const uploadPhasePercent: Record<UploadPhase, number> = {
+  idle: 0,
+  uploading: 20,
+  extracting: 55,
+  metadata: 80,
+  creating: 100,
+};
+
 export const SAMPLE_PAPER: Omit<Paper, 'id'> = {
   title: 'Attention Is All You Need',
   authors: 'Vaswani et al. (2017)',

@@ -18,6 +18,7 @@ import {
   SAMPLE_PAPER,
   TEMPLATE_QUESTIONS,
   resolveApiUrl,
+  uploadPhasePercent,
   uploadPhaseText,
 } from '../constants';
 import { highlightStyle, needsPdfText, noticeStyle } from '../lib/format';
@@ -89,6 +90,7 @@ function App() {
     exportPdf,
   } = useReviewStore();
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
+  const uploadPercent = uploadPhasePercent[uploadPhase] ?? 0;
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-paper text-ink" onMouseDown={() => setSelection(null)}>
@@ -114,10 +116,10 @@ function App() {
             {paper && (
               <button
                 type="button"
-                className="rounded border border-line bg-white px-2 py-1 text-xs text-muted sm:hidden"
+                className="rounded border border-line bg-white px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
                 onClick={() => setUploadOpen((open) => !open)}
               >
-                {uploadOpen ? '접기' : '업로드 열기'}
+                {uploadOpen ? '새 논문 등록 접기' : '새 논문 등록 열기'}
               </button>
             )}
           </div>
@@ -132,7 +134,7 @@ function App() {
               if (file) void handleFile(file);
             }}
           />
-          <div className={`${paper && !uploadOpen ? 'hidden sm:mt-2' : 'mt-2 grid'} gap-2 sm:grid sm:grid-cols-[180px_minmax(0,1fr)_86px]`}>
+          <div className={`${paper && !uploadOpen ? 'hidden' : 'mt-2 grid'} gap-2 sm:grid-cols-[180px_minmax(0,1fr)_86px]`}>
             <button
               className="flex items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
               onClick={() => {
@@ -160,7 +162,7 @@ function App() {
               {doiLoading ? uploadPhaseText[uploadPhase] || '조회 중' : '등록'}
             </button>
           </div>
-          <div className={paper && !uploadOpen ? 'hidden sm:block' : ''}>
+          <div className={paper && !uploadOpen ? 'hidden' : ''}>
             <button
               className="mt-2 rounded border border-dashed border-line bg-white px-3 py-2 text-xs text-muted hover:border-action hover:text-action disabled:opacity-60"
               onClick={() => registerPaper(SAMPLE_PAPER)}
@@ -172,19 +174,12 @@ function App() {
               <div className="mt-3 rounded border border-line bg-white px-3 py-2">
                 <div className="mb-1 flex items-center justify-between text-xs text-muted">
                   <span>{uploadPhaseText[uploadPhase] || '처리 중'}</span>
-                  <span>잠시만 기다려 주세요</span>
+                  <span>{uploadPercent}%</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-paper">
                   <div
-                    className={`h-full rounded-full bg-action transition-all ${
-                      uploadPhase === 'uploading'
-                        ? 'w-1/4'
-                        : uploadPhase === 'extracting'
-                          ? 'w-1/2'
-                          : uploadPhase === 'metadata'
-                            ? 'w-3/4'
-                            : 'w-full'
-                    }`}
+                    className="h-full rounded-full bg-action transition-all"
+                    style={{ width: `${uploadPercent}%` }}
                   />
                 </div>
               </div>
@@ -318,7 +313,7 @@ function App() {
                 리뷰
               </button>
             </div>
-            <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
+            <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.9fr)]">
             {/* 원문 패널 */}
             <article
               className={`min-h-0 flex-col border-b border-line bg-white xl:flex xl:border-b-0 xl:border-r ${
@@ -331,8 +326,8 @@ function App() {
                   <span className="rounded bg-paper px-2 py-1 text-xs text-muted">AI 없이 동작</span>
                 </div>
                 <p className="text-xs text-muted">
-                  문장을 드래그하면 <b>하이라이트</b> 또는 <b>용어 사전 추가</b>를 할 수 있습니다.
-                  옅은 밑줄은 전문용어 추정 힌트(보조)입니다.
+                  아래 <b>하이라이트 가능한 원문</b>에서 문장을 드래그하면 하이라이트 또는 용어 사전 추가를 할 수 있습니다.
+                  PDF 원본은 같은 업로드 파일로 함께 보관됩니다.
                 </p>
                 {needsPdfText(paper) && (
                   <div className="mt-3 rounded border border-sky-300 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
@@ -356,11 +351,35 @@ function App() {
                     </button>
                   </div>
                 )}
+              </div>
+              <div
+                className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 pt-4 text-sm leading-7 text-neutral-800 sm:px-6"
+              >
+                <section className="rounded border border-line bg-white p-4">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-ink">하이라이트 가능한 원문</h3>
+                    <span className="text-xs text-muted">드래그 후 하이라이트/용어 추가</span>
+                  </div>
+                  <div
+                    ref={bodyRef}
+                    className="max-h-[62vh] overflow-y-auto rounded border border-line bg-paper/40 p-4"
+                    onMouseUp={onTextMouseUp}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="select-text whitespace-pre-wrap">
+                      {paper.text ? (
+                        bodyNodes
+                      ) : (
+                        <p className="text-xs text-muted">원문을 불러오는 중이거나 본문이 없습니다.</p>
+                      )}
+                    </div>
+                  </div>
+                </section>
                 {paperPdfUrl && (
-                  <div className="mt-3 rounded border border-line bg-white p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
+                  <section className="rounded border border-line bg-white p-4">
+                    <div className="mb-3 flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-xs font-semibold text-ink">PDF 원본</div>
+                        <h3 className="text-sm font-semibold text-ink">PDF 원본 보기</h3>
                         <div className="truncate text-xs text-muted">
                           {paper.pdfFilename || '저장된 PDF'}
                         </div>
@@ -375,26 +394,12 @@ function App() {
                       </a>
                     </div>
                     <iframe
-                      className="h-[520px] w-full rounded border border-line bg-paper"
+                      className="h-[72vh] min-h-[560px] w-full rounded border border-line bg-paper"
                       title={`${paper.title || '논문'} PDF 원본`}
                       src={paperPdfUrl}
                     />
-                  </div>
+                  </section>
                 )}
-              </div>
-              <div
-                ref={bodyRef}
-                className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm leading-7 text-neutral-800 sm:px-6"
-                onMouseUp={onTextMouseUp}
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <div className="select-text whitespace-pre-wrap">
-                  {paper.text ? (
-                    bodyNodes
-                  ) : (
-                    <p className="text-xs text-muted">원문을 불러오는 중이거나 본문이 없습니다.</p>
-                  )}
-                </div>
               </div>
             </article>
 
