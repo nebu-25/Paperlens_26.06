@@ -325,14 +325,10 @@ function App() {
               }`}
             >
               <div className="sticky top-0 z-10 shrink-0 border-b border-line bg-paper/95 p-5 pb-3 sm:p-6 sm:pb-3">
-                <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <h2 className="text-base font-semibold">원문 패널</h2>
                   <span className="rounded bg-paper px-2 py-1 text-xs text-muted">AI 없이 동작</span>
                 </div>
-                <p className="text-xs text-muted">
-                  아래 <b>하이라이트 가능한 원문</b>에서 문장을 드래그하면 하이라이트 또는 용어 사전 추가를 할 수 있습니다.
-                  PDF 원본은 같은 업로드 파일로 함께 보관됩니다.
-                </p>
                 {needsPdfText(paper) && (
                   <div className="mt-3 rounded border border-sky-300 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
                     <div className="mb-2 font-semibold">원문 PDF가 아직 연결되지 않았습니다</div>
@@ -357,7 +353,7 @@ function App() {
                 )}
               </div>
               <div
-                className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 pt-4 text-sm leading-7 text-neutral-800 sm:px-6"
+                className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 text-sm leading-7 text-neutral-800 sm:px-6"
               >
                 <section className="rounded border border-line bg-white p-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

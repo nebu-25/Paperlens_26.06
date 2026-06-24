@@ -174,6 +174,15 @@ class TestTidySpacing:
         assert papers._tidy_spacing("3.14 model") == "3.14 model"
 
 
+class TestTextQualityNotice:
+    def test_detects_many_broken_glyphs(self):
+        text = ("□□□ 한글 깨짐 " * 8) + "DICOM TIFF GIF JPEG"
+        assert papers._text_quality_notice(text)
+
+    def test_ignores_occasional_symbols(self):
+        assert papers._text_quality_notice("정상 텍스트 □ 일부 기호") is None
+
+
 class TestNoiseBlock:
     def test_page_number_is_noise(self):
         assert papers._is_noise_block("3") is True

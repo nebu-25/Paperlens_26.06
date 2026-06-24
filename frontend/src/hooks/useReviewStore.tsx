@@ -301,11 +301,11 @@ export function useReviewStore() {
           text: data.text || '',
         }, suggestedTags, uploadPaperId);
       }
-      // 스캔(이미지) PDF면 OCR 안내를 노출(등록은 진행 — 노트는 직접 작성 가능)
-      if (data.scanned && data.notice) {
+      // 스캔/OCR 필요 또는 폰트 인코딩 문제로 추출 품질이 낮으면 안내를 노출한다.
+      if (data.notice) {
         setUploadNotice({
           tone: 'warning',
-          title: '스캔 PDF로 보입니다',
+          title: data.scanned ? '스캔 PDF로 보입니다' : '원문 텍스트 확인 필요',
           message: data.notice,
         });
       } else {

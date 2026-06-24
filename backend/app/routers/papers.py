@@ -571,6 +571,26 @@ def _tidy_spacing(text: str) -> str:
     return text
 
 
+_BROKEN_TEXT_CHARS = {"\u25a1", "\ufffd"}
+
+
+def _text_quality_notice(text: str) -> str | None:
+    """PDF 폰트/인코딩 문제로 추출 텍스트가 깨진 경우 사용자에게 알려준다."""
+    visible = [ch for ch in text if not ch.isspace()]
+    if not visible:
+        return None
+    broken_count = sum(1 for ch in visible if ch in _BROKEN_TEXT_CHARS)
+    if broken_count < 8:
+        return None
+    broken_ratio = broken_count / len(visible)
+    if broken_ratio < 0.03:
+        return None
+    return (
+        "PDF 원문 텍스트 일부가 깨진 문자로 추출되었습니다. PDF 원본 보기는 정상적으로 사용할 수 있지만, "
+        "하이라이트 가능한 원문은 부정확할 수 있습니다. 필요한 문장은 리뷰 노트에 직접 보완해 주세요."
+    )
+
+
 @router.post("/extract-text")
 async def extract_text(
     file: UploadFile = File(...),
@@ -625,6 +645,7 @@ async def extract_text(
 
     # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 OCR이 필요하다(기획서 FS-01).
     scanned = len(text.strip()) == 0
+    text_notice = _text_quality_notice(text)
     sections = [] if scanned else _detect_sections(text)
 
     # 메타정보 추출: ① DOI(CrossRef) → ② arXiv API → ③ 첫 페이지 레이아웃 → ④ PDF 내장 → ⑤ 파일명
@@ -692,7 +713,7 @@ async def extract_text(
             "텍스트가 추출되지 않았습니다. 스캔(이미지) PDF로 보이며 OCR이 필요합니다. "
             "메타정보·리뷰 노트는 직접 작성할 수 있습니다."
             if scanned
-            else None
+            else text_notice
         ),
     }
 
