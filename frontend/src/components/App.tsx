@@ -94,14 +94,16 @@ function App() {
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-paper text-ink" onMouseDown={() => setSelection(null)}>
-      <header className="shrink-0 border-b border-line bg-panel px-4 py-4 sm:px-6">
+      <header className={`shrink-0 border-b border-line bg-panel px-4 sm:px-6 ${paper ? 'py-2' : 'py-4'}`}>
         <div className="flex items-center gap-3">
-          <div className="grid size-11 place-items-center rounded bg-action text-white">
-            <FileText size={23} />
+          <div className={`grid place-items-center rounded bg-action text-white ${paper ? 'size-8' : 'size-11'}`}>
+            <FileText size={paper ? 18 : 23} />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-2xl font-bold leading-none tracking-normal sm:text-3xl">PaperLens</h1>
-            <p className="text-xs text-muted">사용자 주도 논문 리뷰 노트</p>
+            <h1 className={`font-bold leading-none tracking-normal ${paper ? 'text-xl' : 'text-2xl sm:text-3xl'}`}>
+              PaperLens
+            </h1>
+            {!paper && <p className="text-xs text-muted">사용자 주도 논문 리뷰 노트</p>}
           </div>
           <span className="hidden rounded bg-paper px-3 py-1 text-xs text-muted sm:inline-flex">
             코어 MVP · {aiEnabled ? 'AI 용어 설명 활성' : 'AI 보조 준비 중'}
@@ -109,10 +111,12 @@ function App() {
         </div>
       </header>
 
-      <section className="shrink-0 border-b border-line bg-panel/95 px-4 py-3 sm:px-6 sm:py-4">
-        <div className="mx-auto max-w-3xl">
+      <section className={`shrink-0 border-b border-line bg-panel/95 px-4 sm:px-6 ${paper && !uploadOpen ? 'py-1.5' : 'py-3 sm:py-4'}`}>
+        <div className={paper && !uploadOpen ? '' : 'mx-auto max-w-3xl'}>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">새 논문 등록</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+              {paper && !uploadOpen ? '새 논문 등록 영역 접힘' : '새 논문 등록'}
+            </p>
             {paper && (
               <button
                 type="button"

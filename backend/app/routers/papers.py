@@ -631,9 +631,10 @@ async def extract_text(
     cross: dict[str, object] | None = None
     arxiv: dict[str, object] | None = None
     metadata_warnings: list[str] = []
-    # 식별자(DOI·arXiv ID)는 머리쪽 원문에 있다. noise 필터 전 원문(앞 2페이지)도 함께 탐색한다.
+    # 식별자(DOI·arXiv ID)는 보통 PDF 메타데이터나 첫머리에 있다. 원문 전체를 뒤지면
+    # 참고문헌 DOI를 논문 자체 DOI로 오인해 엉뚱한 CrossRef 결과를 가져올 수 있다.
     header_raw = "\n".join(document[i].get_text("text") for i in range(min(2, page_count)))
-    identifier_text = f"{header_raw}\n{text}"
+    identifier_text = header_raw
     detected_doi = _find_doi(identifier_text, pdf_meta)
     if detected_doi:
         try:
