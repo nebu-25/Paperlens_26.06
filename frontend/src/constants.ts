@@ -30,41 +30,47 @@ export const TEMPLATE_QUESTIONS = [
 export const HIGHLIGHT_COLORS: {
   value: HighlightColor;
   label: string;
+  meaning: string;
   markClass: string;
   listClass: string;
   swatchClass: string;
 }[] = [
   {
     value: 'yellow',
-    label: '노랑',
+    label: '핵심',
+    meaning: '핵심 주장',
     markClass: 'bg-yellow-200/70',
     listClass: 'bg-yellow-50',
     swatchClass: 'bg-yellow-300',
   },
   {
     value: 'green',
-    label: '초록',
+    label: '방법',
+    meaning: '방법론',
     markClass: 'bg-emerald-200/70',
     listClass: 'bg-emerald-50',
     swatchClass: 'bg-emerald-300',
   },
   {
     value: 'blue',
-    label: '파랑',
+    label: '결과',
+    meaning: '결과',
     markClass: 'bg-sky-200/70',
     listClass: 'bg-sky-50',
     swatchClass: 'bg-sky-300',
   },
   {
     value: 'pink',
-    label: '분홍',
+    label: '한계',
+    meaning: '한계/비판',
     markClass: 'bg-rose-200/70',
     listClass: 'bg-rose-50',
     swatchClass: 'bg-rose-300',
   },
   {
     value: 'orange',
-    label: '주황',
+    label: '질문',
+    meaning: '질문/후속 확인',
     markClass: 'bg-orange-200/70',
     listClass: 'bg-orange-50',
     swatchClass: 'bg-orange-300',

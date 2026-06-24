@@ -574,6 +574,29 @@ def _tidy_spacing(text: str) -> str:
 _BROKEN_TEXT_CHARS = {"\u25a1", "\ufffd"}
 
 
+def _broken_text_samples(text: str, *, limit: int = 3, context: int = 24) -> list[str]:
+    """깨진 글자 주변 문맥을 사용자 안내용으로 짧게 뽑는다."""
+    samples: list[str] = []
+    seen: set[str] = set()
+    for index, ch in enumerate(text):
+        if ch not in _BROKEN_TEXT_CHARS:
+            continue
+        start = max(0, index - context)
+        end = min(len(text), index + context + 1)
+        sample = re.sub(r"\s+", " ", text[start:end]).strip()
+        if start > 0:
+            sample = f"...{sample}"
+        if end < len(text):
+            sample = f"{sample}..."
+        if sample in seen:
+            continue
+        seen.add(sample)
+        samples.append(sample)
+        if len(samples) >= limit:
+            break
+    return samples
+
+
 def _text_quality_stats(text: str) -> dict[str, int | float]:
     visible = [ch for ch in text if not ch.isspace()]
     total = len(visible)
@@ -601,9 +624,12 @@ def _text_quality_notice(text: str) -> str | None:
         return None
     if broken < 3 or broken_ratio < 0.01:
         return None
+    samples = _broken_text_samples(text)
+    sample_notice = f" 깨짐 위치 예: {' / '.join(samples)}" if samples else ""
     return (
         "PDF의 수식·특수기호 일부가 텍스트로 정확히 추출되지 않았습니다. "
         "본문 문장 하이라이트는 사용할 수 있지만, 수식은 PDF 원본 보기에서 확인해 주세요."
+        f"{sample_notice}"
     )
 
 

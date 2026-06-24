@@ -5,7 +5,6 @@ import {
   Highlighter,
   Library,
   PencilLine,
-  Plus,
   Printer,
   Save,
   Search,
@@ -14,7 +13,6 @@ import {
 } from 'lucide-react';
 import {
   HIGHLIGHT_COLORS,
-  MEMO_SECTIONS,
   SAMPLE_PAPER,
   TEMPLATE_QUESTIONS,
   resolveApiUrl,
@@ -22,13 +20,11 @@ import {
   uploadPhaseText,
 } from '../constants';
 import { highlightStyle, needsPdfText, noticeStyle } from '../lib/format';
-import { uid } from '../lib/notes';
 import { useReviewStore } from '../hooks/useReviewStore';
 import { AiDraftButton } from './AiDraftButton';
 import { EmptyState } from './EmptyState';
 import { QuestionsCard } from './QuestionsCard';
 import { SectionCard } from './SectionCard';
-import { SourceBadge } from './SourceBadge';
 import { TagEditor } from './TagEditor';
 
 function App() {
@@ -56,6 +52,7 @@ function App() {
     visiblePapers,
     mobilePanel,
     highlightColor,
+    highlightFilter,
     selection,
     bodyNodes,
     fileInputRef,
@@ -67,10 +64,9 @@ function App() {
     setSearch,
     setMobilePanel,
     setHighlightColor,
+    setHighlightFilter,
     setSelection,
     setSyncNotice,
-    setNote,
-    setSectionSummaries,
     setTags,
     updatePaper,
     updateNote,
@@ -93,23 +89,17 @@ function App() {
     {
       label: '문제 파악',
       helper: '초록(Abstract)의 첫 1~3문단에서 이 논문이 해결하려는 문제를 찾으세요.',
-      done: note.template.q1.trim().length > 0 || note.oneLineSummary.trim().length > 0,
+      done: note.template.q1.trim().length > 0,
     },
     {
       label: '접근법 파악',
       helper: '사용한 방법론, 데이터, 비교 기준을 확인하세요.',
-      done:
-        note.template.q2.trim().length > 0 ||
-        Boolean(note.memos.Method?.trim()) ||
-        note.sectionSummaries.some((s) => /method|방법|approach/i.test(s.section) && s.content.trim()),
+      done: note.template.q2.trim().length > 0,
     },
     {
       label: '결과 확인',
       helper: '내 주장과 같은 결과인지, 반대 결과인지, 인용 근거가 되는지 표시하세요.',
-      done:
-        note.template.q3.trim().length > 0 ||
-        Boolean(note.memos.Result?.trim()) ||
-        note.highlights.length > 0,
+      done: note.template.q3.trim().length > 0 || note.highlights.length > 0,
     },
     {
       label: '비판적 검토',
@@ -119,9 +109,12 @@ function App() {
     {
       label: '정리',
       helper: '내가 이 논문을 인용하는 이유와 핵심 문장을 남기세요.',
-      done: note.template.q5.trim().length > 0 || note.oneLineSummary.trim().length > 0,
+      done: note.template.q5.trim().length > 0,
     },
   ];
+  const visibleHighlights = note.highlights.filter(
+    (h) => highlightFilter === 'all' || (h.color ?? 'yellow') === highlightFilter,
+  );
   const reviewDoneCount = reviewRoadmap.filter((step) => step.done).length;
   const nextRoadmapStep = reviewRoadmap.find((step) => !step.done);
   const currentRoadmapStep = nextRoadmapStep ?? reviewRoadmap[reviewRoadmap.length - 1];
@@ -386,6 +379,19 @@ function App() {
                     </button>
                   </div>
                 )}
+                {paper.metadataWarnings && paper.metadataWarnings.length > 0 && (
+                  <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+                    <div className="mb-1 font-semibold">원문 텍스트 확인 필요</div>
+                    <p>
+                      PDF에서 일부 수식이나 특수 문자가 텍스트로 정확히 변환되지 않았을 수 있습니다.
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4">
+                      {paper.metadataWarnings.map((warning, index) => (
+                        <li key={`${warning}-${index}`}>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
               <div
                 className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 text-sm leading-7 text-neutral-800 sm:px-6"
@@ -503,6 +509,34 @@ function App() {
               </div>
 
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 sm:px-6">
+                <SectionCard title="요약 템플릿" icon={<PencilLine size={16} />}>
+                  <div className="space-y-3">
+                    {TEMPLATE_QUESTIONS.map((q) => {
+                      const val = note.template[q.key];
+                      return (
+                        <div key={q.key}>
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <label className="text-sm font-medium">{q.label}</label>
+                            {val.length === 0 && <AiDraftButton />}
+                          </div>
+                          <textarea
+                            className="min-h-16 w-full resize-none rounded border border-line p-2 text-sm outline-none focus:border-action"
+                            value={val}
+                            onChange={(e) =>
+                              updateNote('template', { ...note.template, [q.key]: e.target.value })
+                            }
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </SectionCard>
+
+                <QuestionsCard
+                  questions={note.questions}
+                  onChange={(q) => updateNote('questions', q)}
+                />
+
                 {/* 논문 메타정보 (영역 1) — 자동 추출 결과를 직접 수정 가능 */}
                 <SectionCard title="논문 메타정보" icon={<FileText size={16} />}>
                   <div className="space-y-2">
@@ -596,27 +630,62 @@ function App() {
                   </div>
                 </section>
 
-                {/* ── 읽으며 캡처: 원문을 읽으며 바로 남기는 영역 ── */}
-                <p className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                  읽으며 캡처
-                </p>
-
                 {/* 핵심 문장 하이라이트 (영역 6) */}
                 <SectionCard title="핵심 문장 하이라이트" icon={<Highlighter size={16} />}>
-                  {note.highlights.length === 0 ? (
+                  <div className="mb-3 flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      className={`rounded-full px-2 py-1 text-xs ${
+                        highlightFilter === 'all'
+                          ? 'bg-action text-white'
+                          : 'border border-line text-muted hover:border-action'
+                      }`}
+                      onClick={() => setHighlightFilter('all')}
+                    >
+                      전체
+                    </button>
+                    {HIGHLIGHT_COLORS.map((color) => (
+                      <button
+                        key={color.value}
+                        type="button"
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${
+                          highlightFilter === color.value
+                            ? 'bg-action text-white'
+                            : 'border border-line text-muted hover:border-action'
+                        }`}
+                        onClick={() => setHighlightFilter(color.value)}
+                      >
+                        <span className={`size-2 rounded-full ${color.swatchClass}`} />
+                        <span>{color.label}</span>
+                        <span className={highlightFilter === color.value ? 'text-white/80' : 'text-muted'}>
+                          {color.meaning}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {visibleHighlights.length === 0 ? (
                     <p className="text-xs text-muted">
-                      원문에서 중요한 문장을 드래그해 추가하세요.
+                      {note.highlights.length === 0
+                        ? '원문에서 중요한 문장을 드래그해 추가하세요.'
+                        : '선택한 라벨의 하이라이트가 없습니다.'}
                     </p>
                   ) : (
                     <ul className="space-y-2">
-                      {note.highlights.map((h) => (
+                      {visibleHighlights.map((h) => {
+                        const style = highlightStyle(h.color);
+                        return (
                         <li
                           key={h.id}
                           className={`flex items-start justify-between gap-2 rounded p-2 text-sm ${
-                            highlightStyle(h.color).listClass
+                            style.listClass
                           }`}
                         >
-                          <span>“{h.text}”</span>
+                          <span className="min-w-0">
+                            <span className="mb-1 inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                              {style.label} · {style.meaning}
+                            </span>
+                            <span className="block">“{h.text}”</span>
+                          </span>
                           <button
                             className="shrink-0 text-muted hover:text-ink"
                             onClick={() =>
@@ -629,7 +698,8 @@ function App() {
                             <Trash2 size={14} />
                           </button>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </SectionCard>
@@ -689,176 +759,6 @@ function App() {
                         </li>
                       ))}
                     </ul>
-                  )}
-                </SectionCard>
-
-                {/* 읽으며 생긴 질문 (영역 5) */}
-                <QuestionsCard
-                  questions={note.questions}
-                  onChange={(q) => updateNote('questions', q)}
-                />
-
-                {/* 섹션별 메모 카드 (영역 8) — 상단부 캡처 묶음으로 이동 */}
-                <SectionCard title="섹션별 메모 카드" icon={<PencilLine size={16} />}>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {MEMO_SECTIONS.map((s) => (
-                      <div key={s}>
-                        <label className="mb-1 block text-xs font-semibold text-muted">{s}</label>
-                        <textarea
-                          className="min-h-20 w-full resize-none rounded border border-line p-2 text-sm outline-none focus:border-action"
-                          placeholder={`${s} 메모`}
-                          value={note.memos[s] ?? ''}
-                          onChange={(e) =>
-                            updateNote('memos', { ...note.memos, [s]: e.target.value })
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </SectionCard>
-
-                {/* ── 내 언어로 정리: 종합 작성 영역 ── */}
-                <p className="px-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted">
-                  내 언어로 정리
-                </p>
-
-                {/* 한 줄 요약 (영역 2) */}
-                <SectionCard
-                  title="한 줄 요약"
-                  icon={<PencilLine size={16} />}
-                  action={
-                    <div className="flex items-center gap-2">
-                      <SourceBadge
-                        filled={note.oneLineSummary.length > 0}
-                        source={note.oneLineSource}
-                      />
-                      {note.oneLineSummary.length === 0 && <AiDraftButton />}
-                    </div>
-                  }
-                >
-                  <input
-                    className="w-full rounded border border-line p-3 text-sm outline-none focus:border-action"
-                    placeholder="이 논문을 내 언어로 한 문장으로 정리하세요."
-                    value={note.oneLineSummary}
-                    onChange={(e) =>
-                      setNote((n) => ({
-                        ...n,
-                        oneLineSummary: e.target.value,
-                        oneLineSource: 'user',
-                      }))
-                    }
-                  />
-                </SectionCard>
-
-                {/* 요약: 섹션별 요약 ↔ 5문항 템플릿 택1 (영역 3/7 통합, 데이터는 양쪽 보존) */}
-                <SectionCard
-                  title="요약"
-                  icon={<PencilLine size={16} />}
-                  action={
-                    <div className="inline-flex shrink-0 rounded border border-line p-0.5 text-xs">
-                      <button
-                        type="button"
-                        className={`rounded px-2 py-0.5 ${
-                          note.summaryMode === 'section' ? 'bg-action text-white' : 'text-muted'
-                        }`}
-                        onClick={() => updateNote('summaryMode', 'section')}
-                      >
-                        섹션별 요약
-                      </button>
-                      <button
-                        type="button"
-                        className={`rounded px-2 py-0.5 ${
-                          note.summaryMode === 'template' ? 'bg-action text-white' : 'text-muted'
-                        }`}
-                        onClick={() => updateNote('summaryMode', 'template')}
-                      >
-                        5문항 템플릿
-                      </button>
-                    </div>
-                  }
-                >
-                  {note.summaryMode === 'section' ? (
-                    <div className="space-y-3">
-                      {note.sectionSummaries.map((s) => (
-                        <div key={s.id} className="rounded border border-line p-3">
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <input
-                              className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none focus:text-action"
-                              value={s.section}
-                              aria-label="섹션 이름"
-                              onChange={(e) =>
-                                setSectionSummaries(
-                                  note.sectionSummaries.map((x) =>
-                                    x.id === s.id ? { ...x, section: e.target.value } : x,
-                                  ),
-                                )
-                              }
-                            />
-                            <div className="flex shrink-0 items-center gap-2">
-                              <SourceBadge filled={s.content.length > 0} source={s.source} />
-                              {s.content.length === 0 && <AiDraftButton />}
-                              <button
-                                className="p-1 text-muted hover:text-ink"
-                                title="섹션 삭제"
-                                onClick={() =>
-                                  setSectionSummaries(
-                                    note.sectionSummaries.filter((x) => x.id !== s.id),
-                                  )
-                                }
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-                          <textarea
-                            className="min-h-20 w-full resize-none rounded border border-line p-3 text-sm outline-none focus:border-action"
-                            placeholder={`${s.section || '이 섹션'}을(를) 내 언어로 요약하세요.`}
-                            value={s.content}
-                            onChange={(e) =>
-                              setSectionSummaries(
-                                note.sectionSummaries.map((x) =>
-                                  x.id === s.id
-                                    ? { ...x, content: e.target.value, source: 'user' }
-                                    : x,
-                                ),
-                              )
-                            }
-                          />
-                        </div>
-                      ))}
-                      <button
-                        className="flex w-full items-center justify-center gap-1 rounded border border-dashed border-line py-2 text-xs text-muted hover:border-action hover:text-action"
-                        onClick={() =>
-                          setSectionSummaries([
-                            ...note.sectionSummaries,
-                            { id: uid(), section: '새 섹션', content: '', source: 'user' },
-                          ])
-                        }
-                      >
-                        <Plus size={14} /> 섹션 추가
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {TEMPLATE_QUESTIONS.map((q) => {
-                        const val = note.template[q.key];
-                        return (
-                          <div key={q.key}>
-                            <div className="mb-1 flex items-center justify-between gap-2">
-                              <label className="text-sm font-medium">{q.label}</label>
-                              {val.length === 0 && <AiDraftButton />}
-                            </div>
-                            <textarea
-                              className="min-h-16 w-full resize-none rounded border border-line p-2 text-sm outline-none focus:border-action"
-                              value={val}
-                              onChange={(e) =>
-                                updateNote('template', { ...note.template, [q.key]: e.target.value })
-                              }
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
                   )}
                 </SectionCard>
 

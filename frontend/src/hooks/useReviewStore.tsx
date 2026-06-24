@@ -40,6 +40,7 @@ export function useReviewStore() {
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [mobilePanel, setMobilePanel] = useState<'paper' | 'review'>('paper');
   const [highlightColor, setHighlightColor] = useState<HighlightColor>('yellow');
+  const [highlightFilter, setHighlightFilter] = useState<HighlightColor | 'all'>('all');
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiLoadingTermId, setAiLoadingTermId] = useState<string | null>(null);
   const [selection, setSelection] = useState<{
@@ -238,6 +239,9 @@ export function useReviewStore() {
       const unknownAuthors = !data.authors || data.authors === '저자 미상';
       const suggestedTags = data.suggested_tags ?? [];
       const pdfUrl = data.pdf_url ? resolveApiUrl(data.pdf_url) : '';
+      const metadataWarnings = data.notice
+        ? [...(data.metadata_warnings ?? []), data.notice]
+        : (data.metadata_warnings ?? []);
       setUploadPhase('creating');
       if (attachTargetId && libraryRef.current[attachTargetId]) {
         setLibrary((lib) => {
@@ -255,7 +259,7 @@ export function useReviewStore() {
               suggestedTags: mergeTags(current.suggestedTags ?? [], suggestedTags),
               metadataSource: data.metadata_source,
               metadataConfidence: data.metadata_confidence,
-              metadataWarnings: data.metadata_warnings ?? [],
+              metadataWarnings,
               pdfUrl: pdfUrl || current.pdfUrl || '',
               pdfFilename: data.pdf_filename || current.pdfFilename || '',
               sections: data.sections ?? current.sections,
@@ -294,7 +298,7 @@ export function useReviewStore() {
           suggestedTags,
           metadataSource: data.metadata_source,
           metadataConfidence: data.metadata_confidence,
-          metadataWarnings: data.metadata_warnings ?? [],
+          metadataWarnings,
           pdfUrl,
           pdfFilename: data.pdf_filename || '',
           sections: data.sections ?? [],
@@ -471,7 +475,7 @@ export function useReviewStore() {
     window.getSelection()?.removeAllRanges();
   }
 
-  const bodyNodes = usePaperBodyNodes(paper, note);
+  const bodyNodes = usePaperBodyNodes(paper, note, highlightFilter);
 
   function contextForTerm(term: string): string {
     if (!paper?.text) return '';
@@ -588,6 +592,7 @@ export function useReviewStore() {
     visiblePapers,
     mobilePanel,
     highlightColor,
+    highlightFilter,
     selection,
     bodyNodes,
     checklist,
@@ -603,6 +608,7 @@ export function useReviewStore() {
     setSearch,
     setMobilePanel,
     setHighlightColor,
+    setHighlightFilter,
     setSelection,
     setSyncNotice,
     // 액션

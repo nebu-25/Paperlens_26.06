@@ -186,6 +186,12 @@ class TestTextQualityNotice:
     def test_ignores_occasional_symbols(self):
         assert papers._text_quality_notice("정상 텍스트 □ 일부 기호") is None
 
+    def test_includes_broken_text_samples(self):
+        notice = papers._text_quality_notice("수식 A = □□□ 때문에 추출이 깨졌습니다.")
+        assert notice
+        assert "깨짐 위치 예" in notice
+        assert "A = □□□" in notice
+
 
 class TestPreferOcrText:
     def test_prefers_ocr_when_scanned_original_is_empty(self):

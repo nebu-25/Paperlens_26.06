@@ -2,12 +2,17 @@ import React, { useMemo } from 'react';
 import { highlightStyle, renderHints } from '../lib/format';
 import type { HighlightColor, Paper, ReviewNote } from '../types';
 
-export function usePaperBodyNodes(paper: Paper | null, note: ReviewNote): React.ReactNode {
+export function usePaperBodyNodes(
+  paper: Paper | null,
+  note: ReviewNote,
+  activeHighlightColor: HighlightColor | 'all' = 'all',
+): React.ReactNode {
   return useMemo(() => {
     const text = paper?.text ?? '';
     if (!text) return null;
     const ranges = (
       (note.highlights ?? [])
+        .filter((h) => activeHighlightColor === 'all' || (h.color ?? 'yellow') === activeHighlightColor)
         .map((h): { start: number; end: number; color?: HighlightColor } | null => {
           if (
             typeof h.start === 'number' &&
@@ -45,5 +50,5 @@ export function usePaperBodyNodes(paper: Paper | null, note: ReviewNote): React.
     }
     if (cursor < text.length) nodes.push(...renderHints(text.slice(cursor), cursor));
     return nodes;
-  }, [paper?.text, note.highlights]);
+  }, [activeHighlightColor, paper?.text, note.highlights]);
 }
