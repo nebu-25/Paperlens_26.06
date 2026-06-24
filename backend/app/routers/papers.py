@@ -574,21 +574,89 @@ def _tidy_spacing(text: str) -> str:
 _BROKEN_TEXT_CHARS = {"\u25a1", "\ufffd"}
 
 
+def _text_quality_stats(text: str) -> dict[str, int | float]:
+    visible = [ch for ch in text if not ch.isspace()]
+    total = len(visible)
+    broken = sum(1 for ch in visible if ch in _BROKEN_TEXT_CHARS)
+    hangul = sum(1 for ch in visible if "가" <= ch <= "힣")
+    latin = sum(1 for ch in visible if ("A" <= ch <= "Z") or ("a" <= ch <= "z"))
+    digits = sum(1 for ch in visible if ch.isdigit())
+    return {
+        "total": total,
+        "broken": broken,
+        "hangul": hangul,
+        "latin": latin,
+        "digits": digits,
+        "broken_ratio": broken / total if total else 0.0,
+    }
+
+
 def _text_quality_notice(text: str) -> str | None:
     """PDF 폰트/인코딩 문제로 추출 텍스트가 깨진 경우 사용자에게 알려준다."""
-    visible = [ch for ch in text if not ch.isspace()]
-    if not visible:
+    stats = _text_quality_stats(text)
+    total = int(stats["total"])
+    broken = int(stats["broken"])
+    broken_ratio = float(stats["broken_ratio"])
+    if total == 0:
         return None
-    broken_count = sum(1 for ch in visible if ch in _BROKEN_TEXT_CHARS)
-    if broken_count < 8:
-        return None
-    broken_ratio = broken_count / len(visible)
-    if broken_ratio < 0.03:
+    if broken < 3 or broken_ratio < 0.01:
         return None
     return (
         "PDF 원문 텍스트 일부가 깨진 문자로 추출되었습니다. PDF 원본 보기는 정상적으로 사용할 수 있지만, "
         "하이라이트 가능한 원문은 부정확할 수 있습니다. 필요한 문장은 리뷰 노트에 직접 보완해 주세요."
     )
+
+
+def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
+    if not ocr_text.strip():
+        return False
+    if scanned:
+        return True
+    original_stats = _text_quality_stats(original)
+    ocr_stats = _text_quality_stats(ocr_text)
+    original_broken = int(original_stats["broken"])
+    ocr_broken = int(ocr_stats["broken"])
+    if ocr_broken >= original_broken:
+        return False
+    return int(ocr_stats["total"]) >= max(40, int(original_stats["total"]) * 0.35)
+
+
+def _ocr_document_text(
+    document,
+    *,
+    language: str,
+    dpi: int,
+    max_pages: int,
+) -> tuple[str, str | None]:
+    """PyMuPDF OCR로 전체 문서를 재추출한다. Tesseract 미설치/언어팩 누락은 안내로 반환한다."""
+    if document.page_count > max_pages:
+        return (
+            "",
+            f"OCR 재추출은 {max_pages}페이지 이하 PDF에만 자동 시도합니다"
+            f"(현재 {document.page_count}페이지).",
+        )
+
+    pages: list[str] = []
+    try:
+        for page in document:
+            textpage = page.get_textpage_ocr(
+                language=language,
+                dpi=dpi,
+                full=True,
+            )
+            page_text = page.get_text("text", textpage=textpage)
+            cleaned = _tidy_spacing(_join_lines(page_text.splitlines()))
+            if cleaned:
+                pages.append(cleaned)
+    except Exception as exc:  # pragma: no cover - depends on host Tesseract install
+        return (
+            "",
+            (
+                "OCR 재추출을 시도했지만 서버에서 OCR 엔진 또는 한국어 언어팩을 사용할 수 없습니다. "
+                f"환경 메시지: {exc}"
+            ),
+        )
+    return "\n\n".join(pages), None
 
 
 @router.post("/extract-text")
@@ -646,6 +714,20 @@ async def extract_text(
     # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 OCR이 필요하다(기획서 FS-01).
     scanned = len(text.strip()) == 0
     text_notice = _text_quality_notice(text)
+    ocr_warning = None
+    if scanned or text_notice:
+        ocr_text, ocr_warning = _ocr_document_text(
+            document,
+            language=settings.ocr_languages,
+            dpi=settings.ocr_dpi,
+            max_pages=settings.ocr_max_pages,
+        )
+        if _prefer_ocr_text(text, ocr_text, scanned=scanned):
+            text = ocr_text
+            scanned = False
+            text_notice = _text_quality_notice(text)
+            ocr_warning = None
+
     sections = [] if scanned else _detect_sections(text)
 
     # 메타정보 추출: ① DOI(CrossRef) → ② arXiv API → ③ 첫 페이지 레이아웃 → ④ PDF 내장 → ⑤ 파일명
@@ -712,8 +794,9 @@ async def extract_text(
         "notice": (
             "텍스트가 추출되지 않았습니다. 스캔(이미지) PDF로 보이며 OCR이 필요합니다. "
             "메타정보·리뷰 노트는 직접 작성할 수 있습니다."
+            + (f" {ocr_warning}" if ocr_warning else "")
             if scanned
-            else text_notice
+            else " ".join(part for part in (text_notice, ocr_warning) if part) or None
         ),
     }
 

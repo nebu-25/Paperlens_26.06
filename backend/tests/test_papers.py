@@ -179,8 +179,26 @@ class TestTextQualityNotice:
         text = ("□□□ 한글 깨짐 " * 8) + "DICOM TIFF GIF JPEG"
         assert papers._text_quality_notice(text)
 
+    def test_detects_smaller_broken_runs(self):
+        text = "DICOM 영상 비교 본문 일부가 □□□ 형태로 깨졌습니다."
+        assert papers._text_quality_notice(text)
+
     def test_ignores_occasional_symbols(self):
         assert papers._text_quality_notice("정상 텍스트 □ 일부 기호") is None
+
+
+class TestPreferOcrText:
+    def test_prefers_ocr_when_scanned_original_is_empty(self):
+        assert papers._prefer_ocr_text("", "OCR로 읽은 본문", scanned=True) is True
+
+    def test_prefers_ocr_when_it_reduces_broken_text(self):
+        original = ("□□□ 한글 깨짐 " * 8) + "DICOM TIFF GIF JPEG"
+        ocr_text = "DICOM 영상과 다양한 형식의 영상 비교 본문입니다." * 4
+        assert papers._prefer_ocr_text(original, ocr_text, scanned=False) is True
+
+    def test_keeps_original_when_ocr_is_too_sparse(self):
+        original = ("□□□ 한글 깨짐 " * 8) + "DICOM TIFF GIF JPEG"
+        assert papers._prefer_ocr_text(original, "짧음", scanned=False) is False
 
 
 class TestNoiseBlock:
