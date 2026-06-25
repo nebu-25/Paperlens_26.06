@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     ocr_languages: str = "kor+eng"
     ocr_max_pages: int = 20
     ocr_dpi: int = 200
+    # 샘플 PDF 파일을 배포 서버에 커밋하지 않고 제공할 때 사용하는 원격 PDF URL.
+    sample_pdf_url: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -41,6 +41,7 @@ Backend:
 | `AI_SITE_URL` | 선택. OpenRouter 앱 표시용 |
 | `AI_APP_NAME` | 선택. OpenRouter 앱 표시용 |
 | `CROSSREF_MAILTO` | 선택. CrossRef User-Agent contact |
+| `SAMPLE_PDF_URL` | 선택. 배포 서버에 샘플 PDF 파일을 두지 않고 샘플 버튼을 사용할 때의 원격 PDF URL |
 
 Frontend build:
 

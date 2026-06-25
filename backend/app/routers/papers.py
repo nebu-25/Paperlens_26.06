@@ -740,19 +740,45 @@ def _ocr_document_text(
 
 
 @router.api_route("/sample-pdf", methods=["GET", "HEAD"])
-def sample_pdf() -> FileResponse:
-    if not SAMPLE_PDF_PATH.exists():
+def sample_pdf():
+    if SAMPLE_PDF_PATH.exists():
+        return FileResponse(
+            SAMPLE_PDF_PATH,
+            media_type="application/pdf",
+            filename=SAMPLE_PDF_PATH.name,
+        )
+
+    sample_url = settings.sample_pdf_url.strip()
+    if not sample_url:
         raise HTTPException(
             status_code=404,
             detail=(
                 "샘플 PDF 파일이 서버에 없습니다. "
-                f"프로젝트 루트에 {SAMPLE_PDF_PATH.name} 파일을 두고 다시 시도해 주세요."
+                f"프로젝트 루트에 {SAMPLE_PDF_PATH.name} 파일을 두거나 "
+                "SAMPLE_PDF_URL 환경변수로 샘플 PDF URL을 설정해 주세요."
             ),
         )
-    return FileResponse(
-        SAMPLE_PDF_PATH,
+
+    try:
+        request = urllib.request.Request(sample_url, headers={"User-Agent": settings.crossref_user_agent})
+        with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310 - operator-provided URL
+            content_type = response.headers.get("content-type", "")
+            content = response.read(MAX_PDF_BYTES + 1)
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail="원격 샘플 PDF를 불러오지 못했습니다.") from exc
+
+    if len(content) > MAX_PDF_BYTES:
+        raise HTTPException(status_code=413, detail="원격 샘플 PDF가 50MB를 초과합니다.")
+    if "pdf" not in content_type.casefold() and not content.startswith(b"%PDF"):
+        raise HTTPException(status_code=502, detail="원격 샘플 URL이 PDF를 반환하지 않았습니다.")
+
+    filename = sample_url.rsplit("/", 1)[-1].split("?", 1)[0] or "sample.pdf"
+    if not filename.casefold().endswith(".pdf"):
+        filename = f"{filename}.pdf"
+    return FastAPIResponse(
+        content,
         media_type="application/pdf",
-        filename=SAMPLE_PDF_PATH.name,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
