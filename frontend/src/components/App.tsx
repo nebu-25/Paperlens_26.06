@@ -529,76 +529,6 @@ function App() {
               </div>
 
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 sm:px-6">
-                <SectionCard title="요약 템플릿" icon={<PencilLine size={16} />}>
-                  <div className="space-y-3">
-                    {TEMPLATE_QUESTIONS.map((q) => {
-                      const val = note.template[q.key];
-                      return (
-                        <div key={q.key}>
-                          <div className="mb-1 flex items-center justify-between gap-2">
-                            <label className="text-sm font-medium">{q.label}</label>
-                            {val.length === 0 && <AiDraftButton />}
-                          </div>
-                          <textarea
-                            className="min-h-16 w-full resize-none rounded border border-line p-2 text-sm outline-none focus:border-action"
-                            value={val}
-                            onChange={(e) =>
-                              updateNote('template', { ...note.template, [q.key]: e.target.value })
-                            }
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </SectionCard>
-
-                <QuestionsCard
-                  questions={note.questions}
-                  onChange={(q) => updateNote('questions', q)}
-                />
-
-                {/* 논문 메타정보 (영역 1) — 자동 추출 결과를 직접 수정 가능 */}
-                <SectionCard title="논문 메타정보" icon={<FileText size={16} />}>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-sm">
-                      <span className="w-10 shrink-0 text-xs text-muted">제목</span>
-                      <input
-                        className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
-                        placeholder="논문 제목을 입력하세요"
-                        value={paper.title}
-                        onChange={(e) => updatePaper({ title: e.target.value })}
-                      />
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <span className="w-10 shrink-0 text-xs text-muted">저자</span>
-                      <input
-                        className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
-                        placeholder="저자를 입력하세요 (쉼표로 구분)"
-                        value={paper.authors}
-                        onChange={(e) => updatePaper({ authors: e.target.value })}
-                      />
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <span className="w-10 shrink-0 text-xs text-muted">링크</span>
-                      <input
-                        className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
-                        placeholder="DOI 또는 URL"
-                        value={paper.link}
-                        onChange={(e) => updatePaper({ link: e.target.value })}
-                      />
-                    </label>
-                    <div className="flex items-start gap-2 text-sm">
-                      <span className="w-10 shrink-0 pt-1.5 text-xs text-muted">태그</span>
-                      <div className="min-w-0 flex-1">
-                        <TagEditor tags={note.tags} onChange={setTags} />
-                      </div>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs text-muted">
-                    자동 추출이 비어 있으면 직접 입력하세요. (KCI 등 CrossRef 미등재 논문)
-                  </p>
-                </SectionCard>
-
                 <section className="rounded border border-line bg-white p-4">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <h3 className="text-sm font-semibold">리뷰 진행 로드맵</h3>
@@ -650,6 +580,76 @@ function App() {
                   </div>
                 </section>
 
+                {/* 논문 메타정보 (영역 1) — 자동 추출 결과를 직접 수정 가능 */}
+                <SectionCard title="논문 메타정보" icon={<FileText size={16} />}>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <span className="w-10 shrink-0 text-xs text-muted">제목</span>
+                      <input
+                        className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
+                        placeholder="논문 제목을 입력하세요"
+                        value={paper.title}
+                        onChange={(e) => updatePaper({ title: e.target.value })}
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <span className="w-10 shrink-0 text-xs text-muted">저자</span>
+                      <input
+                        className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
+                        placeholder="저자를 입력하세요 (쉼표로 구분)"
+                        value={paper.authors}
+                        onChange={(e) => updatePaper({ authors: e.target.value })}
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <span className="w-10 shrink-0 text-xs text-muted">링크</span>
+                      <input
+                        className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
+                        placeholder="DOI 또는 URL"
+                        value={paper.link}
+                        onChange={(e) => updatePaper({ link: e.target.value })}
+                      />
+                    </label>
+                    <div className="flex items-start gap-2 text-sm">
+                      <span className="w-10 shrink-0 pt-1.5 text-xs text-muted">태그</span>
+                      <div className="min-w-0 flex-1">
+                        <TagEditor tags={note.tags} onChange={setTags} />
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted">
+                    자동 추출이 비어 있으면 직접 입력하세요. (KCI 등 CrossRef 미등재 논문)
+                  </p>
+                </SectionCard>
+
+                <SectionCard title="요약 템플릿" icon={<PencilLine size={16} />}>
+                  <div className="space-y-3">
+                    {TEMPLATE_QUESTIONS.map((q) => {
+                      const val = note.template[q.key];
+                      return (
+                        <div key={q.key}>
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <label className="text-sm font-medium">{q.label}</label>
+                            {val.length === 0 && <AiDraftButton />}
+                          </div>
+                          <textarea
+                            className="min-h-16 w-full resize-none rounded border border-line p-2 text-sm outline-none focus:border-action"
+                            value={val}
+                            onChange={(e) =>
+                              updateNote('template', { ...note.template, [q.key]: e.target.value })
+                            }
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </SectionCard>
+
+                <QuestionsCard
+                  questions={note.questions}
+                  onChange={(q) => updateNote('questions', q)}
+                />
+
                 {/* 핵심 문장 하이라이트 (영역 6) */}
                 <SectionCard title="핵심 문장 하이라이트" icon={<Highlighter size={16} />}>
                   <div className="mb-3 flex flex-wrap gap-1">
@@ -694,30 +694,30 @@ function App() {
                       {visibleHighlights.map((h) => {
                         const style = highlightStyle(h.color);
                         return (
-                        <li
-                          key={h.id}
-                          className={`flex items-start justify-between gap-2 rounded p-2 text-sm ${
-                            style.listClass
-                          }`}
-                        >
-                          <span className="min-w-0">
-                            <span className="mb-1 inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
-                              {style.label} · {style.meaning}
-                            </span>
-                            <span className="block">“{h.text}”</span>
-                          </span>
-                          <button
-                            className="shrink-0 text-muted hover:text-ink"
-                            onClick={() =>
-                              updateNote(
-                                'highlights',
-                                note.highlights.filter((x) => x.id !== h.id),
-                              )
-                            }
+                          <li
+                            key={h.id}
+                            className={`flex items-start justify-between gap-2 rounded p-2 text-sm ${
+                              style.listClass
+                            }`}
                           >
-                            <Trash2 size={14} />
-                          </button>
-                        </li>
+                            <span className="min-w-0">
+                              <span className="mb-1 inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                                {style.label} · {style.meaning}
+                              </span>
+                              <span className="block">“{h.text}”</span>
+                            </span>
+                            <button
+                              className="shrink-0 text-muted hover:text-ink"
+                              onClick={() =>
+                                updateNote(
+                                  'highlights',
+                                  note.highlights.filter((x) => x.id !== h.id),
+                                )
+                              }
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </li>
                         );
                       })}
                     </ul>
