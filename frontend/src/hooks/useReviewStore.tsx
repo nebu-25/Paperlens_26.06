@@ -42,6 +42,7 @@ export function useReviewStore({
   const [uploading, setUploading] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle');
   const [doiLoading, setDoiLoading] = useState(false);
+  const [sampleLoading, setSampleLoading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<AppNotice | null>(null); // 업로드 가드 오류/안내
   const [uploadOpen, setUploadOpen] = useState(true);
   const [search, setSearch] = useState('');
@@ -373,6 +374,12 @@ export function useReviewStore({
   }
 
   async function handleSamplePdf() {
+    setSampleLoading(true);
+    setUploadNotice({
+      tone: 'info',
+      title: '샘플 PDF 준비 중',
+      message: '백엔드가 잠들어 있으면 첫 요청에 30초 이상 걸릴 수 있습니다.',
+    });
     try {
       attachTargetRef.current = null;
       const res = await fetch(`${API_BASE}/papers/sample-pdf`);
@@ -397,6 +404,8 @@ export function useReviewStore({
             ? error.message
             : '샘플 PDF를 불러오지 못했습니다. 직접 PDF 업로드를 사용해 주세요.',
       });
+    } finally {
+      setSampleLoading(false);
     }
   }
 
@@ -625,6 +634,7 @@ export function useReviewStore({
     uploading,
     uploadPhase,
     doiLoading,
+    sampleLoading,
     uploadNotice,
     uploadOpen,
     savedAt,

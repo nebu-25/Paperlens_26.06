@@ -98,6 +98,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
     uploading,
     uploadPhase,
     doiLoading,
+    sampleLoading,
     uploadNotice,
     uploadOpen,
     savedAt,
@@ -215,16 +216,12 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
           <span className="hidden rounded bg-paper px-3 py-1 text-xs text-muted sm:inline-flex">
             코어 MVP · {aiEnabled ? 'AI 용어 설명 활성' : 'AI 보조 준비 중'}
           </span>
+          <AuthControls enabled={authEnabled} ready={authReady} user={user} variant="compact" />
         </div>
       </header>
 
       <section className={`shrink-0 border-b border-line bg-panel/95 px-4 sm:px-6 ${paper && !uploadOpen ? 'py-1.5' : 'py-3 sm:py-4'}`}>
         <div className={paper && !uploadOpen ? '' : 'mx-auto max-w-3xl'}>
-          {(!paper || uploadOpen) && (
-            <div className="mb-3">
-              <AuthControls enabled={authEnabled} ready={authReady} user={user} />
-            </div>
-          )}
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">
               {paper && !uploadOpen ? '새 논문 등록 영역 접힘' : '새 논문 등록'}
@@ -254,9 +251,9 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
             <button
               className="flex items-center justify-center gap-2 rounded border border-dashed border-line bg-white px-3 py-3 text-sm font-semibold text-muted hover:border-action hover:text-action disabled:opacity-60"
               onClick={() => void handleSamplePdf()}
-              disabled={uploading || doiLoading}
+              disabled={uploading || doiLoading || sampleLoading}
             >
-              샘플 PDF
+              {sampleLoading ? '샘플 준비 중' : '샘플 PDF'}
             </button>
             <button
               className="flex items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
@@ -264,7 +261,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                 attachTargetRef.current = null;
                 fileInputRef.current?.click();
               }}
-              disabled={uploading}
+              disabled={uploading || sampleLoading}
             >
               <Upload size={16} />
               {uploading ? uploadPhaseText[uploadPhase] || '처리 중' : 'PDF 업로드'}
@@ -273,29 +270,29 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
               className="min-w-0 rounded border border-line bg-white px-4 py-3 text-sm outline-none focus:border-action disabled:opacity-60"
               placeholder="DOI 또는 URL을 입력하세요"
               value={doiInput}
-              disabled={doiLoading || uploading}
+              disabled={doiLoading || uploading || sampleLoading}
               onChange={(e) => setDoiInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && registerByDoi()}
             />
             <button
               className="rounded border border-line bg-white px-3 text-sm font-medium disabled:opacity-60"
               onClick={registerByDoi}
-              disabled={doiLoading || uploading}
+              disabled={doiLoading || uploading || sampleLoading}
             >
               {doiLoading ? uploadPhaseText[uploadPhase] || '조회 중' : '등록'}
             </button>
           </div>
           <div className={paper && !uploadOpen ? 'hidden' : ''}>
-            {(uploading || doiLoading) && (
+            {(uploading || doiLoading || sampleLoading) && (
               <div className="mt-3 rounded border border-line bg-white px-3 py-2">
                 <div className="mb-1 flex items-center justify-between text-xs text-muted">
-                  <span>{uploadPhaseText[uploadPhase] || '처리 중'}</span>
-                  <span>{uploadPercent}%</span>
+                  <span>{sampleLoading ? '샘플 PDF 준비 중' : uploadPhaseText[uploadPhase] || '처리 중'}</span>
+                  <span>{sampleLoading ? '대기' : `${uploadPercent}%`}</span>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-paper">
                   <div
                     className="h-full rounded-full bg-action transition-all"
-                    style={{ width: `${uploadPercent}%` }}
+                    style={{ width: `${sampleLoading ? 18 : uploadPercent}%` }}
                   />
                 </div>
               </div>

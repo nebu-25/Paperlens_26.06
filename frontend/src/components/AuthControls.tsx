@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogIn, LogOut } from 'lucide-react';
+import { LogIn, LogOut, UserCircle } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
@@ -7,9 +7,10 @@ interface AuthControlsProps {
   enabled: boolean;
   ready: boolean;
   user: User | null;
+  variant?: 'panel' | 'compact';
 }
 
-export function AuthControls({ enabled, ready, user }: AuthControlsProps) {
+export function AuthControls({ enabled, ready, user, variant = 'panel' }: AuthControlsProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
@@ -17,6 +18,16 @@ export function AuthControls({ enabled, ready, user }: AuthControlsProps) {
   const [message, setMessage] = useState('');
 
   if (!enabled) {
+    if (variant === 'compact') {
+      return (
+        <span
+          className="hidden rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 sm:inline-flex"
+          title="로그인 설정 전입니다. 배포 환경변수를 확인하세요."
+        >
+          인증 설정 필요
+        </span>
+      );
+    }
     return (
       <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
         로그인 설정 전입니다. 배포 환경변수 VITE_SUPABASE_URL과 VITE_SUPABASE_ANON_KEY를 확인하세요.
@@ -25,10 +36,32 @@ export function AuthControls({ enabled, ready, user }: AuthControlsProps) {
   }
 
   if (!ready) {
+    if (variant === 'compact') {
+      return <span className="hidden rounded bg-paper px-2 py-1 text-[11px] text-muted sm:inline-flex">인증 확인 중</span>;
+    }
     return <div className="rounded bg-paper px-3 py-2 text-xs text-muted">로그인 상태 확인 중</div>;
   }
 
   if (user) {
+    if (variant === 'compact') {
+      return (
+        <div className="hidden items-center gap-1 rounded border border-line bg-white px-2 py-1 text-xs text-muted sm:flex">
+          <UserCircle size={14} className="text-action" />
+          <span className="max-w-28 truncate" title={user.email ?? '사용자'}>
+            {user.email ?? '사용자'}
+          </span>
+          <button
+            type="button"
+            className="ml-1 rounded p-0.5 hover:bg-paper hover:text-action"
+            title="로그아웃"
+            aria-label="로그아웃"
+            onClick={() => void supabase?.auth.signOut()}
+          >
+            <LogOut size={13} />
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-line bg-white px-3 py-2">
         <span className="min-w-0 truncate text-xs text-muted">
