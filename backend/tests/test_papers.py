@@ -309,3 +309,9 @@ class TestLooksLikeAuthors:
 
     def test_accepts_short_korean_name(self):
         assert papers._looks_like_authors("이승재") is True
+
+    def test_rejects_korean_title_phrase(self):
+        assert papers._looks_like_authors("한국어 기계번역의 오류 분석") is False
+
+    def test_rejects_english_translated_title(self):
+        assert papers._looks_like_authors("A Study on Korean Machine Translation") is False

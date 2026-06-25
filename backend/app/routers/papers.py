@@ -215,6 +215,53 @@ def _strip_author_markers(value: str) -> str:
     return cleaned.strip(" ,;·∙•")
 
 
+def _looks_like_author_name_part(part: str) -> bool:
+    part = part.strip()
+    if not part:
+        return False
+
+    # 한글 저자명은 보통 2~4자다. 띄어쓴 긴 한글 구문은 제목/부제일 가능성이 높다.
+    if re.fullmatch(r"[가-힣]{2,4}", part):
+        return True
+    if re.search(r"[가-힣]", part):
+        return False
+
+    title_words = {
+        "a",
+        "an",
+        "the",
+        "study",
+        "studies",
+        "research",
+        "analysis",
+        "review",
+        "method",
+        "methods",
+        "approach",
+        "effect",
+        "effects",
+        "translation",
+        "learning",
+        "model",
+        "models",
+        "system",
+        "systems",
+        "based",
+        "using",
+        "through",
+        "for",
+        "on",
+        "of",
+        "and",
+    }
+    words = [word for word in re.split(r"\s+", part) if word]
+    if not 2 <= len(words) <= 5:
+        return False
+    if any(word.casefold().strip(".") in title_words for word in words):
+        return False
+    return all(re.fullmatch(r"[A-Za-z][A-Za-z.'-]*", word) for word in words)
+
+
 def _looks_like_authors(line: str) -> bool:
     """한 줄이 저자 이름 목록처럼 보이는지 판단한다(소속/이메일/날짜/문장형 제외)."""
     stripped = line.strip()
@@ -231,7 +278,12 @@ def _looks_like_authors(line: str) -> bool:
     if len(stripped.split()) > 12:  # 문장처럼 단어가 너무 많음
         return False
     core = _strip_author_markers(stripped)
-    return bool(re.search(r"[A-Za-z가-힣]", core))
+    if not core or not re.search(r"[A-Za-z가-힣]", core):
+        return False
+    parts = [part.strip() for part in re.split(r"[,;·∙]", core) if part.strip()]
+    if not parts:
+        return False
+    return all(_looks_like_author_name_part(part) for part in parts)
 
 
 def _first_page_metadata(document) -> dict[str, object]:
