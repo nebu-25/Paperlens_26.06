@@ -54,6 +54,14 @@ Frontend build:
 | `VITE_SUPABASE_URL` | Supabase 프로젝트 URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
 
+현재 배포 값 예:
+
+```text
+VITE_API_BASE_URL=https://paperlens-backend-53ki.onrender.com
+VITE_SUPABASE_URL=https://<supabase-project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<Supabase anon 또는 publishable key>
+```
+
 GitHub Pages 빌드에서는 이 값들을 GitHub에 넣습니다. Render의 환경변수와는 별개입니다.
 
 권장 위치:
@@ -64,7 +72,7 @@ Settings > Environments > github-pages > Environment variables
 
 현재 Pages 워크플로의 `build` job은 `environment: github-pages`를 선언하므로 위 environment variables를 `vars.*`로 읽습니다. 저장소 전체 변수로 관리하려면 `Settings > Secrets and variables > Actions > Variables`에 같은 이름으로 넣어도 됩니다.
 
-배포된 화면에 `로그인 설정 전입니다`가 보이면 `VITE_SUPABASE_URL` 또는 `VITE_SUPABASE_ANON_KEY`가 빌드에 들어가지 않은 상태입니다. 샘플 PDF까지 실패하면 `VITE_API_BASE_URL`도 비어 있을 가능성이 큽니다. 현재 워크플로는 세 값 중 하나라도 비어 있으면 배포 빌드를 실패시켜 잘못된 Pages 배포를 막습니다.
+배포된 화면에 `로그인 설정 전입니다`가 보이면 `VITE_SUPABASE_URL` 또는 `VITE_SUPABASE_ANON_KEY`가 빌드에 들어가지 않은 상태입니다. 샘플 PDF까지 실패하면 `VITE_API_BASE_URL`도 비어 있거나 잘못 들어갔을 가능성이 큽니다. 예를 들어 콘솔에 `.../sb_publishable_.../api/papers/sample-pdf 404`가 보이면 `VITE_API_BASE_URL` 자리에 Supabase anon/publishable key를 넣은 상태입니다. 현재 워크플로는 세 값 중 하나라도 비어 있거나 URL 형식이 맞지 않으면 배포 빌드를 실패시켜 잘못된 Pages 배포를 막습니다.
 
 ## Supabase Auth
 

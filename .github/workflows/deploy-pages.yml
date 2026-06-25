@@ -50,6 +50,18 @@ jobs:
               missing=1
             fi
           done
+          if [[ -n "$VITE_API_BASE_URL" && ! "$VITE_API_BASE_URL" =~ ^https?:// ]]; then
+            echo "::error::VITE_API_BASE_URL must be an http(s) backend origin, for example https://paperlens-backend-53ki.onrender.com."
+            missing=1
+          fi
+          if [[ -n "$VITE_SUPABASE_URL" && ! "$VITE_SUPABASE_URL" =~ ^https://.+\.supabase\.co/?$ ]]; then
+            echo "::error::VITE_SUPABASE_URL must be the Supabase project URL, for example https://<project-ref>.supabase.co."
+            missing=1
+          fi
+          if [[ -n "$VITE_SUPABASE_ANON_KEY" && "$VITE_SUPABASE_ANON_KEY" =~ ^https?:// ]]; then
+            echo "::error::VITE_SUPABASE_ANON_KEY must be the anon/publishable key, not a URL."
+            missing=1
+          fi
           if [ "$missing" -ne 0 ]; then
             exit 1
           fi
