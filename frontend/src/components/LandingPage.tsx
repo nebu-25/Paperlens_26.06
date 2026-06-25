@@ -1,4 +1,4 @@
-import { BookOpen, FileText, Highlighter, Library } from 'lucide-react';
+import { ArrowRight, BookOpen, FileText, Highlighter, Library } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { AuthControls } from './AuthControls';
 
@@ -6,6 +6,7 @@ interface LandingPageProps {
   authEnabled: boolean;
   authReady: boolean;
   user: User | null;
+  onEnterService: () => void;
 }
 
 const guideSteps = [
@@ -26,7 +27,7 @@ const guideSteps = [
   },
 ] as const;
 
-export function LandingPage({ authEnabled, authReady, user }: LandingPageProps) {
+export function LandingPage({ authEnabled, authReady, user, onEnterService }: LandingPageProps) {
   return (
     <main className="min-h-screen bg-paper text-ink">
       <section className="mx-auto grid min-h-screen w-full max-w-6xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-center">
@@ -83,6 +84,16 @@ export function LandingPage({ authEnabled, authReady, user }: LandingPageProps) 
             </p>
           </div>
           <AuthControls enabled={authEnabled} ready={authReady} user={user} />
+          {user && (
+            <button
+              type="button"
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white"
+              onClick={onEnterService}
+            >
+              논문 리뷰 서비스로 이동
+              <ArrowRight size={15} />
+            </button>
+          )}
         </aside>
       </section>
     </main>

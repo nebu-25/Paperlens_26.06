@@ -12,7 +12,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import {
   HIGHLIGHT_COLORS,
@@ -55,10 +55,11 @@ function routeFromLocation(): AppRoute {
   return normalized === SERVICE_ROUTE ? 'service' : 'landing';
 }
 
-function replaceRoute(route: AppRoute) {
+function writeRoute(route: AppRoute, mode: 'push' | 'replace' = 'replace') {
   const nextPath = pathForRoute(route);
   if (window.location.pathname !== nextPath) {
-    window.history.replaceState(null, '', nextPath);
+    if (mode === 'push') window.history.pushState(null, '', nextPath);
+    else window.history.replaceState(null, '', nextPath);
   }
 }
 
@@ -71,7 +72,12 @@ function useAppRoute() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  return route;
+  const navigate = useCallback((next: AppRoute, mode: 'push' | 'replace' = 'push') => {
+    writeRoute(next, mode);
+    setRoute(next);
+  }, []);
+
+  return { route, navigate };
 }
 
 interface ReviewWorkspaceProps {
@@ -942,15 +948,40 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
 
 function App() {
   const { authEnabled, authReady, user, accessToken } = useAuthSession();
-  const route = useAppRoute();
+  const { route, navigate } = useAppRoute();
+  const initialAuthResolvedRef = useRef(false);
+  const previousAccessTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!authReady) return;
-    replaceRoute(accessToken ? 'service' : 'landing');
-  }, [accessToken, authReady, route]);
+    if (route === 'service' && !accessToken) {
+      navigate('landing', 'replace');
+    }
+  }, [accessToken, authReady, navigate, route]);
 
-  if (!accessToken) {
-    return <LandingPage authEnabled={authEnabled} authReady={authReady} user={user} />;
+  useEffect(() => {
+    if (!authReady) return;
+    const previousAccessToken = previousAccessTokenRef.current;
+    if (!initialAuthResolvedRef.current) {
+      initialAuthResolvedRef.current = true;
+      previousAccessTokenRef.current = accessToken;
+      return;
+    }
+    previousAccessTokenRef.current = accessToken;
+    if (!previousAccessToken && accessToken && route === 'landing') {
+      navigate('service', 'push');
+    }
+  }, [accessToken, authReady, navigate, route]);
+
+  if (route === 'landing' || !accessToken) {
+    return (
+      <LandingPage
+        authEnabled={authEnabled}
+        authReady={authReady}
+        user={user}
+        onEnterService={() => navigate('service')}
+      />
+    );
   }
 
   return (
