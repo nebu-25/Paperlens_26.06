@@ -54,6 +54,8 @@ Frontend build:
 | `VITE_SUPABASE_URL` | Supabase 프로젝트 URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
 
+GitHub Pages 빌드에서는 이 값들을 저장소의 `Settings > Secrets and variables > Actions > Variables`에 넣습니다. Render의 환경변수와는 별개입니다.
+
 ## Supabase Auth
 
 Supabase Dashboard의 Authentication URL 설정에 아래 주소를 등록합니다.
