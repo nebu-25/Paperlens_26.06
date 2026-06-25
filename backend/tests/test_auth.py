@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import time
+from io import BytesIO
 
 import pytest
 from fastapi import HTTPException
@@ -24,6 +25,27 @@ def _token(payload: dict[str, object], secret: str = "secret") -> str:
     return f"{head}.{body}.{sig}"
 
 
+def _token_with_alg(alg: str, payload: dict[str, object]) -> str:
+    head = _b64({"alg": alg, "typ": "JWT"})
+    body = _b64(payload)
+    signature = base64.urlsafe_b64encode(b"signature").rstrip(b"=").decode("ascii")
+    return f"{head}.{body}.{signature}"
+
+
+class _Response:
+    def __init__(self, data: bytes):
+        self._body = BytesIO(data)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return self._body.read()
+
+
 def test_current_user_id_returns_local_when_auth_disabled(monkeypatch):
     monkeypatch.setattr(settings, "supabase_jwt_secret", "")
     assert auth.current_user_id(None) == "local"
@@ -33,6 +55,24 @@ def test_current_user_id_verifies_supabase_token(monkeypatch):
     monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
     token = _token({"sub": "user-1", "exp": int(time.time()) + 60})
     assert auth.current_user_id(f"Bearer {token}") == "user-1"
+
+
+def test_current_user_id_falls_back_to_supabase_user_endpoint(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    monkeypatch.setattr(settings, "supabase_url", "https://project.supabase.co")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key")
+    token = _token_with_alg("RS256", {"sub": "ignored", "exp": int(time.time()) + 60})
+
+    def fake_urlopen(request, timeout):
+        assert request.full_url == "https://project.supabase.co/auth/v1/user"
+        assert request.headers["Authorization"] == f"Bearer {token}"
+        assert request.headers["Apikey"] == "anon-key"
+        assert timeout == 10
+        return _Response(b'{"id":"user-from-supabase"}')
+
+    monkeypatch.setattr(auth, "urlopen", fake_urlopen)
+
+    assert auth.current_user_id(f"Bearer {token}") == "user-from-supabase"
 
 
 def test_current_user_id_rejects_bad_signature(monkeypatch):

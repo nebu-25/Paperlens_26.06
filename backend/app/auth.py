@@ -4,6 +4,8 @@ import hmac
 import json
 import time
 from typing import Annotated
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from fastapi import Header, HTTPException
 
@@ -46,11 +48,45 @@ def _verify_supabase_jwt(token: str) -> dict[str, object]:
     return payload
 
 
+def _fetch_supabase_user(token: str) -> dict[str, object]:
+    if not settings.supabase_url.strip() or not settings.supabase_anon_key.strip():
+        raise HTTPException(status_code=401, detail="지원하지 않는 인증 토큰입니다.")
+
+    url = f"{settings.supabase_url.rstrip('/')}/auth/v1/user"
+    request = Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "apikey": settings.supabase_anon_key,
+        },
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        if exc.code in (401, 403):
+            raise HTTPException(status_code=401, detail="인증 토큰을 확인할 수 없습니다.") from None
+        raise HTTPException(status_code=503, detail="인증 서버 응답을 확인할 수 없습니다.") from None
+    except (TimeoutError, URLError, json.JSONDecodeError):
+        raise HTTPException(status_code=503, detail="인증 서버에 연결할 수 없습니다.") from None
+
+    user_id = data.get("id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="인증 사용자 정보를 찾을 수 없습니다.")
+    return {"sub": str(user_id)}
+
+
 def current_user_id(authorization: Annotated[str | None, Header()] = None) -> str:
     if not settings.auth_enabled:
         return LOCAL_USER_ID
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
     token = authorization.split(" ", 1)[1].strip()
-    payload = _verify_supabase_jwt(token)
+    try:
+        payload = _verify_supabase_jwt(token)
+    except HTTPException as exc:
+        if exc.status_code != 401 or exc.detail != "지원하지 않는 인증 토큰입니다.":
+            raise
+        payload = _fetch_supabase_user(token)
     return str(payload["sub"])
