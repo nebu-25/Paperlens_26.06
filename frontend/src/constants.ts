@@ -77,6 +77,13 @@ export const HIGHLIGHT_COLORS: {
   },
 ];
 
+export const RESEARCH_LINKS = [
+  { label: 'KCI', url: 'https://www.kci.go.kr/kciportal/main.kci' },
+  { label: 'RISS', url: 'https://www.riss.kr' },
+  { label: 'KISS', url: 'https://kiss.kstudy.com' },
+  { label: 'Scholar', url: 'https://scholar.google.com' },
+] as const;
+
 export const uploadPhaseText: Record<UploadPhase, string> = {
   idle: '',
   uploading: '업로드 중',
