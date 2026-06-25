@@ -19,7 +19,7 @@ export function AuthControls({ enabled, ready, user }: AuthControlsProps) {
   if (!enabled) {
     return (
       <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        로그인 설정 전입니다. 로컬 저장으로 사용할 수 있습니다.
+        로그인 설정 전입니다. 배포 환경변수 VITE_SUPABASE_URL과 VITE_SUPABASE_ANON_KEY를 확인하세요.
       </div>
     );
   }

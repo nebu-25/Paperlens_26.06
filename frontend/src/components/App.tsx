@@ -12,6 +12,8 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
 import {
   HIGHLIGHT_COLORS,
   RESEARCH_LINKS,
@@ -26,12 +28,60 @@ import { useAuthSession } from '../hooks/useAuthSession';
 import { AiDraftButton } from './AiDraftButton';
 import { AuthControls } from './AuthControls';
 import { EmptyState } from './EmptyState';
+import { LandingPage } from './LandingPage';
 import { QuestionsCard } from './QuestionsCard';
 import { SectionCard } from './SectionCard';
 import { TagEditor } from './TagEditor';
 
-function App() {
-  const { authEnabled, authReady, user, accessToken } = useAuthSession();
+const SERVICE_ROUTE = 'service_home';
+
+type AppRoute = 'landing' | 'service';
+
+function appBasePath() {
+  return (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
+}
+
+function pathForRoute(route: AppRoute) {
+  const base = appBasePath();
+  if (route === 'service') return base ? `${base}/${SERVICE_ROUTE}` : `/${SERVICE_ROUTE}`;
+  return base ? `${base}/` : '/';
+}
+
+function routeFromLocation(): AppRoute {
+  const base = appBasePath();
+  let path = window.location.pathname;
+  if (base && path.startsWith(base)) path = path.slice(base.length);
+  const normalized = path.replace(/^\/+|\/+$/g, '');
+  return normalized === SERVICE_ROUTE ? 'service' : 'landing';
+}
+
+function replaceRoute(route: AppRoute) {
+  const nextPath = pathForRoute(route);
+  if (window.location.pathname !== nextPath) {
+    window.history.replaceState(null, '', nextPath);
+  }
+}
+
+function useAppRoute() {
+  const [route, setRoute] = useState<AppRoute>(() => routeFromLocation());
+
+  useEffect(() => {
+    const handlePopState = () => setRoute(routeFromLocation());
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  return route;
+}
+
+interface ReviewWorkspaceProps {
+  authEnabled: boolean;
+  authReady: boolean;
+  user: User | null;
+  accessToken: string;
+}
+
+function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWorkspaceProps) {
   const {
     library,
     notes,
@@ -123,7 +173,6 @@ function App() {
   const nextRoadmapStep = reviewRoadmap.find((step) => !step.done);
   const currentRoadmapStep = nextRoadmapStep ?? reviewRoadmap[reviewRoadmap.length - 1];
   const reviewProgressPercent = Math.round((reviewDoneCount / reviewRoadmap.length) * 100);
-  const loginRequired = authEnabled && authReady && !accessToken;
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-paper text-ink" onMouseDown={() => setSelection(null)}>
@@ -199,7 +248,7 @@ function App() {
             <button
               className="flex items-center justify-center gap-2 rounded border border-dashed border-line bg-white px-3 py-3 text-sm font-semibold text-muted hover:border-action hover:text-action disabled:opacity-60"
               onClick={() => void handleSamplePdf()}
-              disabled={uploading || doiLoading || loginRequired}
+              disabled={uploading || doiLoading}
             >
               샘플 PDF
             </button>
@@ -209,7 +258,7 @@ function App() {
                 attachTargetRef.current = null;
                 fileInputRef.current?.click();
               }}
-              disabled={uploading || loginRequired}
+              disabled={uploading}
             >
               <Upload size={16} />
               {uploading ? uploadPhaseText[uploadPhase] || '처리 중' : 'PDF 업로드'}
@@ -218,24 +267,19 @@ function App() {
               className="min-w-0 rounded border border-line bg-white px-4 py-3 text-sm outline-none focus:border-action disabled:opacity-60"
               placeholder="DOI 또는 URL을 입력하세요"
               value={doiInput}
-              disabled={doiLoading || uploading || loginRequired}
+              disabled={doiLoading || uploading}
               onChange={(e) => setDoiInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && registerByDoi()}
             />
             <button
               className="rounded border border-line bg-white px-3 text-sm font-medium disabled:opacity-60"
               onClick={registerByDoi}
-              disabled={doiLoading || uploading || loginRequired}
+              disabled={doiLoading || uploading}
             >
               {doiLoading ? uploadPhaseText[uploadPhase] || '조회 중' : '등록'}
             </button>
           </div>
           <div className={paper && !uploadOpen ? 'hidden' : ''}>
-            {loginRequired && (
-              <p className="mt-2 text-xs text-muted">
-                개인 라이브러리에 저장하려면 먼저 로그인하세요.
-              </p>
-            )}
             {(uploading || doiLoading) && (
               <div className="mt-3 rounded border border-line bg-white px-3 py-2">
                 <div className="mb-1 flex items-center justify-between text-xs text-muted">
@@ -893,6 +937,29 @@ function App() {
         </div>
       )}
     </main>
+  );
+}
+
+function App() {
+  const { authEnabled, authReady, user, accessToken } = useAuthSession();
+  const route = useAppRoute();
+
+  useEffect(() => {
+    if (!authReady) return;
+    replaceRoute(accessToken ? 'service' : 'landing');
+  }, [accessToken, authReady, route]);
+
+  if (!accessToken) {
+    return <LandingPage authEnabled={authEnabled} authReady={authReady} user={user} />;
+  }
+
+  return (
+    <ReviewWorkspace
+      authEnabled={authEnabled}
+      authReady={authReady}
+      user={user}
+      accessToken={accessToken}
+    />
   );
 }
 
