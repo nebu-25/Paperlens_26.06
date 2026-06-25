@@ -1,5 +1,5 @@
 // 앱 전역 상수. 타입 외 다른 모듈에 의존하지 않는다(순환 의존 방지).
-import type { HighlightColor, Paper, UploadPhase } from './types';
+import type { HighlightColor, UploadPhase } from './types';
 
 // API 베이스 경로. 기본은 상대경로 '/api'(개발 시 Vite 프록시, 배포 시 동일 오리진/리버스 프록시).
 // 다른 오리진의 백엔드를 직접 가리키려면 VITE_API_BASE_URL로 오버라이드한다(예: http://127.0.0.1:8000).
@@ -98,17 +98,6 @@ export const uploadPhasePercent: Record<UploadPhase, number> = {
   extracting: 55,
   metadata: 80,
   creating: 100,
-};
-
-export const SAMPLE_PAPER: Omit<Paper, 'id'> = {
-  title: 'Attention Is All You Need',
-  authors: 'Vaswani et al. (2017)',
-  link: 'https://arxiv.org/abs/1706.03762',
-  text: `We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train.
-
-The dominant sequence transduction models are based on complex recurrent or convolutional neural networks. Self-attention, sometimes called intra-attention, is an attention mechanism relating different positions of a single sequence in order to compute a representation of the sequence.
-
-Multi-Head Attention allows the model to jointly attend to information from different representation subspaces at different positions. The Transformer model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results by over 2 BLEU.`,
 };
 
 // localStorage 키: 논문 라이브러리 + 논문별 노트 + 현재 활성 논문을 한 묶음으로 보관

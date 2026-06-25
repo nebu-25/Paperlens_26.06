@@ -6,9 +6,10 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections import Counter
+from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
-from fastapi.responses import Response as FastAPIResponse
+from fastapi.responses import FileResponse, Response as FastAPIResponse
 
 from app import db
 from app.config import settings
@@ -22,6 +23,7 @@ TRAILING_DOI_CHARS = ".,;:)]}>"
 # 입력 가드 (기획서 FS-01)
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50MB
 MAX_PDF_PAGES = 200
+SAMPLE_PDF_PATH = Path(__file__).resolve().parents[3] / "KCI_FI002116975_250201_164625.pdf"
 
 
 def _format_authors(authors: list[dict]) -> str:
@@ -735,6 +737,23 @@ def _ocr_document_text(
             ),
         )
     return "\n\n".join(pages), None
+
+
+@router.api_route("/sample-pdf", methods=["GET", "HEAD"])
+def sample_pdf() -> FileResponse:
+    if not SAMPLE_PDF_PATH.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "샘플 PDF 파일이 서버에 없습니다. "
+                f"프로젝트 루트에 {SAMPLE_PDF_PATH.name} 파일을 두고 다시 시도해 주세요."
+            ),
+        )
+    return FileResponse(
+        SAMPLE_PDF_PATH,
+        media_type="application/pdf",
+        filename=SAMPLE_PDF_PATH.name,
+    )
 
 
 @router.post("/extract-text")

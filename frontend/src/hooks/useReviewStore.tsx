@@ -353,6 +353,34 @@ export function useReviewStore() {
     }
   }
 
+  async function handleSamplePdf() {
+    try {
+      attachTargetRef.current = null;
+      const res = await fetch(`${API_BASE}/papers/sample-pdf`);
+      if (!res.ok) {
+        let detail = '샘플 PDF를 불러오지 못했습니다.';
+        try {
+          detail = ((await res.json()) as { detail?: string }).detail ?? detail;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail);
+      }
+      const blob = await res.blob();
+      const filename = 'KCI_FI002116975_250201_164625.pdf';
+      await handleFile(new File([blob], filename, { type: 'application/pdf', lastModified: 0 }));
+    } catch (error) {
+      setUploadNotice({
+        tone: 'error',
+        title: '샘플 PDF 불러오기 실패',
+        message:
+          error instanceof Error
+            ? error.message
+            : '샘플 PDF를 불러오지 못했습니다. 직접 PDF 업로드를 사용해 주세요.',
+      });
+    }
+  }
+
   async function registerByDoi() {
     const query = doiInput.trim();
     if (!query) return;
@@ -621,6 +649,7 @@ export function useReviewStore() {
     openPaper,
     deletePaper,
     handleFile,
+    handleSamplePdf,
     registerByDoi,
     onTextMouseUp,
     addHighlight,

@@ -15,7 +15,6 @@ import {
 import {
   HIGHLIGHT_COLORS,
   RESEARCH_LINKS,
-  SAMPLE_PAPER,
   TEMPLATE_QUESTIONS,
   resolveApiUrl,
   uploadPhasePercent,
@@ -72,10 +71,10 @@ function App() {
     setTags,
     updatePaper,
     updateNote,
-    registerPaper,
     openPaper,
     deletePaper,
     handleFile,
+    handleSamplePdf,
     registerByDoi,
     onTextMouseUp,
     addHighlight,
@@ -187,7 +186,14 @@ function App() {
               if (file) void handleFile(file);
             }}
           />
-          <div className={`${paper && !uploadOpen ? 'hidden' : 'mt-2 grid'} gap-2 sm:grid-cols-[180px_minmax(0,1fr)_86px]`}>
+          <div className={`${paper && !uploadOpen ? 'hidden' : 'mt-2 grid'} gap-2 sm:grid-cols-[150px_180px_minmax(0,1fr)_86px]`}>
+            <button
+              className="flex items-center justify-center gap-2 rounded border border-dashed border-line bg-white px-3 py-3 text-sm font-semibold text-muted hover:border-action hover:text-action disabled:opacity-60"
+              onClick={() => void handleSamplePdf()}
+              disabled={uploading || doiLoading}
+            >
+              샘플 PDF
+            </button>
             <button
               className="flex items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
               onClick={() => {
@@ -216,13 +222,6 @@ function App() {
             </button>
           </div>
           <div className={paper && !uploadOpen ? 'hidden' : ''}>
-            <button
-              className="mt-2 rounded border border-dashed border-line bg-white px-3 py-2 text-xs text-muted hover:border-action hover:text-action disabled:opacity-60"
-              onClick={() => registerPaper(SAMPLE_PAPER)}
-              disabled={uploading || doiLoading}
-            >
-              샘플 논문으로 체험하기
-            </button>
             {(uploading || doiLoading) && (
               <div className="mt-3 rounded border border-line bg-white px-3 py-2">
                 <div className="mb-1 flex items-center justify-between text-xs text-muted">
