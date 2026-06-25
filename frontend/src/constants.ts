@@ -6,6 +6,10 @@ import type { HighlightColor, UploadPhase } from './types';
 const API_ORIGIN = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 export const API_BASE = `${API_ORIGIN}/api`;
 
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
+export const SUPABASE_AUTH_ENABLED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+
 export function resolveApiUrl(path: string): string {
   if (!path) return '';
   if (/^https?:\/\//i.test(path)) return path;

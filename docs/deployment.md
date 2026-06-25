@@ -42,12 +42,41 @@ Backend:
 | `AI_APP_NAME` | 선택. OpenRouter 앱 표시용 |
 | `CROSSREF_MAILTO` | 선택. CrossRef User-Agent contact |
 | `SAMPLE_PDF_URL` | 선택. 배포 서버에 샘플 PDF 파일을 두지 않고 샘플 버튼을 사용할 때의 원격 PDF URL |
+| `SUPABASE_URL` | Supabase 프로젝트 URL |
+| `SUPABASE_ANON_KEY` | Supabase anon key |
+| `SUPABASE_JWT_SECRET` | FastAPI가 access token을 검증할 때 쓰는 JWT secret |
 
 Frontend build:
 
 | 변수 | 설명 |
 | --- | --- |
 | `VITE_API_BASE_URL` | Pages 배포 시 Render 백엔드 오리진 |
+| `VITE_SUPABASE_URL` | Supabase 프로젝트 URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key |
+
+## Supabase Auth
+
+Supabase Dashboard의 Authentication URL 설정에 아래 주소를 등록합니다.
+
+Site URL:
+
+```text
+https://nebu-25.github.io/Paperlens_26.06/
+```
+
+Redirect URLs:
+
+```text
+https://nebu-25.github.io/Paperlens_26.06/**
+http://127.0.0.1:5173/**
+http://localhost:5173/**
+```
+
+Google OAuth를 사용할 때 Google Cloud Console의 OAuth Client에는 Supabase callback URL을 redirect URI로 등록합니다.
+
+```text
+https://<supabase-project-ref>.supabase.co/auth/v1/callback
+```
 
 ## PostgreSQL
 

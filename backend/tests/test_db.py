@@ -6,6 +6,8 @@ import pytest
 
 from app.config import settings
 
+USER_ID = "local"
+
 
 @pytest.fixture()
 def db(tmp_path, monkeypatch):
@@ -35,32 +37,37 @@ class TestConnectionPragmas:
 class TestRoundTrip:
     def test_upsert_get_delete(self, db):
         paper = {"title": "T", "authors": "A", "link": "L", "text": "body"}
-        db.upsert_note("n1", paper, {"tags": ["x"]})
-        got = db.get_note("n1")
+        db.upsert_note(USER_ID, "n1", paper, {"tags": ["x"]})
+        got = db.get_note(USER_ID, "n1")
         assert got is not None
         assert got["paper"]["title"] == "T"
         assert got["note"]["tags"] == ["x"]
 
-        db.delete_note("n1")
-        assert db.get_note("n1") is None
+        db.delete_note(USER_ID, "n1")
+        assert db.get_note(USER_ID, "n1") is None
 
     def test_empty_text_does_not_overwrite_existing(self, db):
-        db.upsert_note("n1", {"title": "T", "text": "original"}, {})
+        db.upsert_note(USER_ID, "n1", {"title": "T", "text": "original"}, {})
         # 지연 로드 전 빈 text가 들어와도 기존 본문을 유지해야 한다.
-        db.upsert_note("n1", {"title": "T2", "text": ""}, {})
-        got = db.get_note("n1")
+        db.upsert_note(USER_ID, "n1", {"title": "T2", "text": ""}, {})
+        got = db.get_note(USER_ID, "n1")
         assert got["paper"]["text"] == "original"
         assert got["paper"]["title"] == "T2"
 
     def test_store_get_pdf(self, db):
-        db.store_pdf("n1", "paper.pdf", b"%PDF-1.4\nbody")
-        got = db.get_pdf("n1")
+        db.store_pdf(USER_ID, "n1", "paper.pdf", b"%PDF-1.4\nbody")
+        got = db.get_pdf(USER_ID, "n1")
         assert got == ("paper.pdf", b"%PDF-1.4\nbody")
 
-        note = db.get_note("n1")
+        note = db.get_note(USER_ID, "n1")
         assert note is not None
         assert note["paper"]["pdfFilename"] == "paper.pdf"
         assert note["paper"]["pdfUrl"] == "/api/papers/n1/pdf"
+
+    def test_notes_are_scoped_by_user(self, db):
+        db.upsert_note("u1", "n1", {"title": "Mine"}, {})
+        assert db.get_note("u2", "n1") is None
+        assert db.list_notes("u2") == {"library": {}, "notes": {}}
 
 
 class TestRepositoryFactory:

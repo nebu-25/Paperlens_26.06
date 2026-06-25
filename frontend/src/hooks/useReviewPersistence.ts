@@ -11,6 +11,9 @@ interface UseReviewPersistenceArgs {
   setLibrary: Dispatch<SetStateAction<Record<string, Paper>>>;
   setNotes: Dispatch<SetStateAction<Record<string, ReviewNote>>>;
   setActiveId: Dispatch<SetStateAction<string | null>>;
+  accessToken: string | null;
+  authReady: boolean;
+  authEnabled: boolean;
 }
 
 export function useReviewPersistence({
@@ -20,6 +23,9 @@ export function useReviewPersistence({
   setLibrary,
   setNotes,
   setActiveId,
+  accessToken,
+  authReady,
+  authEnabled,
 }: UseReviewPersistenceArgs) {
   const [loaded, setLoaded] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -32,9 +38,16 @@ export function useReviewPersistence({
   const activeIdRef = useRef(activeId);
   const dirtyRef = useRef<Set<string>>(new Set());
   const deletedIdsRef = useRef<Set<string>>(new Set());
+  const accessTokenRef = useRef(accessToken);
   libraryRef.current = library;
   notesRef.current = notes;
   activeIdRef.current = activeId;
+  accessTokenRef.current = accessToken;
+
+  const authHeaders = useCallback((): Record<string, string> => {
+    const token = accessTokenRef.current;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }, []);
 
   const updatePending = useCallback(() => {
     setPending(dirtyRef.current.size + deletedIdsRef.current.size);
@@ -76,9 +89,12 @@ export function useReviewPersistence({
   }, [persistLocal, updatePending]);
 
   const deleteRemote = useCallback(async (id: string) => {
-    const res = await fetch(`${API_BASE}/notes/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE}/notes/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
     if (!res.ok) throw new Error('delete failed');
-  }, []);
+  }, [authHeaders]);
 
   const flush = useCallback(async () => {
     try {
@@ -113,7 +129,7 @@ export function useReviewPersistence({
       try {
         const res = await fetch(`${API_BASE}/notes/${id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ paper, note: notesRef.current[id] ?? EMPTY_NOTE }),
         });
         if (!res.ok) throw new Error('save failed');
@@ -143,12 +159,12 @@ export function useReviewPersistence({
       setSavedAt(`서버 저장 ${time}`);
       setSyncNotice(null);
     }
-  }, [deleteRemote, persistLocal, updatePending]);
+  }, [authHeaders, deleteRemote, persistLocal, updatePending]);
 
   const ensureText = useCallback(
     async (id: string) => {
       try {
-        const res = await fetch(`${API_BASE}/notes/${id}`);
+        const res = await fetch(`${API_BASE}/notes/${id}`, { headers: authHeaders() });
         if (!res.ok) return;
         const data = (await res.json()) as { paper: Paper };
         setLibrary((lib) => {
@@ -160,12 +176,14 @@ export function useReviewPersistence({
         /* 오프라인이면 원문은 비표시 */
       }
     },
-    [setLibrary],
+    [authHeaders, setLibrary],
   );
 
   useEffect(() => {
+    if (!authReady) return;
     let cancelled = false;
     let activeHint: string | null = null;
+    setLoaded(false);
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -194,8 +212,17 @@ export function useReviewPersistence({
     };
 
     (async () => {
+      if (authEnabled && !accessToken) {
+        setLibrary({});
+        setNotes({});
+        setActiveId(null);
+        setOnline(false);
+        setSavedAt('로그인 필요');
+        setLoaded(false);
+        return;
+      }
       try {
-        const res = await fetch(`${API_BASE}/notes`);
+        const res = await fetch(`${API_BASE}/notes`, { headers: authHeaders() });
         if (!res.ok) throw new Error('server unavailable');
         const data = (await res.json()) as {
           library?: Record<string, Paper>;
@@ -232,7 +259,7 @@ export function useReviewPersistence({
     return () => {
       cancelled = true;
     };
-  }, [setActiveId, setLibrary, setNotes, updatePending]);
+  }, [accessToken, authEnabled, authHeaders, authReady, setActiveId, setLibrary, setNotes, updatePending]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -269,6 +296,7 @@ export function useReviewPersistence({
       for (const id of Array.from(deletedIdsRef.current)) {
         void fetch(`${API_BASE}/notes/${id}`, {
           method: 'DELETE',
+          headers: authHeaders(),
           keepalive: true,
         }).catch(() => {});
       }
@@ -277,7 +305,7 @@ export function useReviewPersistence({
         if (!paper) continue;
         void fetch(`${API_BASE}/notes/${id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ paper, note: notesRef.current[id] ?? EMPTY_NOTE }),
           keepalive: true,
         }).catch(() => {});
@@ -292,7 +320,7 @@ export function useReviewPersistence({
       window.removeEventListener('pagehide', flushOnHide);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [persistLocal]);
+  }, [authHeaders, persistLocal]);
 
   return {
     loaded,

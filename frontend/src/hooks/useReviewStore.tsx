@@ -25,7 +25,15 @@ import type {
 import { usePaperBodyNodes } from './usePaperBodyNodes';
 import { useReviewPersistence } from './useReviewPersistence';
 
-export function useReviewStore() {
+export function useReviewStore({
+  accessToken,
+  authReady,
+  authEnabled,
+}: {
+  accessToken: string | null;
+  authReady: boolean;
+  authEnabled: boolean;
+}) {
   // 논문별로 보관: library[id] = 논문, notes[id] = 그 논문의 리뷰 노트
   const [library, setLibrary] = useState<Record<string, Paper>>({});
   const [notes, setNotes] = useState<Record<string, ReviewNote>>({});
@@ -79,7 +87,14 @@ export function useReviewStore() {
       setLibrary,
       setNotes,
       setActiveId,
+      accessToken,
+      authReady,
+      authEnabled,
     });
+
+  const authHeaders: Record<string, string> = accessToken
+    ? { Authorization: `Bearer ${accessToken}` }
+    : {};
 
   // ── 활성 논문의 노트만 갱신 ──
   function setNote(updater: (n: ReviewNote) => ReviewNote) {
@@ -201,7 +216,11 @@ export function useReviewStore() {
       form.append('file', file);
       form.append('paper_id', uploadPaperId);
       setUploadPhase('extracting');
-      const res = await fetch(`${API_BASE}/papers/extract-text`, { method: 'POST', body: form });
+      const res = await fetch(`${API_BASE}/papers/extract-text`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: form,
+      });
       if (!res.ok) {
         // 입력 가드 위반(크기/암호/페이지 등): 서버 메시지를 표시하고 등록하지 않는다
         let detail = '업로드를 처리할 수 없습니다.';
@@ -519,7 +538,7 @@ export function useReviewStore() {
     try {
       const res = await fetch(`${API_BASE}/ai/term-explanation`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           term: target.term,
           paperTitle: paper.title,

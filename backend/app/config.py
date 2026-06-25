@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     ocr_dpi: int = 200
     # 샘플 PDF 파일을 배포 서버에 커밋하지 않고 제공할 때 사용하는 원격 PDF URL.
     sample_pdf_url: str = ""
+    # Supabase Auth. JWT secret이 있으면 보호 API에서 Bearer token을 검증해 user_id를 추출한다.
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_jwt_secret: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -41,6 +45,10 @@ class Settings(BaseSettings):
     @property
     def ai_enabled(self) -> bool:
         return bool(self.ai_api_key.strip())
+
+    @property
+    def auth_enabled(self) -> bool:
+        return bool(self.supabase_jwt_secret.strip())
 
 
 settings = Settings()

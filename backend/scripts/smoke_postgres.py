@@ -15,6 +15,7 @@ from app.repositories.postgresql_notes import PostgreSQLNotesRepository
 
 
 NOTE_ID = "__paperlens_postgres_smoke__"
+USER_ID = "00000000-0000-0000-0000-000000000000"
 
 
 def main() -> int:
@@ -43,8 +44,8 @@ def main() -> int:
         "oneLineSummary": "PostgreSQL smoke test",
     }
 
-    repo.upsert_note(NOTE_ID, paper, note)
-    got = repo.get_note(NOTE_ID)
+    repo.upsert_note(USER_ID, NOTE_ID, paper, note)
+    got = repo.get_note(USER_ID, NOTE_ID)
     if got is None:
         raise RuntimeError("Inserted note was not found.")
     if got["paper"]["title"] != paper["title"]:
@@ -52,12 +53,12 @@ def main() -> int:
     if got["note"].get("oneLineSummary") != note["oneLineSummary"]:
         raise RuntimeError("Note JSON round-trip failed.")
 
-    listed = repo.list_notes()
+    listed = repo.list_notes(USER_ID)
     if NOTE_ID not in listed["library"]:
         raise RuntimeError("Inserted note was not present in list_notes().")
 
-    repo.delete_note(NOTE_ID)
-    if repo.get_note(NOTE_ID) is not None:
+    repo.delete_note(USER_ID, NOTE_ID)
+    if repo.get_note(USER_ID, NOTE_ID) is not None:
         raise RuntimeError("Deleted note is still present.")
 
     print("PostgreSQL smoke test passed.")

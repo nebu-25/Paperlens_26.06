@@ -11,6 +11,7 @@ from typing import Any
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS papers (
   id                  TEXT PRIMARY KEY,
+  user_id             UUID NOT NULL,
   title               TEXT NOT NULL DEFAULT '',
   authors             TEXT NOT NULL DEFAULT '',
   link                TEXT NOT NULL DEFAULT '',
@@ -47,12 +48,15 @@ class PostgreSQLNotesRepository:
     def init(self) -> None:
         with self.connect() as conn:
             conn.execute(_SCHEMA)
+            conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS user_id UUID")
             conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS pdf_filename TEXT NOT NULL DEFAULT ''")
             conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS pdf_content BYTEA")
 
-    def list_notes(self) -> dict[str, object]:
+    def list_notes(self, user_id: str) -> dict[str, object]:
         with self.connect() as conn:
-            rows = conn.execute("SELECT * FROM papers ORDER BY updated_at DESC").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM papers WHERE user_id = %s ORDER BY updated_at DESC", (user_id,)
+            ).fetchall()
         library: dict[str, object] = {}
         notes: dict[str, object] = {}
         for row in rows:
@@ -60,15 +64,17 @@ class PostgreSQLNotesRepository:
             notes[row["id"]] = row.get("note") or {}
         return {"library": library, "notes": notes}
 
-    def get_note(self, note_id: str) -> dict[str, object] | None:
+    def get_note(self, user_id: str, note_id: str) -> dict[str, object] | None:
         with self.connect() as conn:
-            row = conn.execute("SELECT * FROM papers WHERE id = %s", (note_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM papers WHERE id = %s AND user_id = %s", (note_id, user_id)
+            ).fetchone()
         if row is None:
             return None
         return {"paper": self._paper_of(row), "note": row.get("note") or {}}
 
     def upsert_note(
-        self, note_id: str, paper: dict[str, object], note: dict[str, object]
+        self, user_id: str, note_id: str, paper: dict[str, object], note: dict[str, object]
     ) -> dict[str, object]:
         from psycopg.types.json import Jsonb
 
@@ -77,12 +83,12 @@ class PostgreSQLNotesRepository:
             conn.execute(
                 """
                 INSERT INTO papers (
-                  id, title, authors, link, doi, source_key, suggested_tags,
+                  id, user_id, title, authors, link, doi, source_key, suggested_tags,
                   metadata_source, metadata_confidence, metadata_warnings,
                   text, note, created_at, updated_at
                 )
                 VALUES (
-                  %(id)s, %(title)s, %(authors)s, %(link)s, %(doi)s, %(source_key)s,
+                  %(id)s, %(user_id)s, %(title)s, %(authors)s, %(link)s, %(doi)s, %(source_key)s,
                   %(suggested_tags)s, %(metadata_source)s, %(metadata_confidence)s,
                   %(metadata_warnings)s, %(text)s, %(note)s, %(now)s, %(now)s
                 )
@@ -95,9 +101,11 @@ class PostgreSQLNotesRepository:
                   metadata_warnings=excluded.metadata_warnings,
                   text=CASE WHEN excluded.text = '' THEN papers.text ELSE excluded.text END,
                   note=excluded.note, updated_at=excluded.updated_at
+                WHERE papers.user_id = excluded.user_id
                 """,
                 {
                     "id": note_id,
+                    "user_id": user_id,
                     "title": str(paper.get("title", "")),
                     "authors": str(paper.get("authors", "")),
                     "link": str(paper.get("link", "")),
@@ -114,36 +122,38 @@ class PostgreSQLNotesRepository:
             )
         return {"id": note_id, "updated_at": now}
 
-    def store_pdf(self, note_id: str, filename: str, content: bytes) -> None:
+    def store_pdf(self, user_id: str, note_id: str, filename: str, content: bytes) -> None:
         now = _now()
         with self.connect() as conn:
             conn.execute(
                 """
                 INSERT INTO papers (
-                  id, pdf_filename, pdf_content, created_at, updated_at
+                  id, user_id, pdf_filename, pdf_content, created_at, updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT(id) DO UPDATE SET
                   pdf_filename=excluded.pdf_filename,
                   pdf_content=excluded.pdf_content,
                   updated_at=excluded.updated_at
+                WHERE papers.user_id = excluded.user_id
                 """,
-                (note_id, filename, content, now, now),
+                (note_id, user_id, filename, content, now, now),
             )
 
-    def get_pdf(self, note_id: str) -> tuple[str, bytes] | None:
+    def get_pdf(self, user_id: str, note_id: str) -> tuple[str, bytes] | None:
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT pdf_filename, pdf_content FROM papers WHERE id = %s", (note_id,)
+                "SELECT pdf_filename, pdf_content FROM papers WHERE id = %s AND user_id = %s",
+                (note_id, user_id),
             ).fetchone()
         if row is None or row.get("pdf_content") is None:
             return None
         content = row["pdf_content"]
         return row.get("pdf_filename") or "paper.pdf", bytes(content)
 
-    def delete_note(self, note_id: str) -> None:
+    def delete_note(self, user_id: str, note_id: str) -> None:
         with self.connect() as conn:
-            conn.execute("DELETE FROM papers WHERE id = %s", (note_id,))
+            conn.execute("DELETE FROM papers WHERE id = %s AND user_id = %s", (note_id, user_id))
 
     def _paper_of(self, row: dict[str, Any], *, include_text: bool = True) -> dict[str, object]:
         return {

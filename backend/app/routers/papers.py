@@ -8,10 +8,11 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, Response as FastAPIResponse
 
 from app import db
+from app.auth import current_user_id
 from app.config import settings
 
 router = APIRouter(prefix="/papers", tags=["papers"])
@@ -786,6 +787,7 @@ def sample_pdf():
 async def extract_text(
     file: UploadFile = File(...),
     paper_id: str = Form(""),
+    user_id: str = Depends(current_user_id),
 ) -> dict[str, object]:
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
@@ -831,7 +833,7 @@ async def extract_text(
     pdf_filename = ""
     if paper_id.strip():
         pdf_filename = file.filename or "paper.pdf"
-        db.store_pdf(paper_id.strip(), pdf_filename, content)
+        db.store_pdf(user_id, paper_id.strip(), pdf_filename, content)
         pdf_url = f"/api/papers/{paper_id.strip()}/pdf"
 
     # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 OCR이 필요하다(기획서 FS-01).
@@ -925,8 +927,8 @@ async def extract_text(
 
 
 @router.get("/{paper_id}/pdf")
-def get_pdf(paper_id: str) -> Response:
-    result = db.get_pdf(paper_id)
+def get_pdf(paper_id: str, user_id: str = Depends(current_user_id)) -> Response:
+    result = db.get_pdf(user_id, paper_id)
     if result is None:
         raise HTTPException(status_code=404, detail="저장된 PDF를 찾을 수 없습니다.")
     filename, content = result

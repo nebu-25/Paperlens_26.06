@@ -22,13 +22,16 @@ import {
 } from '../constants';
 import { highlightStyle, needsPdfText, noticeStyle } from '../lib/format';
 import { useReviewStore } from '../hooks/useReviewStore';
+import { useAuthSession } from '../hooks/useAuthSession';
 import { AiDraftButton } from './AiDraftButton';
+import { AuthControls } from './AuthControls';
 import { EmptyState } from './EmptyState';
 import { QuestionsCard } from './QuestionsCard';
 import { SectionCard } from './SectionCard';
 import { TagEditor } from './TagEditor';
 
 function App() {
+  const { authEnabled, authReady, user, accessToken } = useAuthSession();
   const {
     library,
     notes,
@@ -83,7 +86,7 @@ function App() {
     toggleTagFilter,
     exportMarkdown,
     exportPdf,
-  } = useReviewStore();
+  } = useReviewStore({ accessToken, authReady, authEnabled });
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
   const uploadPercent = uploadPhasePercent[uploadPhase] ?? 0;
   const reviewRoadmap = [
@@ -120,6 +123,7 @@ function App() {
   const nextRoadmapStep = reviewRoadmap.find((step) => !step.done);
   const currentRoadmapStep = nextRoadmapStep ?? reviewRoadmap[reviewRoadmap.length - 1];
   const reviewProgressPercent = Math.round((reviewDoneCount / reviewRoadmap.length) * 100);
+  const loginRequired = authEnabled && authReady && !accessToken;
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-paper text-ink" onMouseDown={() => setSelection(null)}>
@@ -161,6 +165,11 @@ function App() {
 
       <section className={`shrink-0 border-b border-line bg-panel/95 px-4 sm:px-6 ${paper && !uploadOpen ? 'py-1.5' : 'py-3 sm:py-4'}`}>
         <div className={paper && !uploadOpen ? '' : 'mx-auto max-w-3xl'}>
+          {(!paper || uploadOpen) && (
+            <div className="mb-3">
+              <AuthControls enabled={authEnabled} ready={authReady} user={user} />
+            </div>
+          )}
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">
               {paper && !uploadOpen ? '새 논문 등록 영역 접힘' : '새 논문 등록'}
@@ -190,7 +199,7 @@ function App() {
             <button
               className="flex items-center justify-center gap-2 rounded border border-dashed border-line bg-white px-3 py-3 text-sm font-semibold text-muted hover:border-action hover:text-action disabled:opacity-60"
               onClick={() => void handleSamplePdf()}
-              disabled={uploading || doiLoading}
+              disabled={uploading || doiLoading || loginRequired}
             >
               샘플 PDF
             </button>
@@ -200,7 +209,7 @@ function App() {
                 attachTargetRef.current = null;
                 fileInputRef.current?.click();
               }}
-              disabled={uploading}
+              disabled={uploading || loginRequired}
             >
               <Upload size={16} />
               {uploading ? uploadPhaseText[uploadPhase] || '처리 중' : 'PDF 업로드'}
@@ -209,19 +218,24 @@ function App() {
               className="min-w-0 rounded border border-line bg-white px-4 py-3 text-sm outline-none focus:border-action disabled:opacity-60"
               placeholder="DOI 또는 URL을 입력하세요"
               value={doiInput}
-              disabled={doiLoading || uploading}
+              disabled={doiLoading || uploading || loginRequired}
               onChange={(e) => setDoiInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && registerByDoi()}
             />
             <button
               className="rounded border border-line bg-white px-3 text-sm font-medium disabled:opacity-60"
               onClick={registerByDoi}
-              disabled={doiLoading || uploading}
+              disabled={doiLoading || uploading || loginRequired}
             >
               {doiLoading ? uploadPhaseText[uploadPhase] || '조회 중' : '등록'}
             </button>
           </div>
           <div className={paper && !uploadOpen ? 'hidden' : ''}>
+            {loginRequired && (
+              <p className="mt-2 text-xs text-muted">
+                개인 라이브러리에 저장하려면 먼저 로그인하세요.
+              </p>
+            )}
             {(uploading || doiLoading) && (
               <div className="mt-3 rounded border border-line bg-white px-3 py-2">
                 <div className="mb-1 flex items-center justify-between text-xs text-muted">

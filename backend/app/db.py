@@ -22,27 +22,27 @@ def init_db() -> None:
     _repository.init()
 
 
-def list_notes() -> dict[str, object]:
-    return _repository.list_notes()
+def list_notes(user_id: str) -> dict[str, object]:
+    return _repository.list_notes(user_id)
 
 
-def get_note(note_id: str) -> dict[str, object] | None:
-    return _repository.get_note(note_id)
+def get_note(user_id: str, note_id: str) -> dict[str, object] | None:
+    return _repository.get_note(user_id, note_id)
 
 
 def upsert_note(
-    note_id: str, paper: dict[str, object], note: dict[str, object]
+    user_id: str, note_id: str, paper: dict[str, object], note: dict[str, object]
 ) -> dict[str, object]:
-    return _repository.upsert_note(note_id, paper, note)
+    return _repository.upsert_note(user_id, note_id, paper, note)
 
 
-def store_pdf(note_id: str, filename: str, content: bytes) -> None:
-    _repository.store_pdf(note_id, filename, content)
+def store_pdf(user_id: str, note_id: str, filename: str, content: bytes) -> None:
+    _repository.store_pdf(user_id, note_id, filename, content)
 
 
-def get_pdf(note_id: str) -> tuple[str, bytes] | None:
-    return _repository.get_pdf(note_id)
+def get_pdf(user_id: str, note_id: str) -> tuple[str, bytes] | None:
+    return _repository.get_pdf(user_id, note_id)
 
 
-def delete_note(note_id: str) -> None:
-    _repository.delete_note(note_id)
+def delete_note(user_id: str, note_id: str) -> None:
+    _repository.delete_note(user_id, note_id)

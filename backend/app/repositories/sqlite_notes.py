@@ -15,6 +15,7 @@ from app.config import settings
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS papers (
   id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL DEFAULT 'local',
   title      TEXT NOT NULL DEFAULT '',
   authors    TEXT NOT NULL DEFAULT '',
   link       TEXT NOT NULL DEFAULT '',
@@ -62,6 +63,7 @@ class SQLiteNotesRepository:
             conn.executescript(_SCHEMA)
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(papers)").fetchall()}
             migrations = {
+                "user_id": "ALTER TABLE papers ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'",
                 "source_key": "ALTER TABLE papers ADD COLUMN source_key TEXT NOT NULL DEFAULT ''",
                 "doi": "ALTER TABLE papers ADD COLUMN doi TEXT NOT NULL DEFAULT ''",
                 "suggested_tags": (
@@ -86,11 +88,13 @@ class SQLiteNotesRepository:
         finally:
             conn.close()
 
-    def list_notes(self) -> dict[str, object]:
+    def list_notes(self, user_id: str) -> dict[str, object]:
         """Return all saved notes as { library, notes }, excluding paper text."""
         conn = self.connect()
         try:
-            rows = conn.execute("SELECT * FROM papers ORDER BY updated_at DESC").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM papers WHERE user_id = ? ORDER BY updated_at DESC", (user_id,)
+            ).fetchall()
         finally:
             conn.close()
         library: dict[str, object] = {}
@@ -100,10 +104,12 @@ class SQLiteNotesRepository:
             notes[row["id"]] = json.loads(row["note"] or "{}")
         return {"library": library, "notes": notes}
 
-    def get_note(self, note_id: str) -> dict[str, object] | None:
+    def get_note(self, user_id: str, note_id: str) -> dict[str, object] | None:
         conn = self.connect()
         try:
-            row = conn.execute("SELECT * FROM papers WHERE id = ?", (note_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM papers WHERE id = ? AND user_id = ?", (note_id, user_id)
+            ).fetchone()
         finally:
             conn.close()
         if row is None:
@@ -111,7 +117,7 @@ class SQLiteNotesRepository:
         return {"paper": self._paper_of(row), "note": json.loads(row["note"] or "{}")}
 
     def upsert_note(
-        self, note_id: str, paper: dict[str, object], note: dict[str, object]
+        self, user_id: str, note_id: str, paper: dict[str, object], note: dict[str, object]
     ) -> dict[str, object]:
         now = _now()
         note_json = json.dumps(note, ensure_ascii=False)
@@ -122,12 +128,12 @@ class SQLiteNotesRepository:
             conn.execute(
                 """
                 INSERT INTO papers (
-                  id, title, authors, link, doi, source_key, suggested_tags,
+                  id, user_id, title, authors, link, doi, source_key, suggested_tags,
                   metadata_source, metadata_confidence, metadata_warnings,
                   text, note, created_at, updated_at
                 )
                 VALUES (
-                  :id, :title, :authors, :link, :doi, :source_key, :suggested_tags,
+                  :id, :user_id, :title, :authors, :link, :doi, :source_key, :suggested_tags,
                   :metadata_source, :metadata_confidence, :metadata_warnings,
                   :text, :note, :now, :now
                 )
@@ -141,9 +147,11 @@ class SQLiteNotesRepository:
                   -- 빈 text(지연 로드 전 상태)가 들어오면 기존 본문을 덮어쓰지 않는다
                   text=CASE WHEN excluded.text = '' THEN papers.text ELSE excluded.text END,
                   note=excluded.note, updated_at=excluded.updated_at
+                WHERE papers.user_id = excluded.user_id
                 """,
                 {
                     "id": note_id,
+                    "user_id": user_id,
                     "title": str(paper.get("title", "")),
                     "authors": str(paper.get("authors", "")),
                     "link": str(paper.get("link", "")),
@@ -163,32 +171,34 @@ class SQLiteNotesRepository:
             conn.close()
         return {"id": note_id, "updated_at": now}
 
-    def store_pdf(self, note_id: str, filename: str, content: bytes) -> None:
+    def store_pdf(self, user_id: str, note_id: str, filename: str, content: bytes) -> None:
         now = _now()
         conn = self.connect()
         try:
             conn.execute(
                 """
                 INSERT INTO papers (
-                  id, pdf_filename, pdf_content, created_at, updated_at
+                  id, user_id, pdf_filename, pdf_content, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   pdf_filename=excluded.pdf_filename,
                   pdf_content=excluded.pdf_content,
                   updated_at=excluded.updated_at
+                WHERE papers.user_id = excluded.user_id
                 """,
-                (note_id, filename, content, now, now),
+                (note_id, user_id, filename, content, now, now),
             )
             conn.commit()
         finally:
             conn.close()
 
-    def get_pdf(self, note_id: str) -> tuple[str, bytes] | None:
+    def get_pdf(self, user_id: str, note_id: str) -> tuple[str, bytes] | None:
         conn = self.connect()
         try:
             row = conn.execute(
-                "SELECT pdf_filename, pdf_content FROM papers WHERE id = ?", (note_id,)
+                "SELECT pdf_filename, pdf_content FROM papers WHERE id = ? AND user_id = ?",
+                (note_id, user_id),
             ).fetchone()
         finally:
             conn.close()
@@ -196,10 +206,10 @@ class SQLiteNotesRepository:
             return None
         return row["pdf_filename"] or "paper.pdf", bytes(row["pdf_content"])
 
-    def delete_note(self, note_id: str) -> None:
+    def delete_note(self, user_id: str, note_id: str) -> None:
         conn = self.connect()
         try:
-            conn.execute("DELETE FROM papers WHERE id = ?", (note_id,))
+            conn.execute("DELETE FROM papers WHERE id = ? AND user_id = ?", (note_id, user_id))
             conn.commit()
         finally:
             conn.close()
