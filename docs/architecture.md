@@ -16,7 +16,8 @@ OpenRouter AI only when AI_API_KEY is set
 ## Frontend
 
 - `frontend/src/main.tsx`: 앱 엔트리
-- `frontend/src/components/App.tsx`: 사이드바, 업로드 영역, 원문 패널, 리뷰 노트 패널 렌더링
+- `frontend/src/components/App.tsx`: 랜딩/서비스 경로 분기, 사이드바, 업로드 영역, 원문 패널, 리뷰 노트 패널 렌더링
+- `frontend/src/components/LandingPage.tsx`: 사용설명서와 로그인 진입 화면
 - `frontend/src/hooks/useReviewStore.tsx`: 등록, 업로드, 하이라이트, 용어 추가, AI 설명, 내보내기 액션
 - `frontend/src/hooks/useReviewPersistence.ts`: 서버 저장, localStorage 폴백, 재동기화
 - `frontend/src/hooks/useAuthSession.ts`: Supabase session 구독
@@ -28,11 +29,18 @@ OpenRouter AI only when AI_API_KEY is set
 
 프론트엔드는 기본적으로 상대경로 `/api`를 호출합니다. 로컬 개발에서는 Vite 프록시가 `127.0.0.1:8000`으로 전달하고, Pages 배포에서는 `VITE_API_BASE_URL`로 Render 백엔드 주소를 주입합니다.
 
+GitHub Pages 배포의 경로 구성은 아래와 같습니다.
+
+- `/Paperlens_26.06/`: 로그인 랜딩 페이지
+- `/Paperlens_26.06/service_home/`: 리뷰 워크스페이스
+- `service_home/index.html`: 직접 접근 시 200 응답을 위한 정적 사본
+- `404.html`: 기타 SPA fallback
+
 ## Backend
 
 - `backend/app/main.py`: FastAPI 앱, lifespan DB 초기화, 라우터 등록
 - `backend/app/config.py`: CORS, CrossRef, AI 설정
-- `backend/app/auth.py`: Supabase JWT 검증, 요청 사용자 id 추출
+- `backend/app/auth.py`: Supabase JWT 검증, Supabase user endpoint fallback, 요청 사용자 id 추출
 - `backend/app/routers/papers.py`: PDF 업로드, 텍스트 추출, 섹션 감지, DOI/CrossRef/arXiv/레이아웃 메타데이터 추정
 - `backend/app/routers/notes.py`: 노트 CRUD
 - `backend/app/routers/ai.py`: OpenRouter 기반 용어 설명 API
@@ -81,4 +89,4 @@ KCI 등 CrossRef 미등재 논문을 위해 레이아웃 휴리스틱은 한글 
 
 SQLite는 WAL 저널 모드와 `busy_timeout`을 사용해 자동 저장 중 잠금 충돌을 줄입니다. WAL을 지원하지 않는 파일시스템에서는 기존 모드로 안전하게 동작합니다.
 
-Supabase Auth가 설정된 환경에서는 프론트엔드가 Supabase access token을 `Authorization: Bearer ...`로 FastAPI에 전달합니다. FastAPI는 JWT를 검증해 `user_id`를 추출하고, 노트·PDF 조회/저장/삭제를 해당 사용자 데이터로 제한합니다. Supabase 설정이 없는 로컬 환경에서는 `local` 사용자로 기존 단일 사용자 흐름을 유지합니다.
+Supabase Auth가 설정된 환경에서는 프론트엔드가 Supabase access token을 `Authorization: Bearer ...`로 FastAPI에 전달합니다. FastAPI는 HS256 토큰을 `SUPABASE_JWT_SECRET`으로 직접 검증합니다. 다른 서명 알고리즘이면 Supabase `/auth/v1/user`에 token과 `SUPABASE_ANON_KEY`를 보내 사용자 id를 확인합니다. 확인된 `user_id`로 노트·PDF 조회/저장/삭제를 해당 사용자 데이터로 제한합니다. Supabase 설정이 없는 로컬 환경에서는 `local` 사용자로 기존 단일 사용자 흐름을 유지합니다.
