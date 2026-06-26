@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, FileText, Highlighter, Library } from 'lucide-react';
+import { BookOpen, FileText, Highlighter, Library } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { AuthControls } from './AuthControls';
 
@@ -54,21 +54,6 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
               PaperLens는 논문 원문 읽기, 핵심 문장 하이라이트, 질문 정리, 리뷰 노트 작성을 한 흐름으로
               묶습니다. 저장되는 노트와 PDF 원본은 로그인한 개인 계정의 라이브러리에 연결됩니다.
             </p>
-            {user && (
-              <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
-                <button
-                  type="button"
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-action/90"
-                  onClick={onEnterService}
-                >
-                  서비스로 이동
-                  <ArrowRight size={16} />
-                </button>
-                <span className="text-xs text-muted">
-                  로그인됨 · {user.email ?? '사용자'}
-                </span>
-              </div>
-            )}
           </section>
 
           <aside className="rounded border border-line bg-panel p-4 shadow-sm sm:p-5 lg:sticky lg:top-6">
@@ -83,17 +68,12 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
                   : '인증이 완료되면 논문 리뷰 서비스 화면으로 이동합니다.'}
               </p>
             </div>
-            {user && (
-              <button
-                type="button"
-                className="mb-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white hover:bg-action/90"
-                onClick={onEnterService}
-              >
-                논문 리뷰 서비스로 이동
-                <ArrowRight size={15} />
-              </button>
-            )}
-            <AuthControls enabled={authEnabled} ready={authReady} user={user} />
+            <AuthControls
+              enabled={authEnabled}
+              ready={authReady}
+              user={user}
+              onEnterService={onEnterService}
+            />
           </aside>
         </div>
 
@@ -115,18 +95,6 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
           인증만 제공해 개인 라이브러리 저장 범위를 명확히 합니다.
         </div>
 
-        {user && (
-          <div className="sticky bottom-0 -mx-4 border-t border-line bg-panel/95 px-4 py-3 shadow-sm sm:hidden">
-            <button
-              type="button"
-              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white"
-              onClick={onEnterService}
-            >
-              서비스로 이동
-              <ArrowRight size={15} />
-            </button>
-          </div>
-        )}
       </section>
     </main>
   );

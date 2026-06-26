@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertCircle, LogIn, LogOut, UserCircle } from 'lucide-react';
+import { AlertCircle, ArrowRight, LogIn, LogOut, UserCircle } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
@@ -8,9 +8,10 @@ interface AuthControlsProps {
   ready: boolean;
   user: User | null;
   variant?: 'panel' | 'compact';
+  onEnterService?: () => void;
 }
 
-export function AuthControls({ enabled, ready, user, variant = 'panel' }: AuthControlsProps) {
+export function AuthControls({ enabled, ready, user, variant = 'panel', onEnterService }: AuthControlsProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
@@ -74,17 +75,27 @@ export function AuthControls({ enabled, ready, user, variant = 'panel' }: AuthCo
       );
     }
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-line bg-white px-3 py-2">
-        <span className="min-w-0 truncate text-xs text-muted">
-          로그인됨 · <b className="text-ink">{user.email ?? '사용자'}</b>
-        </span>
+      <div className="rounded border border-line bg-white p-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-xs text-muted">
+            로그인됨 · <b className="text-ink">{user.email ?? '사용자'}</b>
+          </span>
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center gap-1 rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
+            onClick={() => void supabase?.auth.signOut()}
+          >
+            <LogOut size={13} />
+            로그아웃
+          </button>
+        </div>
         <button
           type="button"
-          className="inline-flex items-center gap-1 rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
-          onClick={() => void supabase?.auth.signOut()}
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white hover:bg-action/90"
+          onClick={onEnterService}
         >
-          <LogOut size={13} />
-          로그아웃
+          논문 리뷰 서비스로 이동
+          <ArrowRight size={15} />
         </button>
       </div>
     );
