@@ -54,6 +54,21 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
               PaperLens는 논문 원문 읽기, 핵심 문장 하이라이트, 질문 정리, 리뷰 노트 작성을 한 흐름으로
               묶습니다. 저장되는 노트와 PDF 원본은 로그인한 개인 계정의 라이브러리에 연결됩니다.
             </p>
+            {user && (
+              <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-action/90"
+                  onClick={onEnterService}
+                >
+                  서비스로 이동
+                  <ArrowRight size={16} />
+                </button>
+                <span className="text-xs text-muted">
+                  로그인됨 · {user.email ?? '사용자'}
+                </span>
+              </div>
+            )}
           </section>
 
           <div className="grid gap-3 md:grid-cols-3">
@@ -78,9 +93,11 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
         <aside className="rounded border border-line bg-panel p-4 shadow-sm sm:p-5">
           <div className="mb-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-action">계정 인증</p>
-            <h2 className="mt-1 text-xl font-bold">로그인 후 서비스 시작</h2>
+            <h2 className="mt-1 text-xl font-bold">{user ? '서비스 입장 준비 완료' : '로그인 후 서비스 시작'}</h2>
             <p className="mt-2 text-xs leading-5 text-muted">
-              인증이 완료되면 별도 버튼 없이 논문 리뷰 서비스 화면으로 이동합니다.
+              {user
+                ? '계정 인증이 완료되었습니다. 서비스 화면에서 저장된 논문과 리뷰 노트를 이어서 확인할 수 있습니다.'
+                : '인증이 완료되면 별도 버튼 없이 논문 리뷰 서비스 화면으로 이동합니다.'}
             </p>
           </div>
           <AuthControls enabled={authEnabled} ready={authReady} user={user} />

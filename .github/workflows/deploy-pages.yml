@@ -1,9 +1,12 @@
 name: Deploy frontend to GitHub Pages
 
-# main 브랜치에 푸시될 때마다 프론트엔드를 빌드해 GitHub Pages로 배포한다.
+# main 브랜치의 프론트엔드/워크플로 변경을 GitHub Pages로 배포한다.
 on:
   push:
     branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 # Pages 배포에 필요한 권한

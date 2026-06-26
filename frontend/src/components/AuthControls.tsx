@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogIn, LogOut, UserCircle } from 'lucide-react';
+import { AlertCircle, LogIn, LogOut, UserCircle } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
@@ -21,10 +21,12 @@ export function AuthControls({ enabled, ready, user, variant = 'panel' }: AuthCo
     if (variant === 'compact') {
       return (
         <span
-          className="hidden rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 sm:inline-flex"
+          className="inline-flex size-8 items-center justify-center rounded border border-amber-200 bg-amber-50 text-amber-800 sm:h-auto sm:w-auto sm:gap-1 sm:px-2 sm:py-1 sm:text-[11px]"
           title="로그인 설정 전입니다. 배포 환경변수를 확인하세요."
+          aria-label="인증 설정 필요"
         >
-          인증 설정 필요
+          <AlertCircle size={14} />
+          <span className="hidden sm:inline">인증 설정 필요</span>
         </span>
       );
     }
@@ -37,7 +39,16 @@ export function AuthControls({ enabled, ready, user, variant = 'panel' }: AuthCo
 
   if (!ready) {
     if (variant === 'compact') {
-      return <span className="hidden rounded bg-paper px-2 py-1 text-[11px] text-muted sm:inline-flex">인증 확인 중</span>;
+      return (
+        <span
+          className="inline-flex size-8 items-center justify-center rounded bg-paper text-muted sm:h-auto sm:w-auto sm:px-2 sm:py-1 sm:text-[11px]"
+          title="인증 확인 중"
+          aria-label="인증 확인 중"
+        >
+          <UserCircle size={14} />
+          <span className="hidden sm:ml-1 sm:inline">인증 확인 중</span>
+        </span>
+      );
     }
     return <div className="rounded bg-paper px-3 py-2 text-xs text-muted">로그인 상태 확인 중</div>;
   }
@@ -45,14 +56,14 @@ export function AuthControls({ enabled, ready, user, variant = 'panel' }: AuthCo
   if (user) {
     if (variant === 'compact') {
       return (
-        <div className="hidden items-center gap-1 rounded border border-line bg-white px-2 py-1 text-xs text-muted sm:flex">
+        <div className="flex h-8 items-center gap-1 rounded border border-line bg-white px-1.5 text-xs text-muted sm:px-2 sm:py-1">
           <UserCircle size={14} className="text-action" />
-          <span className="max-w-28 truncate" title={user.email ?? '사용자'}>
+          <span className="hidden max-w-28 truncate sm:inline" title={user.email ?? '사용자'}>
             {user.email ?? '사용자'}
           </span>
           <button
             type="button"
-            className="ml-1 rounded p-0.5 hover:bg-paper hover:text-action"
+            className="rounded p-1 hover:bg-paper hover:text-action sm:ml-1 sm:p-0.5"
             title="로그아웃"
             aria-label="로그아웃"
             onClick={() => void supabase?.auth.signOut()}
@@ -76,6 +87,19 @@ export function AuthControls({ enabled, ready, user, variant = 'panel' }: AuthCo
           로그아웃
         </button>
       </div>
+    );
+  }
+
+  if (variant === 'compact') {
+    return (
+      <span
+        className="inline-flex size-8 items-center justify-center rounded border border-line bg-white text-muted sm:h-auto sm:w-auto sm:gap-1 sm:px-2 sm:py-1 sm:text-xs"
+        title="로그인이 필요합니다"
+        aria-label="로그인이 필요합니다"
+      >
+        <LogIn size={14} />
+        <span className="hidden sm:inline">로그인</span>
+      </span>
     );
   }
 
