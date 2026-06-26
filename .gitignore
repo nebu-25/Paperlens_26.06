@@ -27,3 +27,6 @@ __pycache__/
 # 로컬 검토용 스크린샷
 *.jpg
 *.jpeg
+
+# Windows Explorer metadata
+desktop.ini

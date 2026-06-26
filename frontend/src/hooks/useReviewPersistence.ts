@@ -251,7 +251,9 @@ export function useReviewPersistence({
       setLibrary(filteredLibrary);
       setNotes(fixed);
       const ids = Object.keys(filteredLibrary);
-      setActiveId(activeHint && ids.includes(activeHint) ? activeHint : null);
+      const nextActiveId = activeHint && ids.includes(activeHint) ? activeHint : ids[0] ?? null;
+      activeIdRef.current = nextActiveId;
+      setActiveId(nextActiveId);
     };
 
     (async () => {

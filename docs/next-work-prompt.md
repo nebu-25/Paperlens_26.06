@@ -17,7 +17,10 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - /api/diagnostics는 비밀값 없이 Auth/DB/AI 설정 상태를 반환합니다.
 - Pages workflow는 VITE_API_BASE_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY 형식을 검증합니다.
 - 샘플 PDF 버튼은 먼저 /api/health로 Render 백엔드를 깨운 뒤 sample-pdf를 호출하고, 진행 단계/취소/재시도를 표시합니다.
+- 샘플 PDF는 `sample:paperlens` sourceKey로 중복 등록을 막고, 실제 샘플 파일명은 `2604.04977v1.pdf`로 맞춥니다.
 - /api/notes 저장/복원 실패는 401, 503, 네트워크 실패를 구분해 안내합니다.
+- 로그인 후 저장된 논문이 있으면 추가 업로드 없이 마지막 활성 논문 또는 첫 논문을 바로 엽니다.
+- PDF 원본 보기는 Bearer token으로 PDF를 fetch한 뒤 blob URL로 iframe에 표시합니다. 실패해도 하이라이트 가능한 원문은 유지합니다.
 - 원문 패널의 PDF 연결 안내는 숨김/다시보기를 지원하고, 사용자가 해결하기 어려운 원문 텍스트 경고는 닫으면 세션 중 숨깁니다.
 
 최근 확인된 배포/설정 주의점:
@@ -30,7 +33,10 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 우선순위 개선 작업:
 1. 남은 운영 수동 smoke test
    - 실제 로그인 후 /api/notes 200 여부 확인
+   - 로그인 후 저장된 논문이 추가 업로드 없이 바로 열리는지 확인
    - 샘플 PDF 버튼으로 PDF 다운로드, 텍스트 추출, 새 리뷰 노트 생성까지 확인
+   - 샘플 PDF를 다시 눌렀을 때 기존 샘플 리뷰 노트를 여는지 확인
+   - PDF 원본 보기에서 401 콘솔 오류 없이 blob 미리보기가 뜨거나 fallback 안내가 뜨는지 확인
    - DOI/URL 등록 흐름 확인
    - 로그아웃 후 /service_home 접근 시 랜딩으로 되돌아가는지 확인
    - 결과를 docs/testing.md의 운영 체크리스트에 반영

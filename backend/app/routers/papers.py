@@ -24,7 +24,7 @@ TRAILING_DOI_CHARS = ".,;:)]}>"
 # 입력 가드 (기획서 FS-01)
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50MB
 MAX_PDF_PAGES = 200
-SAMPLE_PDF_PATH = Path(__file__).resolve().parents[3] / "KCI_FI002116975_250201_164625.pdf"
+SAMPLE_PDF_PATH = Path(__file__).resolve().parents[3] / "2604.04977v1.pdf"
 
 
 def _format_authors(authors: list[dict]) -> str:
@@ -776,6 +776,8 @@ def sample_pdf():
     filename = sample_url.rsplit("/", 1)[-1].split("?", 1)[0] or "sample.pdf"
     if not filename.casefold().endswith(".pdf"):
         filename = f"{filename}.pdf"
+    if filename == "2604.04977.pdf":
+        filename = "2604.04977v1.pdf"
     return FastAPIResponse(
         content,
         media_type="application/pdf",

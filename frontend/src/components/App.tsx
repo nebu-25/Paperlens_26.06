@@ -151,6 +151,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
   } = useReviewStore({ accessToken, authReady, authEnabled });
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
   const [paperPdfObjectUrl, setPaperPdfObjectUrl] = useState('');
+  const [paperPdfPreviewError, setPaperPdfPreviewError] = useState('');
   const uploadPercent = uploadPhasePercent[uploadPhase] ?? 0;
   const samplePercent = samplePhasePercent[samplePhase] ?? 0;
   const sampleStatusText =
@@ -214,23 +215,38 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
   useEffect(() => {
     if (!paperPdfUrl) {
       setPaperPdfObjectUrl('');
+      setPaperPdfPreviewError('');
       return;
     }
     let cancelled = false;
     let objectUrl = '';
     setPaperPdfObjectUrl('');
+    setPaperPdfPreviewError('');
     (async () => {
       try {
         const res = await fetch(paperPdfUrl, {
           headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (!cancelled) {
+            setPaperPdfPreviewError(
+              res.status === 401
+                ? 'PDF 원본 미리보기를 열 수 없습니다. 로그인 세션을 새로고침한 뒤 다시 시도해 주세요.'
+                : 'PDF 원본 미리보기를 불러오지 못했습니다. 하이라이트 가능한 원문은 계속 사용할 수 있습니다.',
+            );
+          }
+          return;
+        }
         const blob = await res.blob();
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
         setPaperPdfObjectUrl(objectUrl);
       } catch {
-        /* PDF 원본 미리보기는 선택 기능이므로 실패해도 원문 텍스트는 유지한다. */
+        if (!cancelled) {
+          setPaperPdfPreviewError(
+            'PDF 원본 미리보기를 불러오지 못했습니다. 하이라이트 가능한 원문은 계속 사용할 수 있습니다.',
+          );
+        }
       }
     })();
     return () => {
@@ -606,7 +622,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                     </div>
                   </div>
                 </section>
-                {paperPdfObjectUrl && (
+                {(paperPdfObjectUrl || paperPdfPreviewError) && (
                   <section className="rounded border border-line bg-white p-4">
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <div className="min-w-0">
@@ -615,20 +631,28 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                           {paper.pdfFilename || '저장된 PDF'}
                         </div>
                       </div>
-                      <a
-                        className="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
-                        href={paperPdfObjectUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        새 창
-                      </a>
+                      {paperPdfObjectUrl && (
+                        <a
+                          className="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
+                          href={paperPdfObjectUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          새 창
+                        </a>
+                      )}
                     </div>
-                    <iframe
-                      className="h-[72vh] min-h-[560px] w-full rounded border border-line bg-paper"
-                      title={`${paper.title || '논문'} PDF 원본`}
-                      src={paperPdfObjectUrl}
-                    />
+                    {paperPdfObjectUrl ? (
+                      <iframe
+                        className="h-[72vh] min-h-[560px] w-full rounded border border-line bg-paper"
+                        title={`${paper.title || '논문'} PDF 원본`}
+                        src={paperPdfObjectUrl}
+                      />
+                    ) : (
+                      <div className="rounded border border-line bg-paper p-3 text-xs leading-relaxed text-muted">
+                        {paperPdfPreviewError}
+                      </div>
+                    )}
                   </section>
                 )}
               </div>
