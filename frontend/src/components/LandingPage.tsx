@@ -30,18 +30,18 @@ const guideSteps = [
 export function LandingPage({ authEnabled, authReady, user, onEnterService }: LandingPageProps) {
   return (
     <main className="min-h-screen bg-paper text-ink">
-      <section className="mx-auto grid min-h-screen w-full max-w-6xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-center">
-        <div className="space-y-8">
-          <header className="flex items-center gap-3">
-            <div className="grid size-11 place-items-center rounded bg-action text-white">
-              <FileText size={23} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold leading-none sm:text-3xl">PaperLens</h1>
-              <p className="mt-1 text-sm text-muted">로그인 후 시작하는 개인 논문 리뷰 서비스</p>
-            </div>
-          </header>
+      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:justify-center">
+        <header className="flex items-center gap-3">
+          <div className="grid size-11 shrink-0 place-items-center rounded bg-action text-white">
+            <FileText size={23} />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold leading-none sm:text-3xl">PaperLens</h1>
+            <p className="mt-1 text-sm text-muted">로그인 후 시작하는 개인 논문 리뷰 서비스</p>
+          </div>
+        </header>
 
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_390px] lg:items-start">
           <section className="max-w-3xl">
             <p className="mb-3 inline-flex items-center gap-2 rounded bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wide text-action">
               <BookOpen size={14} />
@@ -58,7 +58,7 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
               <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center">
                 <button
                   type="button"
-                  className="inline-flex items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-action/90"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-action/90"
                   onClick={onEnterService}
                 >
                   서비스로 이동
@@ -71,47 +71,62 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             )}
           </section>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            {guideSteps.map((step) => (
-              <article key={step.title} className="rounded border border-line bg-white p-4">
-                <div className="mb-3 grid size-9 place-items-center rounded bg-action/10 text-action">
-                  {step.icon}
-                </div>
-                <h3 className="text-sm font-semibold">{step.title}</h3>
-                <p className="mt-2 text-xs leading-5 text-muted">{step.body}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="rounded border border-line bg-white p-4 text-xs leading-5 text-muted">
-            <b className="mb-1 block text-ink">진입 조건</b>
-            샘플 PDF와 논문 리뷰 작업 화면은 로그인 후 사용할 수 있습니다. 로그인 전에는 사용설명서와 계정
-            인증만 제공해 개인 라이브러리 저장 범위를 명확히 합니다.
-          </div>
+          <aside className="rounded border border-line bg-panel p-4 shadow-sm sm:p-5 lg:sticky lg:top-6">
+            <div className="mb-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-action">계정 인증</p>
+              <h2 className="mt-1 text-xl font-bold">
+                {user ? '서비스 입장 준비 완료' : '로그인 후 서비스 시작'}
+              </h2>
+              <p className="mt-2 text-xs leading-5 text-muted">
+                {user
+                  ? '계정 인증이 완료되었습니다. 저장된 논문과 리뷰 노트를 바로 이어서 확인할 수 있습니다.'
+                  : '인증이 완료되면 논문 리뷰 서비스 화면으로 이동합니다.'}
+              </p>
+            </div>
+            {user && (
+              <button
+                type="button"
+                className="mb-3 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white hover:bg-action/90"
+                onClick={onEnterService}
+              >
+                논문 리뷰 서비스로 이동
+                <ArrowRight size={15} />
+              </button>
+            )}
+            <AuthControls enabled={authEnabled} ready={authReady} user={user} />
+          </aside>
         </div>
 
-        <aside className="rounded border border-line bg-panel p-4 shadow-sm sm:p-5">
-          <div className="mb-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-action">계정 인증</p>
-            <h2 className="mt-1 text-xl font-bold">{user ? '서비스 입장 준비 완료' : '로그인 후 서비스 시작'}</h2>
-            <p className="mt-2 text-xs leading-5 text-muted">
-              {user
-                ? '계정 인증이 완료되었습니다. 서비스 화면에서 저장된 논문과 리뷰 노트를 이어서 확인할 수 있습니다.'
-                : '인증이 완료되면 별도 버튼 없이 논문 리뷰 서비스 화면으로 이동합니다.'}
-            </p>
-          </div>
-          <AuthControls enabled={authEnabled} ready={authReady} user={user} />
-          {user && (
+        <div className="grid gap-3 md:grid-cols-3">
+          {guideSteps.map((step) => (
+            <article key={step.title} className="rounded border border-line bg-white p-4">
+              <div className="mb-3 grid size-9 place-items-center rounded bg-action/10 text-action">
+                {step.icon}
+              </div>
+              <h3 className="text-sm font-semibold">{step.title}</h3>
+              <p className="mt-2 text-xs leading-5 text-muted">{step.body}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="rounded border border-line bg-white p-4 text-xs leading-5 text-muted">
+          <b className="mb-1 block text-ink">진입 조건</b>
+          샘플 PDF와 논문 리뷰 작업 화면은 로그인 후 사용할 수 있습니다. 로그인 전에는 사용설명서와 계정
+          인증만 제공해 개인 라이브러리 저장 범위를 명확히 합니다.
+        </div>
+
+        {user && (
+          <div className="sticky bottom-0 -mx-4 border-t border-line bg-panel/95 px-4 py-3 shadow-sm sm:hidden">
             <button
               type="button"
-              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white"
               onClick={onEnterService}
             >
-              논문 리뷰 서비스로 이동
+              서비스로 이동
               <ArrowRight size={15} />
             </button>
-          )}
-        </aside>
+          </div>
+        )}
       </section>
     </main>
   );
