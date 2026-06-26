@@ -107,6 +107,7 @@ export function useReviewPersistence({
         library: libraryRef.current,
         notes: notesRef.current,
         activeId: activeIdRef.current,
+        dirtyIds: Array.from(dirtyRef.current),
         deletedIds: Array.from(deletedIdsRef.current),
       }),
     );
@@ -230,8 +231,13 @@ export function useReviewPersistence({
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const data = JSON.parse(raw) as { activeId?: string | null; deletedIds?: string[] };
+        const data = JSON.parse(raw) as {
+          activeId?: string | null;
+          dirtyIds?: string[];
+          deletedIds?: string[];
+        };
         activeHint = data.activeId ?? null;
+        dirtyRef.current = new Set(data.dirtyIds ?? []);
         deletedIdsRef.current = new Set(data.deletedIds ?? []);
         updatePending();
       }
@@ -284,11 +290,12 @@ export function useReviewPersistence({
             const data = JSON.parse(raw) as {
               library?: Record<string, Paper>;
               notes?: Record<string, ReviewNote>;
+              dirtyIds?: string[];
             };
             apply(data.library ?? {}, data.notes ?? {});
-            for (const id of Object.keys(data.library ?? {})) {
-              if (!deletedIdsRef.current.has(id)) dirtyRef.current.add(id);
-            }
+            dirtyRef.current = new Set(
+              (data.dirtyIds ?? []).filter((id) => (data.library ?? {})[id] && !deletedIdsRef.current.has(id)),
+            );
             updatePending();
             if (Object.keys(data.library ?? {}).length > 0) setSavedAt('로컬 복원');
           }

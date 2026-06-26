@@ -32,7 +32,13 @@ export function renderHints(text: string, base: number): React.ReactNode[] {
   let last = 0;
   for (const m of text.matchAll(HINT_PATTERN)) {
     const start = m.index ?? 0;
-    if (start > last) parts.push(text.slice(last, start));
+    if (start > last) {
+      parts.push(
+        <span key={`text-${base + last}`}>
+          {text.slice(last, start)}
+        </span>,
+      );
+    }
     parts.push(
       <span key={`hint-${base + start}`} className="border-b border-dotted border-action/60">
         {m[0]}
@@ -40,6 +46,12 @@ export function renderHints(text: string, base: number): React.ReactNode[] {
     );
     last = start + m[0].length;
   }
-  if (last < text.length) parts.push(text.slice(last));
+  if (last < text.length) {
+    parts.push(
+      <span key={`text-${base + last}`}>
+        {text.slice(last)}
+      </span>,
+    );
+  }
   return parts;
 }

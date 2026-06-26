@@ -24,6 +24,10 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 로그인 후 저장된 논문이 있으면 추가 업로드 없이 마지막 활성 논문 또는 첫 논문을 바로 엽니다.
 - PDF 원본 보기는 Bearer token으로 PDF를 fetch한 뒤 blob URL로 iframe에 표시합니다. 실패해도 하이라이트 가능한 원문은 유지합니다.
 - 원문 패널의 PDF 연결 안내는 숨김/다시보기를 지원하고, 사용자가 해결하기 어려운 원문 텍스트 경고는 닫으면 세션 중 숨깁니다.
+- 브라우저 웹 번역은 React가 관리하는 원문/하이라이트 DOM과 충돌할 수 있어, 하이라이트 가능한 원문 영역은 `notranslate`/`translate="no"`로 보호합니다.
+- 웹 번역 DOM 충돌 방어용 DOM mutation guard와 화면 복구용 ErrorBoundary가 들어가 있습니다.
+- 하이라이트 선택 offset 계산 실패 시 빈 화면으로 가지 않고 경고를 표시합니다.
+- 로컬 캐시 복원 후 저장 재시도는 `dirtyIds` 기준으로만 수행해, 보기만 하는 상태에서 전체 노트 PUT 루프가 돌지 않도록 했습니다.
 
 최근 확인된 배포/설정 주의점:
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
@@ -31,6 +35,8 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - VITE_SUPABASE_ANON_KEY는 sb_publishable_... 값입니다.
 - Render에는 SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_JWT_SECRET이 모두 필요합니다.
 - /service_home 직접 접근은 /service_home/로 redirect된 뒤 200이어야 합니다.
+- 브라우저 기본 번역으로 번역된 본문 위에서 직접 하이라이트하는 UX는 안정 지원 대상이 아닙니다. 안정적인 번역 지원은 별도 번역 보기 패널로 설계하는 것이 필요합니다.
+- 로컬 dev에서 백엔드를 띄우지 않으면 Vite `/api` proxy가 502를 낼 수 있습니다. 이 경우 보기만 하는 로컬 캐시가 반복 PUT을 보내지 않는지 확인하세요.
 
 우선순위 개선 작업:
 1. 배포 후 운영 수동 smoke test
@@ -62,6 +68,12 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - diagnostics endpoint 운영 응답을 배포 후 확인
    - fallback cache TTL이 운영 로그와 맞는지 관찰
    - 인증 서버 장애와 사용자 토큰 만료의 사용자 안내가 충분히 구분되는지 확인
+
+5. 번역 보기 UX 설계
+   - 원문 하이라이트 패널은 계속 `notranslate`로 보호
+   - 별도 번역 보기 패널 또는 탭을 추가할지 검토
+   - 번역 보기에서는 읽기/복사 중심으로 제공하고, 하이라이트는 원문 기준으로 저장하는 흐름 검토
+   - 브라우저 번역 감지/안내 문구가 필요한지 검토
 
 검증 명령:
 - cd frontend && npm run lint

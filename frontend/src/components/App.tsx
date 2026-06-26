@@ -609,11 +609,12 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   </div>
                   <div
                     ref={bodyRef}
-                    className="max-h-[62vh] overflow-y-auto rounded border border-line bg-paper/40 p-4"
+                    className="notranslate max-h-[62vh] overflow-y-auto rounded border border-line bg-paper/40 p-4"
+                    translate="no"
                     onMouseUp={onTextMouseUp}
                     onMouseDown={(e) => e.stopPropagation()}
                   >
-                    <div className="select-text whitespace-pre-wrap">
+                    <div className="notranslate select-text whitespace-pre-wrap" translate="no">
                       {paper.text ? (
                         bodyNodes
                       ) : (

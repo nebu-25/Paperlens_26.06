@@ -696,6 +696,15 @@ export function useReviewStore({
     return r.toString().length;
   }
 
+  function resolveSelectionRange(text: string, start: number, end: number) {
+    const source = paper?.text ?? '';
+    if (!source) return null;
+    if (start >= 0 && end > start && end <= source.length) return { start, end };
+    const exact = source.indexOf(text);
+    if (exact >= 0) return { start: exact, end: exact + text.length };
+    return null;
+  }
+
   function onTextMouseUp(e: React.MouseEvent) {
     const sel = window.getSelection();
     const text = sel?.toString() ?? '';
@@ -709,13 +718,43 @@ export function useReviewStore({
       setSelection(null);
       return;
     }
-    const a = offsetWithin(container, range.startContainer, range.startOffset);
-    const b = offsetWithin(container, range.endContainer, range.endOffset);
-    setSelection({ text, start: Math.min(a, b), end: Math.max(a, b), x: e.clientX, y: e.clientY });
+    try {
+      const a = offsetWithin(container, range.startContainer, range.startOffset);
+      const b = offsetWithin(container, range.endContainer, range.endOffset);
+      const resolved = resolveSelectionRange(text, Math.min(a, b), Math.max(a, b));
+      if (!resolved) {
+        setSelection(null);
+        setSyncNotice({
+          tone: 'warning',
+          title: '하이라이트 위치 확인 필요',
+          message: '브라우저 번역으로 본문 위치가 바뀌었습니다. 원문 보기에서 다시 선택해 주세요.',
+        });
+        return;
+      }
+      setSelection({ text, start: resolved.start, end: resolved.end, x: e.clientX, y: e.clientY });
+    } catch {
+      setSelection(null);
+      setSyncNotice({
+        tone: 'warning',
+        title: '하이라이트 위치 확인 필요',
+        message: '브라우저 번역으로 선택 위치를 계산하지 못했습니다. 원문 보기에서 다시 선택해 주세요.',
+      });
+    }
   }
 
   function addHighlight() {
     if (!selection) return;
+    const resolved = resolveSelectionRange(selection.text, selection.start, selection.end);
+    if (!resolved) {
+      setSelection(null);
+      setSyncNotice({
+        tone: 'warning',
+        title: '하이라이트 위치 확인 필요',
+        message: '선택한 문장을 원문 위치와 연결하지 못했습니다. 원문 보기에서 다시 선택해 주세요.',
+      });
+      window.getSelection()?.removeAllRanges();
+      return;
+    }
     setNote((n) => ({
       ...n,
       highlights: [
@@ -724,8 +763,8 @@ export function useReviewStore({
           id: uid(),
           text: selection.text,
           color: highlightColor,
-          start: selection.start,
-          end: selection.end,
+          start: resolved.start,
+          end: resolved.end,
         },
       ],
     }));
