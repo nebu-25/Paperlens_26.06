@@ -75,21 +75,10 @@ DATABASE_URL=postgresql://paperlens:paperlens_dev@127.0.0.1:5432/paperlens pytho
 ## Deployment Smoke
 
 ```bash
-curl -L -I https://nebu-25.github.io/Paperlens_26.06/
-curl -L -I https://nebu-25.github.io/Paperlens_26.06/service_home
-curl -L -I https://nebu-25.github.io/Paperlens_26.06/service_home/
-curl -L -I https://nebu-25.github.io/Paperlens_26.06/favicon.svg
-curl https://paperlens-backend-53ki.onrender.com/api/health
-curl https://paperlens-backend-53ki.onrender.com/api/diagnostics
-curl https://paperlens-backend-53ki.onrender.com/api/ai/status
-curl -i https://paperlens-backend-53ki.onrender.com/api/notes
-curl -L -I https://paperlens-backend-53ki.onrender.com/api/papers/sample-pdf
-
-cd backend
-API_BASE_URL=https://paperlens-backend-53ki.onrender.com python scripts/smoke_api.py
+python3 backend/scripts/smoke_deployment.py
 ```
 
-Render 무료 플랜은 콜드스타트가 있을 수 있으므로 첫 health 요청은 느릴 수 있습니다.
+GitHub Actions의 `Production smoke` 워크플로도 같은 공개 endpoint 검사를 수행합니다. 수동 실행할 수 있고, GitHub Pages 배포 성공 후 자동으로 실행됩니다. Render 무료 플랜은 콜드스타트가 있을 수 있으므로 첫 health 요청은 느릴 수 있습니다.
 
 ### 운영 체크리스트
 

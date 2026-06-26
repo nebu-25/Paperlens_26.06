@@ -150,27 +150,33 @@ DATABASE_URL=postgresql://paperlens:paperlens_dev@127.0.0.1:5432/paperlens pytho
 
 ## Smoke Checks
 
-배포 후 콜드스타트가 끝난 뒤 health와 저장 API를 확인합니다.
+배포 후 콜드스타트가 끝난 뒤 공개 endpoint를 확인합니다.
+
+```bash
+python3 backend/scripts/smoke_deployment.py
+```
+
+기본값은 운영 Pages와 Render URL입니다. 다른 환경을 확인할 때는 아래처럼 덮어씁니다.
+
+```bash
+FRONTEND_BASE_URL=https://nebu-25.github.io/Paperlens_26.06 \
+API_BASE_URL=https://paperlens-backend-53ki.onrender.com \
+python3 backend/scripts/smoke_deployment.py
+```
+
+GitHub Actions의 `Production smoke` 워크플로도 같은 검사를 수행합니다. 이 워크플로는 수동 실행할 수 있고, GitHub Pages 배포 워크플로가 성공한 뒤 자동으로도 실행됩니다. Render 배포는 GitHub Actions가 완료 시점을 직접 알 수 없으므로 Render 배포 후 필요할 때 수동 실행합니다.
+
+`/api/diagnostics`는 비밀값을 반환하지 않고 Supabase/Auth/DB/AI 설정 여부만 반환합니다. 운영에서는 `auth.mode`가 `supabase`, `auth.ready`가 `true`, `auth.warnings`가 빈 배열이어야 합니다. `smoke_deployment.py`는 다음 공개 항목을 확인합니다.
+
+- Pages 루트, `/service_home/`, `favicon.svg`
+- Render `/api/health`, `/api/diagnostics`, `/api/ai/status`
+- 미인증 `/api/notes` 401 응답
+- `/api/papers/sample-pdf` HEAD 응답
 
 ```bash
 curl https://paperlens-backend-53ki.onrender.com/api/health
 curl https://paperlens-backend-53ki.onrender.com/api/diagnostics
-
-cd backend
-API_BASE_URL=https://paperlens-backend-53ki.onrender.com python scripts/smoke_api.py
-```
-
-`/api/diagnostics`는 비밀값을 반환하지 않고 Supabase/Auth/DB/AI 설정 여부만 반환합니다. 운영에서는 `auth.mode`가 `supabase`, `auth.ready`가 `true`, `auth.warnings`가 빈 배열이어야 합니다.
-
-AI 설정 확인:
-
-```bash
 curl https://paperlens-backend-53ki.onrender.com/api/ai/status
-```
-
-Pages 확인:
-
-```bash
 curl -L -I https://nebu-25.github.io/Paperlens_26.06/
 curl -L -I https://nebu-25.github.io/Paperlens_26.06/service_home/
 curl -L -I https://nebu-25.github.io/Paperlens_26.06/favicon.svg

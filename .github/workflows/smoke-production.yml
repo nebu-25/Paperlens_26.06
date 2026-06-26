@@ -1,0 +1,41 @@
+name: Production smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      frontend_base_url:
+        description: GitHub Pages frontend base URL
+        required: false
+        default: https://nebu-25.github.io/Paperlens_26.06
+      api_base_url:
+        description: Render backend base URL
+        required: false
+        default: https://paperlens-backend-53ki.onrender.com
+  workflow_run:
+    workflows: ["Deploy frontend to GitHub Pages"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run production smoke checks
+        env:
+          FRONTEND_BASE_URL: ${{ github.event.inputs.frontend_base_url || 'https://nebu-25.github.io/Paperlens_26.06' }}
+          API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://paperlens-backend-53ki.onrender.com' }}
+        run: python3 backend/scripts/smoke_deployment.py

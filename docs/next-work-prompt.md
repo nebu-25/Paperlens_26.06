@@ -69,8 +69,9 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 
 3. 문서와 배포 자동화
    - docs/deployment.md의 환경변수 표를 실제 운영값 기준으로 재확인
-   - GitHub Actions가 Pages 관련 변경이 없을 때도 빌드되는 점을 최적화할지 검토
-   - Render 배포 성공 여부를 확인하는 smoke script 또는 GitHub Action 추가 검토
+   - Pages workflow는 프론트엔드/워크플로 변경시에만 자동 실행되도록 path 필터가 설정되어 있다
+   - `backend/scripts/smoke_deployment.py`와 GitHub Actions `Production smoke` 워크플로로 공개 운영 endpoint 자동 확인을 수행한다
+   - Render 배포 완료 시점은 GitHub Actions가 직접 알 수 없으므로 Render 배포 후 `Production smoke`를 수동 실행한다
 
 4. 추가 저장/인증 견고화 검토
    - diagnostics endpoint 운영 응답을 배포 후 확인
