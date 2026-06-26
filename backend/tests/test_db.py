@@ -121,6 +121,24 @@ class TestRoundTrip:
         assert repo.get_pdf(USER_ID, "legacy") == ("legacy.pdf", b"%PDF")
 
 
+class TestPostgreSQLMigration:
+    def test_legacy_rows_without_user_id_are_skipped(self):
+        from app.repositories.postgresql_notes import PostgreSQLNotesRepository
+
+        class FakeConnection:
+            def __init__(self):
+                self.statements = []
+
+            def execute(self, statement):
+                self.statements.append(statement)
+
+        conn = FakeConnection()
+        PostgreSQLNotesRepository("")._migrate_from_legacy_papers(conn)
+
+        assert len(conn.statements) == 4
+        assert all("user_id IS NOT NULL" in statement for statement in conn.statements)
+
+
 class TestRepositoryFactory:
     def test_defaults_to_sqlite(self, monkeypatch):
         from app.repositories.factory import create_notes_repository

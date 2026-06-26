@@ -120,13 +120,16 @@ class PostgreSQLNotesRepository:
                    metadata_source, metadata_confidence, metadata_warnings, pdf_filename,
                    created_at, updated_at
             FROM papers
+            WHERE user_id IS NOT NULL
             ON CONFLICT (id) DO NOTHING
             """
         )
         conn.execute(
             """
             INSERT INTO paper_texts (paper_id, user_id, text, updated_at)
-            SELECT id, user_id, text, updated_at FROM papers WHERE text <> ''
+            SELECT id, user_id, text, updated_at
+            FROM papers
+            WHERE user_id IS NOT NULL AND text <> ''
             ON CONFLICT (paper_id) DO NOTHING
             """
         )
@@ -134,6 +137,7 @@ class PostgreSQLNotesRepository:
             """
             INSERT INTO review_notes (paper_id, user_id, note, updated_at)
             SELECT id, user_id, note, updated_at FROM papers
+            WHERE user_id IS NOT NULL
             ON CONFLICT (paper_id) DO NOTHING
             """
         )
@@ -142,7 +146,7 @@ class PostgreSQLNotesRepository:
             INSERT INTO paper_files (paper_id, user_id, filename, content, updated_at)
             SELECT id, user_id, pdf_filename, pdf_content, updated_at
             FROM papers
-            WHERE pdf_content IS NOT NULL OR pdf_filename <> ''
+            WHERE user_id IS NOT NULL AND (pdf_content IS NOT NULL OR pdf_filename <> '')
             ON CONFLICT (paper_id) DO NOTHING
             """
         )
