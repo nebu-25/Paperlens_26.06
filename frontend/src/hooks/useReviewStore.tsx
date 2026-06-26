@@ -617,6 +617,17 @@ export function useReviewStore({
         return;
       }
 
+      const doiLike = isLikelyDoi(query);
+      const urlLike = /^https?:\/\//i.test(query);
+      if (urlLike && !doiLike) {
+        setUploadNotice({
+          tone: 'warning',
+          title: 'PDF 원문 URL이 필요합니다',
+          message: '웹페이지 주소는 원문을 안정적으로 가져올 수 없습니다. PDF 파일을 업로드하거나 PDF로 바로 열리는 URL을 입력해 주세요.',
+        });
+        return;
+      }
+
       const res = await fetch(`${API_BASE}/papers/metadata?doi=${encodeURIComponent(query)}`);
       if (!res.ok) throw new Error('metadata failed');
       const data: {
@@ -649,15 +660,6 @@ export function useReviewStore({
     } catch {
       // 비DOI 입력·미연동·조회 실패 시에도 등록 흐름이 끊기지 않게 폴백
       const doiLike = isLikelyDoi(query);
-      const urlLike = /^https?:\/\//i.test(query);
-      if (urlLike && !doiLike) {
-        setUploadNotice({
-          tone: 'warning',
-          title: 'PDF 원문 URL이 필요합니다',
-          message: '웹페이지 주소는 원문을 안정적으로 가져올 수 없습니다. PDF 파일을 업로드하거나 PDF로 바로 열리는 URL을 입력해 주세요.',
-        });
-        return;
-      }
       setUploadPhase('creating');
       registerPaper({
         title: query,
