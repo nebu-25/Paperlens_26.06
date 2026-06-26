@@ -50,5 +50,24 @@ class Settings(BaseSettings):
     def auth_enabled(self) -> bool:
         return bool(self.supabase_jwt_secret.strip())
 
+    @property
+    def auth_diagnostics(self) -> dict[str, object]:
+        configured = {
+            "supabase_url": bool(self.supabase_url.strip()),
+            "supabase_anon_key": bool(self.supabase_anon_key.strip()),
+            "supabase_jwt_secret": bool(self.supabase_jwt_secret.strip()),
+        }
+        warnings: list[str] = []
+        if any(configured.values()) and not all(configured.values()):
+            warnings.append(
+                "Supabase auth is partially configured. Set SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_JWT_SECRET together."
+            )
+        return {
+            "mode": "supabase" if configured["supabase_jwt_secret"] else "local",
+            "configured": configured,
+            "ready": all(configured.values()),
+            "warnings": warnings,
+        }
+
 
 settings = Settings()

@@ -112,6 +112,8 @@ FastAPI는 Supabase access token을 다음 순서로 처리합니다.
 1. `SUPABASE_JWT_SECRET`으로 HS256 JWT를 직접 검증합니다.
 2. 지원하지 않는 서명 알고리즘이면 `SUPABASE_URL`의 `/auth/v1/user`에 access token과 `SUPABASE_ANON_KEY`를 보내 사용자 id를 확인합니다.
 
+Fallback 사용자 조회 결과는 token hash 기준으로 최대 5분 동안, token의 `exp`를 넘지 않는 범위에서 캐시합니다. 같은 로그인 세션의 자동 저장 요청이 반복되어도 Supabase Auth endpoint를 매번 호출하지 않기 위함입니다.
+
 따라서 Render에는 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`을 모두 설정해 둡니다.
 
 ## PostgreSQL
@@ -143,10 +145,13 @@ DATABASE_URL=postgresql://paperlens:paperlens_dev@127.0.0.1:5432/paperlens pytho
 
 ```bash
 curl https://paperlens-backend-53ki.onrender.com/api/health
+curl https://paperlens-backend-53ki.onrender.com/api/diagnostics
 
 cd backend
 API_BASE_URL=https://paperlens-backend-53ki.onrender.com python scripts/smoke_api.py
 ```
+
+`/api/diagnostics`는 비밀값을 반환하지 않고 Supabase/Auth/DB/AI 설정 여부만 반환합니다. 운영에서는 `auth.mode`가 `supabase`, `auth.ready`가 `true`, `auth.warnings`가 빈 배열이어야 합니다.
 
 AI 설정 확인:
 

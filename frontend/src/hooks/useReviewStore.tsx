@@ -19,6 +19,7 @@ import type {
   HighlightColor,
   Paper,
   ReviewNote,
+  SamplePhase,
   SectionSummary,
   UploadPhase,
 } from '../types';
@@ -43,6 +44,8 @@ export function useReviewStore({
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle');
   const [doiLoading, setDoiLoading] = useState(false);
   const [sampleLoading, setSampleLoading] = useState(false);
+  const [samplePhase, setSamplePhase] = useState<SamplePhase>('idle');
+  const [sampleRetryAvailable, setSampleRetryAvailable] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<AppNotice | null>(null); // 업로드 가드 오류/안내
   const [uploadOpen, setUploadOpen] = useState(true);
   const [search, setSearch] = useState('');
@@ -62,6 +65,7 @@ export function useReviewStore({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const attachTargetRef = useRef<string | null>(null);
+  const sampleAbortRef = useRef<AbortController | null>(null);
 
   const paper = activeId ? library[activeId] ?? null : null;
   const note = (activeId ? notes[activeId] : undefined) ?? EMPTY_NOTE;
@@ -96,6 +100,14 @@ export function useReviewStore({
   const authHeaders: Record<string, string> = accessToken
     ? { Authorization: `Bearer ${accessToken}` }
     : {};
+
+  async function readErrorDetail(res: Response, fallback: string): Promise<string> {
+    try {
+      return ((await res.json()) as { detail?: string }).detail ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
 
   // ── 활성 논문의 노트만 갱신 ──
   function setNote(updater: (n: ReviewNote) => ReviewNote) {
@@ -183,7 +195,14 @@ export function useReviewStore({
     void flush();
   }
 
-  async function handleFile(file: File) {
+  function isAbortError(error: unknown) {
+    return error instanceof DOMException && error.name === 'AbortError';
+  }
+
+  async function handleFile(
+    file: File,
+    options: { signal?: AbortSignal; onPhase?: (phase: UploadPhase) => void } = {},
+  ) {
     setUploadNotice(null);
     const sourceKey = fileSourceKey(file);
     const attachTargetId = attachTargetRef.current;
@@ -211,16 +230,19 @@ export function useReviewStore({
     }
     setUploading(true);
     setUploadPhase('uploading');
+    options.onPhase?.('uploading');
     try {
       const form = new FormData();
       const uploadPaperId = attachTargetId ?? uid();
       form.append('file', file);
       form.append('paper_id', uploadPaperId);
       setUploadPhase('extracting');
+      options.onPhase?.('extracting');
       const res = await fetch(`${API_BASE}/papers/extract-text`, {
         method: 'POST',
         headers: authHeaders,
         body: form,
+        signal: options.signal,
       });
       if (!res.ok) {
         // 입력 가드 위반(크기/암호/페이지 등): 서버 메시지를 표시하고 등록하지 않는다
@@ -238,6 +260,7 @@ export function useReviewStore({
         return;
       }
       setUploadPhase('metadata');
+      options.onPhase?.('metadata');
       const data: {
         filename: string;
         text: string;
@@ -263,6 +286,7 @@ export function useReviewStore({
         ? [...(data.metadata_warnings ?? []), data.notice]
         : (data.metadata_warnings ?? []);
       setUploadPhase('creating');
+      options.onPhase?.('creating');
       if (attachTargetId && libraryRef.current[attachTargetId]) {
         setLibrary((lib) => {
           const current = lib[attachTargetId];
@@ -348,7 +372,15 @@ export function useReviewStore({
               : '원문 텍스트와 메타정보를 반영해 새 리뷰 노트를 만들었습니다.') + sectionNote,
         });
       }
-    } catch {
+    } catch (error) {
+      if (isAbortError(error)) {
+        setUploadNotice({
+          tone: 'info',
+          title: '샘플 PDF 취소됨',
+          message: '진행 중이던 샘플 PDF 처리를 중단했습니다.',
+        });
+        return;
+      }
       // 네트워크/백엔드 미연결: 등록 흐름은 끊기지 않게 폴백
       if (!attachTargetId) {
         registerPaper({
@@ -374,28 +406,64 @@ export function useReviewStore({
   }
 
   async function handleSamplePdf() {
+    if (sampleLoading) return;
+    const controller = new AbortController();
+    sampleAbortRef.current = controller;
+    setSampleRetryAvailable(false);
     setSampleLoading(true);
+    setSamplePhase('waking');
     setUploadNotice({
       tone: 'info',
       title: '샘플 PDF 준비 중',
-      message: '백엔드가 잠들어 있으면 첫 요청에 30초 이상 걸릴 수 있습니다.',
+      message: '백엔드를 먼저 깨운 뒤 샘플 PDF를 내려받아 분석합니다. 첫 요청은 30초 이상 걸릴 수 있습니다.',
     });
     try {
       attachTargetRef.current = null;
-      const res = await fetch(`${API_BASE}/papers/sample-pdf`);
+      try {
+        const health = await fetch(`${API_BASE}/health`, { signal: controller.signal });
+        if (!health.ok) throw new Error(await readErrorDetail(health, '백엔드 상태를 확인하지 못했습니다.'));
+        if (controller.signal.aborted) return;
+        setUploadNotice({
+          tone: 'info',
+          title: '샘플 PDF 내려받는 중',
+          message: '백엔드가 응답했습니다. 샘플 파일을 받은 뒤 자동으로 본문을 추출합니다.',
+        });
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+        setUploadNotice({
+          tone: 'warning',
+          title: '샘플 PDF 재시도 중',
+          message: '백엔드 응답이 지연되고 있습니다. 샘플 파일 요청을 한 번 더 시도합니다.',
+        });
+      }
+      setSamplePhase('downloading');
+      const res = await fetch(`${API_BASE}/papers/sample-pdf`, { signal: controller.signal });
       if (!res.ok) {
-        let detail = '샘플 PDF를 불러오지 못했습니다.';
-        try {
-          detail = ((await res.json()) as { detail?: string }).detail ?? detail;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail);
+        throw new Error(await readErrorDetail(res, '샘플 PDF를 불러오지 못했습니다.'));
       }
       const blob = await res.blob();
       const filename = 'KCI_FI002116975_250201_164625.pdf';
-      await handleFile(new File([blob], filename, { type: 'application/pdf', lastModified: 0 }));
+      setSamplePhase('extracting');
+      await handleFile(new File([blob], filename, { type: 'application/pdf', lastModified: 0 }), {
+        signal: controller.signal,
+        onPhase: (phase) => {
+          if (phase === 'creating') setSamplePhase('creating');
+          else if (phase === 'extracting' || phase === 'metadata') setSamplePhase('extracting');
+        },
+      });
+      if (!controller.signal.aborted) {
+        setSamplePhase('creating');
+      }
     } catch (error) {
+      if (isAbortError(error)) {
+        setUploadNotice({
+          tone: 'info',
+          title: '샘플 PDF 취소됨',
+          message: '진행 중이던 샘플 PDF 처리를 중단했습니다.',
+        });
+        return;
+      }
+      setSampleRetryAvailable(true);
       setUploadNotice({
         tone: 'error',
         title: '샘플 PDF 불러오기 실패',
@@ -405,8 +473,14 @@ export function useReviewStore({
             : '샘플 PDF를 불러오지 못했습니다. 직접 PDF 업로드를 사용해 주세요.',
       });
     } finally {
+      if (sampleAbortRef.current === controller) sampleAbortRef.current = null;
       setSampleLoading(false);
+      setSamplePhase('idle');
     }
+  }
+
+  function cancelSamplePdf() {
+    sampleAbortRef.current?.abort();
   }
 
   async function registerByDoi() {
@@ -635,6 +709,8 @@ export function useReviewStore({
     uploadPhase,
     doiLoading,
     sampleLoading,
+    samplePhase,
+    sampleRetryAvailable,
     uploadNotice,
     uploadOpen,
     savedAt,
@@ -679,6 +755,7 @@ export function useReviewStore({
     deletePaper,
     handleFile,
     handleSamplePdf,
+    cancelSamplePdf,
     registerByDoi,
     onTextMouseUp,
     addHighlight,

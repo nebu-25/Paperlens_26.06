@@ -2,6 +2,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import time
 from typing import Annotated
 from urllib.error import HTTPError, URLError
@@ -12,6 +13,9 @@ from fastapi import Header, HTTPException
 from app.config import settings
 
 LOCAL_USER_ID = "local"
+FALLBACK_CACHE_TTL_SECONDS = 300
+logger = logging.getLogger(__name__)
+_fallback_user_cache: dict[str, tuple[float, dict[str, object]]] = {}
 
 
 def _decode_base64url(value: str) -> bytes:
@@ -48,9 +52,59 @@ def _verify_supabase_jwt(token: str) -> dict[str, object]:
     return payload
 
 
+def _token_cache_key(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _uncached_token_payload(token: str) -> dict[str, object]:
+    parts = token.split(".")
+    if len(parts) < 2:
+        return {}
+    try:
+        return json.loads(_decode_base64url(parts[1]))
+    except (ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _fallback_cache_expiry(token: str) -> float:
+    expiry = time.time() + FALLBACK_CACHE_TTL_SECONDS
+    exp = _uncached_token_payload(token).get("exp")
+    if isinstance(exp, (int, float)):
+        expiry = min(expiry, float(exp))
+    return expiry
+
+
+def clear_fallback_user_cache() -> None:
+    _fallback_user_cache.clear()
+
+
+def _get_cached_fallback_user(token: str) -> dict[str, object] | None:
+    key = _token_cache_key(token)
+    cached = _fallback_user_cache.get(key)
+    if not cached:
+        return None
+    expires_at, payload = cached
+    if expires_at <= time.time():
+        _fallback_user_cache.pop(key, None)
+        return None
+    return payload
+
+
+def _set_cached_fallback_user(token: str, payload: dict[str, object]) -> None:
+    expires_at = _fallback_cache_expiry(token)
+    if expires_at <= time.time():
+        return
+    _fallback_user_cache[_token_cache_key(token)] = (expires_at, payload)
+
+
 def _fetch_supabase_user(token: str) -> dict[str, object]:
+    cached = _get_cached_fallback_user(token)
+    if cached:
+        return cached
+
     if not settings.supabase_url.strip() or not settings.supabase_anon_key.strip():
-        raise HTTPException(status_code=401, detail="지원하지 않는 인증 토큰입니다.")
+        logger.warning("Supabase fallback auth is missing SUPABASE_URL or SUPABASE_ANON_KEY.")
+        raise HTTPException(status_code=503, detail="인증 서버 설정이 누락되었습니다.")
 
     url = f"{settings.supabase_url.rstrip('/')}/auth/v1/user"
     request = Request(
@@ -67,14 +121,18 @@ def _fetch_supabase_user(token: str) -> dict[str, object]:
     except HTTPError as exc:
         if exc.code in (401, 403):
             raise HTTPException(status_code=401, detail="인증 토큰을 확인할 수 없습니다.") from None
+        logger.warning("Supabase user endpoint returned %s during fallback auth.", exc.code)
         raise HTTPException(status_code=503, detail="인증 서버 응답을 확인할 수 없습니다.") from None
     except (TimeoutError, URLError, json.JSONDecodeError):
+        logger.warning("Supabase user endpoint was unavailable during fallback auth.", exc_info=True)
         raise HTTPException(status_code=503, detail="인증 서버에 연결할 수 없습니다.") from None
 
     user_id = data.get("id")
     if not user_id:
         raise HTTPException(status_code=401, detail="인증 사용자 정보를 찾을 수 없습니다.")
-    return {"sub": str(user_id)}
+    payload = {"sub": str(user_id)}
+    _set_cached_fallback_user(token, payload)
+    return payload
 
 
 def current_user_id(authorization: Annotated[str | None, Header()] = None) -> str:

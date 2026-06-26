@@ -16,6 +16,53 @@ interface UseReviewPersistenceArgs {
   authEnabled: boolean;
 }
 
+class SyncError extends Error {
+  constructor(
+    public readonly status: number | null,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'SyncError';
+  }
+}
+
+async function detailFromResponse(res: Response, fallback: string): Promise<string> {
+  try {
+    return ((await res.json()) as { detail?: string }).detail ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function throwSyncError(res: Response, fallback: string): Promise<never> {
+  throw new SyncError(res.status, await detailFromResponse(res, fallback));
+}
+
+function noticeForSyncError(error: unknown): AppNotice {
+  if (error instanceof SyncError) {
+    if (error.status === 401) {
+      return {
+        tone: 'warning',
+        title: '인증 확인 필요',
+        message: error.message || '로그인 정보가 만료되었습니다. 다시 로그인하면 서버 저장을 재개합니다.',
+      };
+    }
+    if (error.status === 503) {
+      return {
+        tone: 'warning',
+        title: '서버 준비 중',
+        message:
+          error.message || 'Render 백엔드 또는 인증 서버가 준비 중입니다. 변경 사항은 로컬에 보관했습니다.',
+      };
+    }
+  }
+  return {
+    tone: 'warning',
+    title: '로컬 저장 중',
+    message: '서버에 연결하지 못했습니다. 변경 사항은 이 브라우저에 보관하고 자동으로 다시 저장합니다.',
+  };
+}
+
 export function useReviewPersistence({
   library,
   notes,
@@ -93,7 +140,7 @@ export function useReviewPersistence({
       method: 'DELETE',
       headers: authHeaders(),
     });
-    if (!res.ok) throw new Error('delete failed');
+    if (!res.ok) await throwSyncError(res, '노트 삭제를 서버에 반영하지 못했습니다.');
   }, [authHeaders]);
 
   const flush = useCallback(async () => {
@@ -106,14 +153,14 @@ export function useReviewPersistence({
     const ids = Array.from(dirtyRef.current);
     if (deleteIds.length === 0 && ids.length === 0) return;
     let savedAny = false;
-    let failed = false;
+    let failure: unknown = null;
     for (const id of deleteIds) {
       try {
         await deleteRemote(id);
         deletedIdsRef.current.delete(id);
         savedAny = true;
-      } catch {
-        failed = true;
+      } catch (error) {
+        failure = failure ?? error;
       }
     }
     for (const id of ids) {
@@ -132,11 +179,11 @@ export function useReviewPersistence({
           headers: { ...authHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ paper, note: notesRef.current[id] ?? EMPTY_NOTE }),
         });
-        if (!res.ok) throw new Error('save failed');
+        if (!res.ok) await throwSyncError(res, '노트 저장을 서버에 반영하지 못했습니다.');
         dirtyRef.current.delete(id);
         savedAny = true;
-      } catch {
-        failed = true;
+      } catch (error) {
+        failure = failure ?? error;
       }
     }
     updatePending();
@@ -146,17 +193,13 @@ export function useReviewPersistence({
       /* ignore */
     }
     const time = new Date().toLocaleTimeString('ko-KR');
-    if (failed) {
+    if (failure) {
       setOnline(false);
-      setSavedAt(`로컬 저장 ${time} (오프라인)`);
-      setSyncNotice({
-        tone: 'warning',
-        title: '서버 동기화 대기 중',
-        message: '변경 사항은 이 브라우저에 보관했습니다. 연결이 복구되면 자동으로 다시 저장합니다.',
-      });
+      setSavedAt(`로컬 저장 ${time}`);
+      setSyncNotice(noticeForSyncError(failure));
     } else if (savedAny) {
       setOnline(true);
-      setSavedAt(`서버 저장 ${time}`);
+      setSavedAt(`저장됨 ${time}`);
       setSyncNotice(null);
     }
   }, [authHeaders, deleteRemote, persistLocal, updatePending]);
@@ -223,7 +266,7 @@ export function useReviewPersistence({
       }
       try {
         const res = await fetch(`${API_BASE}/notes`, { headers: authHeaders() });
-        if (!res.ok) throw new Error('server unavailable');
+        if (!res.ok) await throwSyncError(res, '저장된 노트를 불러오지 못했습니다.');
         const data = (await res.json()) as {
           library?: Record<string, Paper>;
           notes?: Record<string, ReviewNote>;
@@ -232,7 +275,7 @@ export function useReviewPersistence({
         apply(data.library ?? {}, data.notes ?? {});
         setOnline(true);
         if (Object.keys(data.library ?? {}).length > 0) setSavedAt('서버에서 불러옴');
-      } catch {
+      } catch (error) {
         try {
           const raw = window.localStorage.getItem(STORAGE_KEY);
           if (raw && !cancelled) {
@@ -245,12 +288,15 @@ export function useReviewPersistence({
               if (!deletedIdsRef.current.has(id)) dirtyRef.current.add(id);
             }
             updatePending();
-            if (Object.keys(data.library ?? {}).length > 0) setSavedAt('로컬 복원(오프라인)');
+            if (Object.keys(data.library ?? {}).length > 0) setSavedAt('로컬 복원');
           }
         } catch {
           /* 손상된 캐시는 무시 */
         }
-        if (!cancelled) setOnline(false);
+        if (!cancelled) {
+          setOnline(false);
+          setSyncNotice(noticeForSyncError(error));
+        }
       } finally {
         if (!cancelled) setLoaded(true);
       }

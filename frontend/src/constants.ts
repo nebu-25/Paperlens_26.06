@@ -1,5 +1,5 @@
 // 앱 전역 상수. 타입 외 다른 모듈에 의존하지 않는다(순환 의존 방지).
-import type { HighlightColor, UploadPhase } from './types';
+import type { HighlightColor, SamplePhase, UploadPhase } from './types';
 
 // API 베이스 경로. 기본은 상대경로 '/api'(개발 시 Vite 프록시, 배포 시 동일 오리진/리버스 프록시).
 // 다른 오리진의 백엔드를 직접 가리키려면 VITE_API_BASE_URL로 오버라이드한다(예: http://127.0.0.1:8000).
@@ -102,6 +102,22 @@ export const uploadPhasePercent: Record<UploadPhase, number> = {
   extracting: 55,
   metadata: 80,
   creating: 100,
+};
+
+export const samplePhaseText: Record<SamplePhase, string> = {
+  idle: '',
+  waking: '백엔드 확인 중',
+  downloading: '샘플 PDF 다운로드 중',
+  extracting: '샘플 PDF 분석 중',
+  creating: '샘플 노트 생성 중',
+};
+
+export const samplePhasePercent: Record<SamplePhase, number> = {
+  idle: 0,
+  waking: 18,
+  downloading: 38,
+  extracting: 68,
+  creating: 92,
 };
 
 // localStorage 키: 논문 라이브러리 + 논문별 노트 + 현재 활성 논문을 한 묶음으로 보관

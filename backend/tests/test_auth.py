@@ -46,6 +46,13 @@ class _Response:
         return self._body.read()
 
 
+@pytest.fixture(autouse=True)
+def clear_auth_cache():
+    auth.clear_fallback_user_cache()
+    yield
+    auth.clear_fallback_user_cache()
+
+
 def test_current_user_id_returns_local_when_auth_disabled(monkeypatch):
     monkeypatch.setattr(settings, "supabase_jwt_secret", "")
     assert auth.current_user_id(None) == "local"
@@ -73,6 +80,59 @@ def test_current_user_id_falls_back_to_supabase_user_endpoint(monkeypatch):
     monkeypatch.setattr(auth, "urlopen", fake_urlopen)
 
     assert auth.current_user_id(f"Bearer {token}") == "user-from-supabase"
+
+
+def test_current_user_id_caches_supabase_fallback_user(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    monkeypatch.setattr(settings, "supabase_url", "https://project.supabase.co")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key")
+    token = _token_with_alg("RS256", {"sub": "ignored", "exp": int(time.time()) + 60})
+    calls = 0
+
+    def fake_urlopen(_request, timeout):
+        assert timeout == 10
+        nonlocal calls
+        calls += 1
+        return _Response(b'{"id":"cached-user"}')
+
+    monkeypatch.setattr(auth, "urlopen", fake_urlopen)
+
+    assert auth.current_user_id(f"Bearer {token}") == "cached-user"
+    assert auth.current_user_id(f"Bearer {token}") == "cached-user"
+    assert calls == 1
+
+
+def test_current_user_id_does_not_cache_expired_fallback_token(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    monkeypatch.setattr(settings, "supabase_url", "https://project.supabase.co")
+    monkeypatch.setattr(settings, "supabase_anon_key", "anon-key")
+    token = _token_with_alg("RS256", {"sub": "ignored", "exp": int(time.time()) - 1})
+    calls = 0
+
+    def fake_urlopen(_request, timeout):
+        assert timeout == 10
+        nonlocal calls
+        calls += 1
+        return _Response(b'{"id":"expired-cache-user"}')
+
+    monkeypatch.setattr(auth, "urlopen", fake_urlopen)
+
+    assert auth.current_user_id(f"Bearer {token}") == "expired-cache-user"
+    assert auth.current_user_id(f"Bearer {token}") == "expired-cache-user"
+    assert calls == 2
+
+
+def test_current_user_id_reports_missing_supabase_fallback_config(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "supabase_anon_key", "")
+    token = _token_with_alg("RS256", {"sub": "ignored", "exp": int(time.time()) + 60})
+
+    with pytest.raises(HTTPException) as exc:
+        auth.current_user_id(f"Bearer {token}")
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "인증 서버 설정이 누락되었습니다."
 
 
 def test_current_user_id_rejects_bad_signature(monkeypatch):

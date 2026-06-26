@@ -32,3 +32,18 @@ app.include_router(ai.router, prefix="/api")
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/diagnostics")
+def diagnostics() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "auth": settings.auth_diagnostics,
+        "database": {
+            "mode": "postgresql" if settings.database_url.strip() else "sqlite",
+        },
+        "ai": {
+            "enabled": settings.ai_enabled,
+            "model": settings.ai_model,
+        },
+    }

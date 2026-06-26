@@ -19,6 +19,8 @@ import {
   RESEARCH_LINKS,
   TEMPLATE_QUESTIONS,
   resolveApiUrl,
+  samplePhasePercent,
+  samplePhaseText,
   uploadPhasePercent,
   uploadPhaseText,
 } from '../constants';
@@ -99,6 +101,8 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
     uploadPhase,
     doiLoading,
     sampleLoading,
+    samplePhase,
+    sampleRetryAvailable,
     uploadNotice,
     uploadOpen,
     savedAt,
@@ -135,6 +139,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
     deletePaper,
     handleFile,
     handleSamplePdf,
+    cancelSamplePdf,
     registerByDoi,
     onTextMouseUp,
     addHighlight,
@@ -146,6 +151,9 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
   } = useReviewStore({ accessToken, authReady, authEnabled });
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
   const uploadPercent = uploadPhasePercent[uploadPhase] ?? 0;
+  const samplePercent = samplePhasePercent[samplePhase] ?? 0;
+  const sampleStatusText =
+    samplePhaseText[samplePhase] || (uploading ? uploadPhaseText[uploadPhase] : '샘플 PDF 준비 중');
   const reviewRoadmap = [
     {
       label: '문제 파악',
@@ -180,6 +188,27 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
   const nextRoadmapStep = reviewRoadmap.find((step) => !step.done);
   const currentRoadmapStep = nextRoadmapStep ?? reviewRoadmap[reviewRoadmap.length - 1];
   const reviewProgressPercent = Math.round((reviewDoneCount / reviewRoadmap.length) * 100);
+  const [hiddenPaperNotices, setHiddenPaperNotices] = useState<Set<string>>(() => new Set());
+  const missingPdfNoticeKey = paper ? `missing-pdf:${paper.id}:${needsPdfText(paper)}` : '';
+  const metadataNoticeKey = paper
+    ? `metadata:${paper.id}:${(paper.metadataWarnings ?? []).join('\u001f')}`
+    : '';
+  const hidePaperNotice = (key: string) => {
+    if (!key) return;
+    setHiddenPaperNotices((current) => new Set(current).add(key));
+  };
+  const showPaperNotice = (key: string) => {
+    if (!key) return;
+    setHiddenPaperNotices((current) => {
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
+  };
+  const missingPdfNoticeHidden = missingPdfNoticeKey
+    ? hiddenPaperNotices.has(missingPdfNoticeKey)
+    : false;
+  const metadataNoticeHidden = metadataNoticeKey ? hiddenPaperNotices.has(metadataNoticeKey) : false;
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-paper text-ink" onMouseDown={() => setSelection(null)}>
@@ -285,14 +314,25 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
           <div className={paper && !uploadOpen ? 'hidden' : ''}>
             {(uploading || doiLoading || sampleLoading) && (
               <div className="mt-3 rounded border border-line bg-white px-3 py-2">
-                <div className="mb-1 flex items-center justify-between text-xs text-muted">
-                  <span>{sampleLoading ? '샘플 PDF 준비 중' : uploadPhaseText[uploadPhase] || '처리 중'}</span>
-                  <span>{sampleLoading ? '대기' : `${uploadPercent}%`}</span>
+                <div className="mb-1 flex items-center justify-between gap-3 text-xs text-muted">
+                  <span>{sampleLoading ? sampleStatusText : uploadPhaseText[uploadPhase] || '처리 중'}</span>
+                  <div className="flex items-center gap-2">
+                    <span>{sampleLoading ? `${samplePercent}%` : `${uploadPercent}%`}</span>
+                    {sampleLoading && (
+                      <button
+                        type="button"
+                        className="rounded border border-line px-2 py-0.5 text-[11px] text-muted hover:border-action hover:text-action"
+                        onClick={cancelSamplePdf}
+                      >
+                        취소
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-paper">
                   <div
                     className="h-full rounded-full bg-action transition-all"
-                    style={{ width: `${sampleLoading ? 18 : uploadPercent}%` }}
+                    style={{ width: `${sampleLoading ? samplePercent : uploadPercent}%` }}
                   />
                 </div>
               </div>
@@ -311,6 +351,15 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                 <b className="block">{uploadNotice.title}</b>
                 {uploadNotice.message}
               </span>
+              {sampleRetryAvailable && uploadNotice.title === '샘플 PDF 불러오기 실패' && (
+                <button
+                  type="button"
+                  className="shrink-0 rounded border border-current px-2 py-1 font-semibold hover:bg-white/70"
+                  onClick={() => void handleSamplePdf()}
+                >
+                  재시도
+                </button>
+              )}
               <button
                 className="shrink-0 leading-none hover:text-ink"
                 title="닫기"
@@ -438,9 +487,20 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   <h2 className="text-base font-semibold">원문 패널</h2>
                   <span className="rounded bg-paper px-2 py-1 text-xs text-muted">AI 없이 동작</span>
                 </div>
-                {needsPdfText(paper) && (
+                {needsPdfText(paper) && !missingPdfNoticeHidden && (
                   <div className="mt-3 rounded border border-sky-300 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
-                    <div className="mb-2 font-semibold">원문 PDF가 아직 연결되지 않았습니다</div>
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <div className="font-semibold">원문 PDF가 아직 연결되지 않았습니다</div>
+                      <button
+                        type="button"
+                        className="shrink-0 leading-none hover:text-ink"
+                        title="숨기기"
+                        aria-label="원문 PDF 연결 알림 숨기기"
+                        onClick={() => hidePaperNotice(missingPdfNoticeKey)}
+                      >
+                        ×
+                      </button>
+                    </div>
                     <p>
                       DOI/URL 등록만으로는 본문 텍스트가 없습니다. PDF를 연결하면 현재 리뷰 노트에
                       원문을 붙여 읽으며 하이라이트할 수 있습니다.
@@ -460,9 +520,29 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                     </button>
                   </div>
                 )}
-                {paper.metadataWarnings && paper.metadataWarnings.length > 0 && (
+                {needsPdfText(paper) && missingPdfNoticeHidden && (
+                  <button
+                    type="button"
+                    className="mt-3 rounded border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-800 hover:border-sky-400"
+                    onClick={() => showPaperNotice(missingPdfNoticeKey)}
+                  >
+                    원문 PDF 연결 알림 보기
+                  </button>
+                )}
+                {paper.metadataWarnings && paper.metadataWarnings.length > 0 && !metadataNoticeHidden && (
                   <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
-                    <div className="mb-1 font-semibold">원문 텍스트 확인 필요</div>
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <div className="font-semibold">원문 텍스트 확인 필요</div>
+                      <button
+                        type="button"
+                        className="shrink-0 leading-none hover:text-ink"
+                        title="숨기기"
+                        aria-label="원문 텍스트 확인 알림 숨기기"
+                        onClick={() => hidePaperNotice(metadataNoticeKey)}
+                      >
+                        ×
+                      </button>
+                    </div>
                     <p>
                       PDF에서 일부 수식이나 특수 문자가 텍스트로 정확히 변환되지 않았을 수 있습니다.
                     </p>

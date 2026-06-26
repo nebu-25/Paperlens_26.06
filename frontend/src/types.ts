@@ -28,6 +28,7 @@ export interface Paper {
 
 export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'orange';
 export type UploadPhase = 'idle' | 'uploading' | 'extracting' | 'metadata' | 'creating';
+export type SamplePhase = 'idle' | 'waking' | 'downloading' | 'extracting' | 'creating';
 export type NoticeTone = 'info' | 'warning' | 'error' | 'success';
 
 export interface AppNotice {
