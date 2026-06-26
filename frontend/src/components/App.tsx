@@ -667,20 +667,29 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
             >
               <div className="sticky top-0 z-10 shrink-0 border-b border-line bg-paper/95 p-5 pb-3 sm:p-6 sm:pb-3">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-base font-semibold">리뷰 노트</h2>
+                  <h2 className="min-w-0 text-base font-semibold">리뷰 노트</h2>
                   <span
                     role="status"
                     aria-live="polite"
-                    className={`flex items-center gap-1 rounded px-2 py-1 text-xs ${
+                    className={`notranslate inline-flex max-w-[13rem] shrink-0 items-center gap-1 rounded px-2 py-1 text-xs leading-none ${
                       online ? 'bg-emerald-50 text-emerald-700' : 'bg-paper text-muted'
                     }`}
+                    translate="no"
                     title={
                       online ? '서버에 저장됩니다' : '서버 미연결 — 로컬에만 저장됩니다(복구 시 자동 동기화)'
                     }
                   >
-                    <Save size={12} />
-                    {savedAt ?? '자동 저장 대기'}
-                    {pending > 0 && ` · 미동기 ${pending}건`}
+                    <Save size={12} className="shrink-0" />
+                    <span className="min-w-0 truncate">{savedAt ?? '자동 저장 대기'}</span>
+                    {pending > 0 && (
+                      <span
+                        className="ml-1 inline-flex min-w-5 shrink-0 justify-center rounded bg-white/80 px-1.5 py-0.5 text-[11px] font-semibold"
+                        title={`미동기 ${pending}건`}
+                        aria-label={`미동기 ${pending}건`}
+                      >
+                        {pending}
+                      </span>
+                    )}
                   </span>
                 </div>
                 <div className="mt-3 rounded border border-line bg-white p-2">

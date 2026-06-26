@@ -1,14 +1,61 @@
 """PostgreSQL-backed review note repository.
 
-This keeps the same document-shaped API as the SQLite repository so the first
-PostgreSQL migration can focus on durable storage. Normalizing highlights,
-tags, and review sections can remain a later schema evolution.
+Storage is split into paper metadata, paper text, review notes, and PDF files.
+The legacy single ``papers`` table is copied into the split schema at init time
+when it exists, keeping the route-facing document API unchanged.
 """
 
 from datetime import datetime, timezone
 from typing import Any
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS paper_metadata (
+  id                  TEXT PRIMARY KEY,
+  user_id             UUID NOT NULL,
+  title               TEXT NOT NULL DEFAULT '',
+  authors             TEXT NOT NULL DEFAULT '',
+  link                TEXT NOT NULL DEFAULT '',
+  doi                 TEXT NOT NULL DEFAULT '',
+  source_key          TEXT NOT NULL DEFAULT '',
+  suggested_tags      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  metadata_source     TEXT NOT NULL DEFAULT '',
+  metadata_confidence TEXT NOT NULL DEFAULT '',
+  metadata_warnings   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  pdf_filename        TEXT NOT NULL DEFAULT '',
+  created_at          TIMESTAMPTZ NOT NULL,
+  updated_at          TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS paper_texts (
+  paper_id   TEXT PRIMARY KEY REFERENCES paper_metadata(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL,
+  text       TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS review_notes (
+  paper_id   TEXT PRIMARY KEY REFERENCES paper_metadata(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL,
+  note       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS paper_files (
+  paper_id   TEXT PRIMARY KEY REFERENCES paper_metadata(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL,
+  filename   TEXT NOT NULL DEFAULT '',
+  content    BYTEA,
+  updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS paper_metadata_user_updated_idx
+  ON paper_metadata(user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS review_notes_user_idx ON review_notes(user_id);
+CREATE INDEX IF NOT EXISTS paper_texts_user_idx ON paper_texts(user_id);
+CREATE INDEX IF NOT EXISTS paper_files_user_idx ON paper_files(user_id);
+"""
+
+_LEGACY_SCHEMA = """
 CREATE TABLE IF NOT EXISTS papers (
   id                  TEXT PRIMARY KEY,
   user_id             UUID NOT NULL,
@@ -35,6 +82,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _execute_script(conn, script: str) -> None:
+    for statement in script.split(";"):
+        sql = statement.strip()
+        if sql:
+            conn.execute(sql)
+
+
 class PostgreSQLNotesRepository:
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
@@ -47,31 +101,93 @@ class PostgreSQLNotesRepository:
 
     def init(self) -> None:
         with self.connect() as conn:
-            conn.execute(_SCHEMA)
+            _execute_script(conn, _LEGACY_SCHEMA)
             conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS user_id UUID")
             conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS pdf_filename TEXT NOT NULL DEFAULT ''")
             conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS pdf_content BYTEA")
+            _execute_script(conn, _SCHEMA)
+            self._migrate_from_legacy_papers(conn)
+
+    def _migrate_from_legacy_papers(self, conn) -> None:
+        conn.execute(
+            """
+            INSERT INTO paper_metadata (
+              id, user_id, title, authors, link, doi, source_key, suggested_tags,
+              metadata_source, metadata_confidence, metadata_warnings, pdf_filename,
+              created_at, updated_at
+            )
+            SELECT id, user_id, title, authors, link, doi, source_key, suggested_tags,
+                   metadata_source, metadata_confidence, metadata_warnings, pdf_filename,
+                   created_at, updated_at
+            FROM papers
+            ON CONFLICT (id) DO NOTHING
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO paper_texts (paper_id, user_id, text, updated_at)
+            SELECT id, user_id, text, updated_at FROM papers WHERE text <> ''
+            ON CONFLICT (paper_id) DO NOTHING
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO review_notes (paper_id, user_id, note, updated_at)
+            SELECT id, user_id, note, updated_at FROM papers
+            ON CONFLICT (paper_id) DO NOTHING
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO paper_files (paper_id, user_id, filename, content, updated_at)
+            SELECT id, user_id, pdf_filename, pdf_content, updated_at
+            FROM papers
+            WHERE pdf_content IS NOT NULL OR pdf_filename <> ''
+            ON CONFLICT (paper_id) DO NOTHING
+            """
+        )
 
     def list_notes(self, user_id: str) -> dict[str, object]:
         with self.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM papers WHERE user_id = %s ORDER BY updated_at DESC", (user_id,)
+                """
+                SELECT m.*, f.filename AS stored_pdf_filename
+                FROM paper_metadata m
+                LEFT JOIN paper_files f ON f.paper_id = m.id AND f.user_id = m.user_id
+                WHERE m.user_id = %s
+                ORDER BY m.updated_at DESC
+                """,
+                (user_id,),
+            ).fetchall()
+            note_rows = conn.execute(
+                "SELECT paper_id, note FROM review_notes WHERE user_id = %s", (user_id,)
             ).fetchall()
         library: dict[str, object] = {}
-        notes: dict[str, object] = {}
+        notes = {row["paper_id"]: row.get("note") or {} for row in note_rows}
         for row in rows:
             library[row["id"]] = self._paper_of(row, include_text=False)
-            notes[row["id"]] = row.get("note") or {}
+            notes.setdefault(row["id"], {})
         return {"library": library, "notes": notes}
 
     def get_note(self, user_id: str, note_id: str) -> dict[str, object] | None:
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT * FROM papers WHERE id = %s AND user_id = %s", (note_id, user_id)
+                """
+                SELECT m.*, t.text, f.filename AS stored_pdf_filename
+                FROM paper_metadata m
+                LEFT JOIN paper_texts t ON t.paper_id = m.id AND t.user_id = m.user_id
+                LEFT JOIN paper_files f ON f.paper_id = m.id AND f.user_id = m.user_id
+                WHERE m.id = %s AND m.user_id = %s
+                """,
+                (note_id, user_id),
+            ).fetchone()
+            note_row = conn.execute(
+                "SELECT note FROM review_notes WHERE paper_id = %s AND user_id = %s",
+                (note_id, user_id),
             ).fetchone()
         if row is None:
             return None
-        return {"paper": self._paper_of(row), "note": row.get("note") or {}}
+        return {"paper": self._paper_of(row), "note": (note_row or {}).get("note") or {}}
 
     def upsert_note(
         self, user_id: str, note_id: str, paper: dict[str, object], note: dict[str, object]
@@ -79,18 +195,19 @@ class PostgreSQLNotesRepository:
         from psycopg.types.json import Jsonb
 
         now = _now()
+        text = str(paper.get("text", ""))
         with self.connect() as conn:
             conn.execute(
                 """
-                INSERT INTO papers (
+                INSERT INTO paper_metadata (
                   id, user_id, title, authors, link, doi, source_key, suggested_tags,
-                  metadata_source, metadata_confidence, metadata_warnings,
-                  text, note, created_at, updated_at
+                  metadata_source, metadata_confidence, metadata_warnings, pdf_filename,
+                  created_at, updated_at
                 )
                 VALUES (
                   %(id)s, %(user_id)s, %(title)s, %(authors)s, %(link)s, %(doi)s, %(source_key)s,
                   %(suggested_tags)s, %(metadata_source)s, %(metadata_confidence)s,
-                  %(metadata_warnings)s, %(text)s, %(note)s, %(now)s, %(now)s
+                  %(metadata_warnings)s, %(pdf_filename)s, %(now)s, %(now)s
                 )
                 ON CONFLICT(id) DO UPDATE SET
                   title=excluded.title, authors=excluded.authors,
@@ -99,26 +216,35 @@ class PostgreSQLNotesRepository:
                   metadata_source=excluded.metadata_source,
                   metadata_confidence=excluded.metadata_confidence,
                   metadata_warnings=excluded.metadata_warnings,
-                  text=CASE WHEN excluded.text = '' THEN papers.text ELSE excluded.text END,
-                  note=excluded.note, updated_at=excluded.updated_at
-                WHERE papers.user_id = excluded.user_id
+                  pdf_filename=CASE
+                    WHEN excluded.pdf_filename = '' THEN paper_metadata.pdf_filename
+                    ELSE excluded.pdf_filename
+                  END,
+                  updated_at=excluded.updated_at
+                WHERE paper_metadata.user_id = excluded.user_id
                 """,
-                {
-                    "id": note_id,
-                    "user_id": user_id,
-                    "title": str(paper.get("title", "")),
-                    "authors": str(paper.get("authors", "")),
-                    "link": str(paper.get("link", "")),
-                    "doi": str(paper.get("doi", "")),
-                    "source_key": str(paper.get("sourceKey", "")),
-                    "suggested_tags": Jsonb(paper.get("suggestedTags") or []),
-                    "metadata_source": str(paper.get("metadataSource", "")),
-                    "metadata_confidence": str(paper.get("metadataConfidence", "")),
-                    "metadata_warnings": Jsonb(paper.get("metadataWarnings") or []),
-                    "text": str(paper.get("text", "")),
-                    "note": Jsonb(note),
-                    "now": now,
-                },
+                self._paper_params(user_id, note_id, paper, now, Jsonb),
+            )
+            if text:
+                conn.execute(
+                    """
+                    INSERT INTO paper_texts (paper_id, user_id, text, updated_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT(paper_id) DO UPDATE SET
+                      text=excluded.text, updated_at=excluded.updated_at
+                    WHERE paper_texts.user_id = excluded.user_id
+                    """,
+                    (note_id, user_id, text, now),
+                )
+            conn.execute(
+                """
+                INSERT INTO review_notes (paper_id, user_id, note, updated_at)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT(paper_id) DO UPDATE SET
+                  note=excluded.note, updated_at=excluded.updated_at
+                WHERE review_notes.user_id = excluded.user_id
+                """,
+                (note_id, user_id, Jsonb(note), now),
             )
         return {"id": note_id, "updated_at": now}
 
@@ -127,35 +253,66 @@ class PostgreSQLNotesRepository:
         with self.connect() as conn:
             conn.execute(
                 """
-                INSERT INTO papers (
-                  id, user_id, pdf_filename, pdf_content, created_at, updated_at
-                )
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO paper_metadata (id, user_id, pdf_filename, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT(id) DO UPDATE SET
                   pdf_filename=excluded.pdf_filename,
-                  pdf_content=excluded.pdf_content,
                   updated_at=excluded.updated_at
-                WHERE papers.user_id = excluded.user_id
+                WHERE paper_metadata.user_id = excluded.user_id
                 """,
-                (note_id, user_id, filename, content, now, now),
+                (note_id, user_id, filename, now, now),
+            )
+            conn.execute(
+                """
+                INSERT INTO paper_files (paper_id, user_id, filename, content, updated_at)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT(paper_id) DO UPDATE SET
+                  filename=excluded.filename,
+                  content=excluded.content,
+                  updated_at=excluded.updated_at
+                WHERE paper_files.user_id = excluded.user_id
+                """,
+                (note_id, user_id, filename, content, now),
             )
 
     def get_pdf(self, user_id: str, note_id: str) -> tuple[str, bytes] | None:
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT pdf_filename, pdf_content FROM papers WHERE id = %s AND user_id = %s",
+                "SELECT filename, content FROM paper_files WHERE paper_id = %s AND user_id = %s",
                 (note_id, user_id),
             ).fetchone()
-        if row is None or row.get("pdf_content") is None:
+        if row is None or row.get("content") is None:
             return None
-        content = row["pdf_content"]
-        return row.get("pdf_filename") or "paper.pdf", bytes(content)
+        return row.get("filename") or "paper.pdf", bytes(row["content"])
 
     def delete_note(self, user_id: str, note_id: str) -> None:
         with self.connect() as conn:
-            conn.execute("DELETE FROM papers WHERE id = %s AND user_id = %s", (note_id, user_id))
+            for table in ("paper_files", "paper_texts", "review_notes"):
+                conn.execute(
+                    f"DELETE FROM {table} WHERE paper_id = %s AND user_id = %s",
+                    (note_id, user_id),
+                )
+            conn.execute("DELETE FROM paper_metadata WHERE id = %s AND user_id = %s", (note_id, user_id))
+
+    def _paper_params(self, user_id: str, note_id: str, paper: dict[str, object], now: str, jsonb) -> dict[str, object]:
+        return {
+            "id": note_id,
+            "user_id": user_id,
+            "title": str(paper.get("title", "")),
+            "authors": str(paper.get("authors", "")),
+            "link": str(paper.get("link", "")),
+            "doi": str(paper.get("doi", "")),
+            "source_key": str(paper.get("sourceKey", "")),
+            "suggested_tags": jsonb(paper.get("suggestedTags") or []),
+            "metadata_source": str(paper.get("metadataSource", "")),
+            "metadata_confidence": str(paper.get("metadataConfidence", "")),
+            "metadata_warnings": jsonb(paper.get("metadataWarnings") or []),
+            "pdf_filename": str(paper.get("pdfFilename", "")),
+            "now": now,
+        }
 
     def _paper_of(self, row: dict[str, Any], *, include_text: bool = True) -> dict[str, object]:
+        pdf_filename = row.get("stored_pdf_filename") or row.get("pdf_filename") or ""
         return {
             "id": row["id"],
             "title": row["title"],
@@ -167,7 +324,7 @@ class PostgreSQLNotesRepository:
             "metadataSource": row["metadata_source"],
             "metadataConfidence": row["metadata_confidence"],
             "metadataWarnings": row.get("metadata_warnings") or [],
-            "pdfFilename": row.get("pdf_filename") or "",
-            "pdfUrl": f"/api/papers/{row['id']}/pdf" if row.get("pdf_filename") else "",
-            "text": row["text"] if include_text else "",
+            "pdfFilename": pdf_filename,
+            "pdfUrl": f"/api/papers/{row['id']}/pdf" if pdf_filename else "",
+            "text": (row.get("text") or "") if include_text else "",
         }

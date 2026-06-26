@@ -28,6 +28,11 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 웹 번역 DOM 충돌 방어용 DOM mutation guard와 화면 복구용 ErrorBoundary가 들어가 있습니다.
 - 하이라이트 선택 offset 계산 실패 시 빈 화면으로 가지 않고 경고를 표시합니다.
 - 로컬 캐시 복원 후 저장 재시도는 `dirtyIds` 기준으로만 수행해, 보기만 하는 상태에서 전체 노트 PUT 루프가 돌지 않도록 했습니다.
+- 이전 작업 복원은 로컬 캐시를 먼저 표시하고 서버 health/notes 동기화는 백그라운드로 수행합니다.
+- 일반 자동 저장에서는 큰 `paper.text`를 PUT payload에서 제외하고, PDF/본문 연결처럼 원문 저장이 필요한 경우에만 포함합니다.
+- 저장 재시도는 실패 후 최대 5분까지 늘어나는 backoff를 사용합니다.
+- SQLite/PostgreSQL 저장소는 내부적으로 `paper_metadata`, `paper_texts`, `review_notes`, `paper_files` 분리 테이블을 사용합니다.
+- 기존 단일 `papers` 테이블은 앱 시작 시 분리 테이블로 복사하며 자동 삭제하지 않습니다.
 
 최근 확인된 배포/설정 주의점:
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
@@ -37,6 +42,9 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - /service_home 직접 접근은 /service_home/로 redirect된 뒤 200이어야 합니다.
 - 브라우저 기본 번역으로 번역된 본문 위에서 직접 하이라이트하는 UX는 안정 지원 대상이 아닙니다. 안정적인 번역 지원은 별도 번역 보기 패널로 설계하는 것이 필요합니다.
 - 로컬 dev에서 백엔드를 띄우지 않으면 Vite `/api` proxy가 502를 낼 수 있습니다. 이 경우 보기만 하는 로컬 캐시가 반복 PUT을 보내지 않는지 확인하세요.
+- 운영 DB 스키마 분리 배포 전 PostgreSQL snapshot 또는 `pg_dump "$DATABASE_URL" > paperlens-backup.sql` 백업이 필요합니다.
+- WSL에는 `psql`/`pg_dump` PostgreSQL 18.4 클라이언트가 설치되어 있습니다.
+- 직전 세션에서 사용자가 다른 값을 복사해 `psql`이 로컬 socket으로 접속하려 했습니다. 다음 세션에서는 Render `paperlens-backend > Environment`의 실제 `DATABASE_URL` 또는 PostgreSQL 리소스의 External Database URL을 먼저 확인해야 합니다.
 
 우선순위 개선 작업:
 1. 배포 후 운영 수동 smoke test
@@ -74,6 +82,11 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - 별도 번역 보기 패널 또는 탭을 추가할지 검토
    - 번역 보기에서는 읽기/복사 중심으로 제공하고, 하이라이트는 원문 기준으로 저장하는 흐름 검토
    - 브라우저 번역 감지/안내 문구가 필요한지 검토
+
+6. 스키마 분리 운영 검증
+   - 배포 전 운영 PostgreSQL 백업 생성
+   - 배포 후 분리 테이블 생성과 기존 `papers` 데이터 복사 여부 확인
+   - 기존 저장 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소가 정상 동작하는지 확인
 
 검증 명령:
 - cd frontend && npm run lint

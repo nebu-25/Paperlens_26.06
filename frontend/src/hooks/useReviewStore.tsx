@@ -172,7 +172,7 @@ export function useReviewStore({
   // 활성 논문의 메타정보(제목/저자/링크) 직접 편집 — 자동 추출 실패 시 보완
   function updatePaper(patch: Partial<Omit<Paper, 'id'>>) {
     if (!activeId) return;
-    markDirty(activeId);
+    markDirty(activeId, { includeText: typeof patch.text === 'string' });
     setLibrary((lib) => (lib[activeId] ? { ...lib, [activeId]: { ...lib[activeId], ...patch } } : lib));
   }
 
@@ -193,7 +193,7 @@ export function useReviewStore({
       ...n,
       [id]: nextNote,
     }));
-    markDirty(id);
+    markDirty(id, { includeText: Boolean(next.text) });
     setActiveId(id);
     setMobilePanel('paper');
     setUploadOpen(false);
@@ -367,7 +367,7 @@ export function useReviewStore({
             },
           };
         });
-        markDirty(attachTargetId);
+        markDirty(attachTargetId, { includeText: Boolean(data.text) });
         setActiveId(attachTargetId);
         setMobilePanel('paper');
         setUploadOpen(false);

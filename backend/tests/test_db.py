@@ -35,6 +35,16 @@ class TestConnectionPragmas:
 
 
 class TestRoundTrip:
+    def test_split_tables_are_created(self, db):
+        with db._connect() as conn:
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+        assert {"paper_metadata", "paper_texts", "review_notes", "paper_files"}.issubset(tables)
+
     def test_upsert_get_delete(self, db):
         paper = {"title": "T", "authors": "A", "link": "L", "text": "body"}
         db.upsert_note(USER_ID, "n1", paper, {"tags": ["x"]})
@@ -68,6 +78,47 @@ class TestRoundTrip:
         db.upsert_note("u1", "n1", {"title": "Mine"}, {})
         assert db.get_note("u2", "n1") is None
         assert db.list_notes("u2") == {"library": {}, "notes": {}}
+
+    def test_legacy_papers_are_migrated_to_split_tables(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(settings, "database_path", str(tmp_path / "legacy.db"))
+        monkeypatch.setattr(settings, "database_url", "")
+        from app.repositories.sqlite_notes import SQLiteNotesRepository
+
+        repo = SQLiteNotesRepository()
+        repo.init()
+        with repo.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO papers (
+                  id, user_id, title, authors, link, text, note,
+                  pdf_filename, pdf_content, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "legacy",
+                    USER_ID,
+                    "Legacy",
+                    "Author",
+                    "https://example.com",
+                    "legacy body",
+                    '{"tags":["old"]}',
+                    "legacy.pdf",
+                    b"%PDF",
+                    "2026-01-01T00:00:00+00:00",
+                    "2026-01-01T00:00:00+00:00",
+                ),
+            )
+            conn.commit()
+
+        repo.init()
+        got = repo.get_note(USER_ID, "legacy")
+        assert got is not None
+        assert got["paper"]["title"] == "Legacy"
+        assert got["paper"]["text"] == "legacy body"
+        assert got["paper"]["pdfUrl"] == "/api/papers/legacy/pdf"
+        assert got["note"]["tags"] == ["old"]
+        assert repo.get_pdf(USER_ID, "legacy") == ("legacy.pdf", b"%PDF")
 
 
 class TestRepositoryFactory:
