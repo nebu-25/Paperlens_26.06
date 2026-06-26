@@ -150,6 +150,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
     exportPdf,
   } = useReviewStore({ accessToken, authReady, authEnabled });
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
+  const [paperPdfObjectUrl, setPaperPdfObjectUrl] = useState('');
   const uploadPercent = uploadPhasePercent[uploadPhase] ?? 0;
   const samplePercent = samplePhasePercent[samplePhase] ?? 0;
   const sampleStatusText =
@@ -209,6 +210,34 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
     ? hiddenPaperNotices.has(missingPdfNoticeKey)
     : false;
   const metadataNoticeHidden = metadataNoticeKey ? hiddenPaperNotices.has(metadataNoticeKey) : false;
+
+  useEffect(() => {
+    if (!paperPdfUrl) {
+      setPaperPdfObjectUrl('');
+      return;
+    }
+    let cancelled = false;
+    let objectUrl = '';
+    setPaperPdfObjectUrl('');
+    (async () => {
+      try {
+        const res = await fetch(paperPdfUrl, {
+          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPaperPdfObjectUrl(objectUrl);
+      } catch {
+        /* PDF 원본 미리보기는 선택 기능이므로 실패해도 원문 텍스트는 유지한다. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [accessToken, paperPdfUrl]);
 
   return (
     <main className="flex h-screen flex-col overflow-hidden bg-paper text-ink" onMouseDown={() => setSelection(null)}>
@@ -577,7 +606,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                     </div>
                   </div>
                 </section>
-                {paperPdfUrl && (
+                {paperPdfObjectUrl && (
                   <section className="rounded border border-line bg-white p-4">
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <div className="min-w-0">
@@ -588,7 +617,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                       </div>
                       <a
                         className="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
-                        href={paperPdfUrl}
+                        href={paperPdfObjectUrl}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -598,7 +627,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                     <iframe
                       className="h-[72vh] min-h-[560px] w-full rounded border border-line bg-paper"
                       title={`${paper.title || '논문'} PDF 원본`}
-                      src={paperPdfUrl}
+                      src={paperPdfObjectUrl}
                     />
                   </section>
                 )}

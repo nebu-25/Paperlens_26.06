@@ -147,16 +147,20 @@ export function useReviewStore({
 
   // ── 논문 등록 (#2: 논문별로 누적, 덮어쓰지 않음) ──
   function registerPaper(next: Omit<Paper, 'id'>, initialTags: string[] = [], id = uid()) {
-    setLibrary((l) => ({ ...l, [id]: { ...next, id } }));
+    const nextPaper = { ...next, id };
+    const nextNote = {
+      ...EMPTY_NOTE,
+      tags: mergeTags([], initialTags),
+      sectionSummaries: sectionSummariesFromDetected(next.sections),
+    };
+    libraryRef.current = { ...libraryRef.current, [id]: nextPaper };
+    notesRef.current = { ...notesRef.current, [id]: nextNote };
+    setLibrary((l) => ({ ...l, [id]: nextPaper }));
     // 논문마다 자체 섹션 배열을 갖도록 새 노트를 생성한다.
     // 자동 감지된 섹션이 있으면 그것으로 요약 카드를 시드한다(#6).
     setNotes((n) => ({
       ...n,
-      [id]: {
-        ...EMPTY_NOTE,
-        tags: mergeTags([], initialTags),
-        sectionSummaries: sectionSummariesFromDetected(next.sections),
-      },
+      [id]: nextNote,
     }));
     markDirty(id);
     setActiveId(id);
@@ -201,10 +205,14 @@ export function useReviewStore({
 
   async function handleFile(
     file: File,
-    options: { signal?: AbortSignal; onPhase?: (phase: UploadPhase) => void } = {},
+    options: {
+      signal?: AbortSignal;
+      onPhase?: (phase: UploadPhase) => void;
+      sourceKeyOverride?: string;
+    } = {},
   ) {
     setUploadNotice(null);
-    const sourceKey = fileSourceKey(file);
+    const sourceKey = options.sourceKeyOverride ?? fileSourceKey(file);
     const attachTargetId = attachTargetRef.current;
     const duplicate = Object.values(libraryRef.current).find((p) => p.sourceKey === sourceKey);
     if (duplicate) {
@@ -407,6 +415,18 @@ export function useReviewStore({
 
   async function handleSamplePdf() {
     if (sampleLoading) return;
+    const existingSample = Object.values(libraryRef.current).find((p) => p.sourceKey === 'sample:paperlens');
+    if (existingSample) {
+      setActiveId(existingSample.id);
+      setMobilePanel('paper');
+      setUploadOpen(false);
+      setUploadNotice({
+        tone: 'info',
+        title: '이미 등록된 샘플 PDF',
+        message: '새 노트를 만들지 않고 기존 샘플 리뷰 노트를 열었습니다.',
+      });
+      return;
+    }
     const controller = new AbortController();
     sampleAbortRef.current = controller;
     setSampleRetryAvailable(false);
@@ -446,6 +466,7 @@ export function useReviewStore({
       setSamplePhase('extracting');
       await handleFile(new File([blob], filename, { type: 'application/pdf', lastModified: 0 }), {
         signal: controller.signal,
+        sourceKeyOverride: 'sample:paperlens',
         onPhase: (phase) => {
           if (phase === 'creating') setSamplePhase('creating');
           else if (phase === 'extracting' || phase === 'metadata') setSamplePhase('extracting');
