@@ -18,6 +18,8 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - Pages workflow는 VITE_API_BASE_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY 형식을 검증합니다.
 - 샘플 PDF 버튼은 먼저 /api/health로 Render 백엔드를 깨운 뒤 sample-pdf를 호출하고, 진행 단계/취소/재시도를 표시합니다.
 - 샘플 PDF는 `sample:paperlens` sourceKey로 중복 등록을 막고, 실제 샘플 파일명은 `2604.04977v1.pdf`로 맞춥니다.
+- DOI 입력은 메타데이터 등록용이고, 원문/뷰어 연결은 PDF 업로드 또는 PDF 원문 URL 입력으로 처리합니다.
+- PDF 원문 URL은 `/api/papers/extract-url`로 다운로드한 뒤 기존 PDF 추출 파이프라인과 동일하게 저장/분석합니다.
 - /api/notes 저장/복원 실패는 401, 503, 네트워크 실패를 구분해 안내합니다.
 - 로그인 후 저장된 논문이 있으면 추가 업로드 없이 마지막 활성 논문 또는 첫 논문을 바로 엽니다.
 - PDF 원본 보기는 Bearer token으로 PDF를 fetch한 뒤 blob URL로 iframe에 표시합니다. 실패해도 하이라이트 가능한 원문은 유지합니다.
@@ -31,13 +33,18 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - /service_home 직접 접근은 /service_home/로 redirect된 뒤 200이어야 합니다.
 
 우선순위 개선 작업:
-1. 남은 운영 수동 smoke test
+1. 배포 후 운영 수동 smoke test
+   - GitHub Pages가 최신 JS 번들을 가리키는지 확인
+   - Render가 최신 백엔드로 재배포됐는지 확인
+   - /api/diagnostics 운영 응답에서 `auth.mode: supabase`, `auth.ready: true`, `auth.warnings: []` 확인
    - 실제 로그인 후 /api/notes 200 여부 확인
    - 로그인 후 저장된 논문이 추가 업로드 없이 바로 열리는지 확인
    - 샘플 PDF 버튼으로 PDF 다운로드, 텍스트 추출, 새 리뷰 노트 생성까지 확인
    - 샘플 PDF를 다시 눌렀을 때 기존 샘플 리뷰 노트를 여는지 확인
    - PDF 원본 보기에서 401 콘솔 오류 없이 blob 미리보기가 뜨거나 fallback 안내가 뜨는지 확인
-   - DOI/URL 등록 흐름 확인
+   - DOI 등록은 메타데이터/원문 별도 연결 안내가 뜨는지 확인
+   - PDF 원문 URL 예: https://arxiv.org/pdf/2604.04977v1 등록 시 원문 추출과 PDF 원본 보기가 연결되는지 확인
+   - 일반 웹페이지 URL 입력 시 PDF 원문 URL이 필요하다는 안내가 뜨고 노트가 생성되지 않는지 확인
    - 로그아웃 후 /service_home 접근 시 랜딩으로 되돌아가는지 확인
    - 결과를 docs/testing.md의 운영 체크리스트에 반영
 
@@ -61,6 +68,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - cd frontend && npm run build
 - backend/.venv/bin/python -m pytest backend/tests/test_auth.py
 - backend/.venv/bin/python -m pytest backend/tests/test_auth.py backend/tests/test_diagnostics.py
+- backend/.venv/bin/python -m pytest backend/tests/test_auth.py backend/tests/test_diagnostics.py backend/tests/test_papers.py
 - curl -L -I https://nebu-25.github.io/Paperlens_26.06/
 - curl -L -I https://nebu-25.github.io/Paperlens_26.06/service_home/
 - curl -L -I https://nebu-25.github.io/Paperlens_26.06/favicon.svg

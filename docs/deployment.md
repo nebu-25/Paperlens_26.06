@@ -168,6 +168,8 @@ curl -L -I https://nebu-25.github.io/Paperlens_26.06/favicon.svg
 curl -L -I https://paperlens-backend-53ki.onrender.com/api/papers/sample-pdf
 ```
 
+PDF 원문 URL 등록은 로그인된 프론트에서 `/api/papers/extract-url` POST 요청으로 처리합니다. 이 endpoint는 보호 API이므로 curl smoke에서는 직접 확인하지 않고, 운영 브라우저에서 PDF 원문 URL 등록 흐름으로 확인합니다.
+
 ## Backup
 
 PostgreSQL 백업은 사용하는 제공자(Neon, Supabase, Render 등)의 스냅샷·백업 기능을 우선 사용합니다. CLI로 직접 백업할 때는 연결 문자열이 터미널 기록에 남지 않도록 주의합니다.

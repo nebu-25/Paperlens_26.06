@@ -342,7 +342,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
             </button>
             <input
               className="min-w-0 rounded border border-line bg-white px-4 py-3 text-sm outline-none focus:border-action disabled:opacity-60"
-              placeholder="DOI 또는 URL을 입력하세요"
+              placeholder="DOI 또는 PDF 원문 URL"
               value={doiInput}
               disabled={doiLoading || uploading || sampleLoading}
               onChange={(e) => setDoiInput(e.target.value)}
@@ -547,7 +547,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                       </button>
                     </div>
                     <p>
-                      DOI/URL 등록만으로는 본문 텍스트가 없습니다. PDF를 연결하면 현재 리뷰 노트에
+                      DOI 등록만으로는 본문 텍스트가 없습니다. PDF를 연결하면 현재 리뷰 노트에
                       원문을 붙여 읽으며 하이라이트할 수 있습니다.
                     </p>
                     <button
@@ -799,7 +799,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                       <span className="w-10 shrink-0 text-xs text-muted">링크</span>
                       <input
                         className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
-                        placeholder="DOI 또는 URL"
+                        placeholder="DOI 또는 PDF 원문 URL"
                         value={paper.link}
                         onChange={(e) => updatePaper({ link: e.target.value })}
                       />

@@ -126,6 +126,20 @@ export function useReviewStore({
     return filename === '2604.04977.pdf' ? '2604.04977v1.pdf' : filename;
   }
 
+  function isPdfUrl(value: string): boolean {
+    try {
+      const url = new URL(value);
+      const path = url.pathname.toLowerCase();
+      return path.endsWith('.pdf') || (url.hostname.endsWith('arxiv.org') && path.startsWith('/pdf/'));
+    } catch {
+      return false;
+    }
+  }
+
+  function isLikelyDoi(value: string): boolean {
+    return /^https?:\/\/(dx\.)?doi\.org\/10\.\d{4,9}\//i.test(value) || /^10\.\d{4,9}\//i.test(value);
+  }
+
   // ── 활성 논문의 노트만 갱신 ──
   function setNote(updater: (n: ReviewNote) => ReviewNote) {
     if (!activeId) return;
@@ -528,6 +542,81 @@ export function useReviewStore({
     setDoiLoading(true);
     setUploadPhase('metadata');
     try {
+      if (isPdfUrl(query)) {
+        const sourceKey = `url:${query}`;
+        const duplicate = Object.values(libraryRef.current).find((p) => p.sourceKey === sourceKey);
+        if (duplicate) {
+          setActiveId(duplicate.id);
+          setMobilePanel('paper');
+          setUploadOpen(false);
+          setUploadNotice({
+            tone: 'info',
+            title: '이미 등록된 PDF URL',
+            message: '새 노트를 만들지 않고 기존 리뷰 노트를 열었습니다.',
+          });
+          setDoiInput('');
+          return;
+        }
+
+        const uploadPaperId = uid();
+        const form = new FormData();
+        form.append('url', query);
+        form.append('paper_id', uploadPaperId);
+        setUploadPhase('extracting');
+        const pdfRes = await fetch(`${API_BASE}/papers/extract-url`, {
+          method: 'POST',
+          headers: authHeaders,
+          body: form,
+        });
+        if (!pdfRes.ok) throw new Error(await readErrorDetail(pdfRes, 'PDF URL을 처리하지 못했습니다.'));
+        const data: {
+          filename: string;
+          text: string;
+          title?: string;
+          authors?: string;
+          link?: string;
+          doi?: string;
+          sections?: DetectedSection[];
+          suggested_tags?: string[];
+          metadata_source?: string;
+          metadata_confidence?: string;
+          metadata_warnings?: string[];
+          pdf_url?: string;
+          pdf_filename?: string;
+          scanned?: boolean;
+          notice?: string | null;
+        } = await pdfRes.json();
+        const suggestedTags = data.suggested_tags ?? [];
+        const unknownTitle = !data.title || data.title === '(제목 없음)';
+        const unknownAuthors = !data.authors || data.authors === '저자 미상';
+        const metadataWarnings = data.notice
+          ? [...(data.metadata_warnings ?? []), data.notice]
+          : (data.metadata_warnings ?? []);
+        setUploadPhase('creating');
+        registerPaper({
+          title: unknownTitle ? data.filename.replace(/\.pdf$/i, '') : (data.title ?? ''),
+          authors: unknownAuthors ? '' : (data.authors ?? ''),
+          link: data.link || query,
+          doi: data.doi || '',
+          sourceKey,
+          suggestedTags,
+          metadataSource: data.metadata_source,
+          metadataConfidence: data.metadata_confidence,
+          metadataWarnings,
+          pdfUrl: data.pdf_url ? resolveApiUrl(data.pdf_url) : '',
+          pdfFilename: data.pdf_filename || data.filename || '',
+          sections: data.sections ?? [],
+          text: data.text || '',
+        }, suggestedTags, uploadPaperId);
+        setUploadNotice({
+          tone: data.notice ? 'warning' : 'success',
+          title: data.notice ? 'PDF 원문 확인 필요' : 'PDF URL 등록 완료',
+          message: data.notice || 'URL에서 PDF를 내려받아 원문과 메타정보를 반영했습니다.',
+        });
+        setDoiInput('');
+        return;
+      }
+
       const res = await fetch(`${API_BASE}/papers/metadata?doi=${encodeURIComponent(query)}`);
       if (!res.ok) throw new Error('metadata failed');
       const data: {
@@ -554,28 +643,42 @@ export function useReviewStore({
       setUploadNotice({
         tone: 'info',
         title: '메타정보 등록 완료',
-        message: '본문 원문은 아직 없습니다. 원문 패널에서 PDF를 연결하면 본문을 읽으며 리뷰할 수 있습니다.',
+        message: 'DOI는 원문 PDF를 직접 포함하지 않습니다. 원문 패널에서 PDF 파일 또는 PDF URL을 연결하면 본문과 PDF 원본 보기를 사용할 수 있습니다.',
       });
       setDoiInput('');
     } catch {
       // 비DOI 입력·미연동·조회 실패 시에도 등록 흐름이 끊기지 않게 폴백
+      const doiLike = isLikelyDoi(query);
+      const urlLike = /^https?:\/\//i.test(query);
+      if (urlLike && !doiLike) {
+        setUploadNotice({
+          tone: 'warning',
+          title: 'PDF 원문 URL이 필요합니다',
+          message: '웹페이지 주소는 원문을 안정적으로 가져올 수 없습니다. PDF 파일을 업로드하거나 PDF로 바로 열리는 URL을 입력해 주세요.',
+        });
+        return;
+      }
       setUploadPhase('creating');
       registerPaper({
         title: query,
         authors: '',
         link: query,
-        doi: '',
-        sourceKey: `manual:${query}`,
+        doi: doiLike ? query.replace(/^https?:\/\/(dx\.)?doi\.org\//i, '') : '',
+        sourceKey: doiLike ? `doi:${query}` : `manual:${query}`,
         suggestedTags: [],
-        metadataSource: 'manual',
+        metadataSource: doiLike ? 'doi' : 'manual',
         metadataConfidence: 'none',
         metadataWarnings: [],
-        text: '[DOI/URL 등록] 메타정보를 가져오지 못했습니다(비DOI이거나 CrossRef 미연동). 제목·저자를 직접 입력하고 리뷰 노트를 작성할 수 있습니다.',
+        text: doiLike
+          ? '[DOI 등록] 메타정보를 가져오지 못했습니다. 제목·저자를 직접 입력하고, 원문 패널에서 PDF 파일 또는 PDF URL을 연결할 수 있습니다.'
+          : '[DOI 등록] 메타정보를 가져오지 못했습니다. 제목·저자를 직접 입력하고 리뷰 노트를 작성할 수 있습니다.',
       });
       setUploadNotice({
         tone: 'warning',
-        title: '메타정보 조회 실패',
-        message: 'DOI 또는 URL을 노트로 등록했습니다. 제목·저자와 PDF 본문은 직접 보완할 수 있습니다.',
+        title: doiLike ? 'DOI 등록 완료' : '메타정보 조회 실패',
+        message: doiLike
+          ? 'CrossRef에서 메타정보를 찾지 못했습니다. DOI는 노트에 남겼고, 원문은 PDF 파일 또는 PDF URL로 연결할 수 있습니다.'
+          : 'DOI를 찾지 못했습니다. PDF 원문 URL 또는 PDF 파일 업로드를 사용해 주세요.',
       });
       setDoiInput('');
     } finally {

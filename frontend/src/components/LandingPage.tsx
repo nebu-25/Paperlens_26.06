@@ -13,7 +13,7 @@ const guideSteps = [
   {
     icon: <FileText size={18} />,
     title: '논문 등록',
-    body: '로그인 후 샘플 PDF, PDF 업로드, DOI/URL 등록으로 개인 라이브러리를 시작합니다.',
+    body: '로그인 후 샘플 PDF, PDF 업로드, DOI 또는 PDF 원문 URL로 개인 라이브러리를 시작합니다.',
   },
   {
     icon: <Highlighter size={18} />,

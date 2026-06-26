@@ -13,7 +13,7 @@ export function EmptyState() {
               논문을 등록하면 원문과 리뷰 노트가 나란히 열립니다
             </h2>
             <p className="max-w-xl text-sm leading-6 text-muted">
-              상단의 PDF 업로드 또는 DOI/URL 입력으로 논문을 추가하세요. 등록 전에는 이 화면에서
+              상단의 PDF 업로드, DOI, PDF 원문 URL 입력으로 논문을 추가하세요. 등록 전에는 이 화면에서
               흐름을 확인하고, 등록 후에는 원문과 리뷰를 독립적으로 스크롤하며 작성할 수 있습니다.
             </p>
             <div className="mt-5 grid gap-2 text-sm text-ink sm:grid-cols-3">

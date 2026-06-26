@@ -47,6 +47,26 @@ def _metadata_text(metadata: dict) -> str:
     return " ".join(str(value) for value in metadata.values() if value)
 
 
+def _filename_from_content_disposition(value: str) -> str:
+    match = re.search(r"filename\*=UTF-8''([^;]+)", value, re.IGNORECASE)
+    if match:
+        return urllib.parse.unquote(match.group(1).strip().strip('"'))
+    match = re.search(r'filename="?([^";]+)"?', value, re.IGNORECASE)
+    return match.group(1).strip() if match else ""
+
+
+def _filename_from_pdf_url(url: str, content_disposition: str = "") -> str:
+    filename = _filename_from_content_disposition(content_disposition)
+    if not filename:
+        parsed = urllib.parse.urlparse(url)
+        filename = Path(urllib.parse.unquote(parsed.path)).name or "paper.pdf"
+    if not filename.casefold().endswith(".pdf"):
+        filename = f"{filename}.pdf"
+    if filename == "2604.04977.pdf":
+        filename = "2604.04977v1.pdf"
+    return filename
+
+
 def _unique_tags(values: list[str], *, limit: int = 8) -> list[str]:
     seen: set[str] = set()
     tags: list[str] = []
@@ -785,16 +805,13 @@ def sample_pdf():
     )
 
 
-@router.post("/extract-text")
-async def extract_text(
-    file: UploadFile = File(...),
-    paper_id: str = Form(""),
-    user_id: str = Depends(current_user_id),
+def _extract_pdf_content(
+    *,
+    content: bytes,
+    filename: str,
+    paper_id: str,
+    user_id: str,
 ) -> dict[str, object]:
-    if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
-
-    content = await file.read()
     if len(content) > MAX_PDF_BYTES:
         raise HTTPException(
             status_code=413, detail="PDF 파일이 너무 큽니다. 최대 50MB까지 업로드할 수 있습니다."
@@ -834,7 +851,7 @@ async def extract_text(
     pdf_url = ""
     pdf_filename = ""
     if paper_id.strip():
-        pdf_filename = file.filename or "paper.pdf"
+        pdf_filename = filename or "paper.pdf"
         db.store_pdf(user_id, paper_id.strip(), pdf_filename, content)
         pdf_url = f"/api/papers/{paper_id.strip()}/pdf"
 
@@ -884,7 +901,7 @@ async def extract_text(
     primary = cross or arxiv or {}
     pdf_title = (pdf_meta.get("title") or "").strip()
     pdf_author = (pdf_meta.get("author") or "").strip()
-    filename_title = (file.filename or "").rsplit(".", 1)[0]
+    filename_title = (filename or "").rsplit(".", 1)[0]
     layout_title = str(layout_meta.get("title") or "")
     layout_authors = str(layout_meta.get("authors") or "")
     if not primary:
@@ -903,7 +920,7 @@ async def extract_text(
     metadata_confidence = "high" if primary else str(layout_meta.get("confidence") or "low")
 
     return {
-        "filename": file.filename,
+        "filename": filename,
         "page_count": page_count,
         "pdf_url": pdf_url,
         "pdf_filename": pdf_filename,
@@ -926,6 +943,56 @@ async def extract_text(
             else " ".join(part for part in (text_notice, ocr_warning) if part) or None
         ),
     }
+
+
+@router.post("/extract-text")
+async def extract_text(
+    file: UploadFile = File(...),
+    paper_id: str = Form(""),
+    user_id: str = Depends(current_user_id),
+) -> dict[str, object]:
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
+
+    content = await file.read()
+    return _extract_pdf_content(
+        content=content,
+        filename=file.filename or "paper.pdf",
+        paper_id=paper_id,
+        user_id=user_id,
+    )
+
+
+@router.post("/extract-url")
+def extract_url(
+    url: str = Form(...),
+    paper_id: str = Form(""),
+    user_id: str = Depends(current_user_id),
+) -> dict[str, object]:
+    parsed = urllib.parse.urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="PDF URL은 http 또는 https 주소여야 합니다.")
+
+    try:
+        request = urllib.request.Request(url.strip(), headers={"User-Agent": settings.crossref_user_agent})
+        with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - user-provided PDF URL
+            content_type = response.headers.get("content-type", "")
+            content_disposition = response.headers.get("content-disposition", "")
+            content = response.read(MAX_PDF_BYTES + 1)
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise HTTPException(status_code=502, detail="PDF URL에서 원문을 불러오지 못했습니다.") from exc
+
+    if len(content) > MAX_PDF_BYTES:
+        raise HTTPException(status_code=413, detail="PDF 파일이 너무 큽니다. 최대 50MB까지 업로드할 수 있습니다.")
+    if "pdf" not in content_type.casefold() and not content.startswith(b"%PDF"):
+        raise HTTPException(status_code=422, detail="입력한 URL이 PDF를 반환하지 않았습니다.")
+
+    return _extract_pdf_content(
+        content=content,
+        filename=_filename_from_pdf_url(url.strip(), content_disposition),
+        paper_id=paper_id,
+        user_id=user_id,
+    )
 
 
 @router.get("/{paper_id}/pdf")

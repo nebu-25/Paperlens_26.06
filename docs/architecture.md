@@ -54,6 +54,7 @@ GitHub Pages 배포의 경로 구성은 아래와 같습니다.
 | `GET /api/ai/status` | AI 보조 활성 상태 확인 |
 | `POST /api/ai/term-explanation` | 용어 설명 초안 생성 |
 | `POST /api/papers/extract-text` | PDF 업로드, 텍스트/메타데이터 추출 |
+| `POST /api/papers/extract-url` | PDF 원문 URL 다운로드, 텍스트/메타데이터 추출 |
 | `GET /api/papers/{id}/pdf` | 저장된 PDF 원본 조회 |
 | `GET /api/papers/metadata` | DOI 기반 CrossRef 메타데이터 조회 |
 | `GET /api/notes` | 노트 목록 조회(본문 제외) |
@@ -64,6 +65,7 @@ GitHub Pages 배포의 경로 구성은 아래와 같습니다.
 ## PDF Processing
 
 - 50MB 초과, 200페이지 초과, 암호 PDF를 서버에서 거절합니다.
+- 원문 등록은 PDF 파일 업로드 또는 PDF로 바로 열리는 URL을 안정 경로로 사용합니다. 일반 웹페이지 URL은 원문 추출 대상으로 보지 않습니다.
 - 텍스트가 없는 스캔 PDF는 등록은 허용하되 OCR/직접 작성 안내를 표시합니다.
 - PyMuPDF 추출 라인을 문단 단위로 재결합합니다.
 - 라틴어 줄바꿈과 하이픈을 보정하고, CJK 줄바꿈은 불필요한 공백을 줄입니다.
@@ -82,6 +84,8 @@ PDF 업로드 시 메타데이터는 아래 순서로 보완합니다.
 6. 파일명 fallback
 
 KCI 등 CrossRef 미등재 논문을 위해 레이아웃 휴리스틱은 한글 소속어, 괄호 소속, 이메일, 날짜, 섹션 헤딩, 제목형 문구를 저자 후보에서 제외합니다. 추출 결과는 `metadataSource`, `metadataConfidence`, `metadataWarnings`, `suggestedTags`로 함께 저장됩니다.
+
+DOI 입력은 메타데이터 등록용입니다. DOI만으로는 원문 PDF를 보장하지 않으므로, 원문/뷰어 연결은 PDF 업로드 또는 PDF 원문 URL 입력으로 처리합니다.
 
 ## Storage
 
