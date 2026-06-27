@@ -1,12 +1,19 @@
 """db.py 연결/영속화 테스트. 실데이터를 건드리지 않도록 tmp 경로로 격리한다(#12)."""
 
 import importlib
+import os
+import uuid
 
 import pytest
 
 from app.config import settings
 
 USER_ID = "local"
+
+# 운영 저장소(PostgreSQL) 라운드트립 통합 테스트용 연결 문자열.
+# 설정돼 있을 때만(예: CI의 Postgres 서비스, 로컬 docker-compose.postgres.yml) 실행하고
+# 없으면 skip 한다. SQLite 단위 테스트는 이 변수 없이도 항상 돈다.
+PG_URL_ENV = "PAPERLENS_TEST_DATABASE_URL"
 
 
 @pytest.fixture()
@@ -171,3 +178,141 @@ class TestRepositoryFactory:
         repo = create_notes_repository()
         assert isinstance(repo, PostgreSQLNotesRepository)
         assert repo.database_url == url
+
+
+def _drop_all_pg_tables(repo) -> None:
+    with repo.connect() as conn:
+        conn.execute(
+            "DROP TABLE IF EXISTS paper_files, paper_texts, review_notes, "
+            "paper_metadata, papers CASCADE"
+        )
+
+
+@pytest.fixture()
+def pg_repo():
+    """실제 PostgreSQL에 연결된 깨끗한 저장소. 각 테스트 전후로 스키마를 초기화한다."""
+    url = os.environ.get(PG_URL_ENV, "").strip()
+    if not url:
+        pytest.skip(f"{PG_URL_ENV} 미설정 — PostgreSQL 통합 테스트를 건너뜁니다.")
+    from app.repositories.postgresql_notes import PostgreSQLNotesRepository
+
+    repo = PostgreSQLNotesRepository(url)
+    _drop_all_pg_tables(repo)
+    repo.init()
+    yield repo
+    _drop_all_pg_tables(repo)
+
+
+class TestPostgreSQLRoundTrip:
+    """운영 저장소 SQL의 실제 라운드트립을 검증한다(스키마는 user_id를 UUID로 요구)."""
+
+    def test_split_tables_are_created(self, pg_repo):
+        with pg_repo.connect() as conn:
+            tables = {
+                row["table_name"]
+                for row in conn.execute(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = 'public'"
+                ).fetchall()
+            }
+        assert {"paper_metadata", "paper_texts", "review_notes", "paper_files"}.issubset(tables)
+
+    def test_upsert_get_delete(self, pg_repo):
+        user = str(uuid.uuid4())
+        paper = {
+            "title": "T",
+            "authors": "A",
+            "link": "L",
+            "text": "body",
+            "suggestedTags": ["cs.CL"],
+            "extractionQuality": {
+                "score": 64,
+                "status": "review",
+                "reasons": ["추출량 확인 필요"],
+                "source": "auto",
+            },
+        }
+        pg_repo.upsert_note(user, "n1", paper, {"tags": ["x"]})
+        got = pg_repo.get_note(user, "n1")
+        assert got is not None
+        assert got["paper"]["title"] == "T"
+        assert got["paper"]["suggestedTags"] == ["cs.CL"]
+        assert got["paper"]["extractionQuality"]["status"] == "review"
+        assert got["paper"]["extractionQuality"]["score"] == 64
+        assert got["paper"]["text"] == "body"
+        assert got["note"]["tags"] == ["x"]
+
+        pg_repo.delete_note(user, "n1")
+        assert pg_repo.get_note(user, "n1") is None
+
+    def test_empty_text_does_not_overwrite_existing(self, pg_repo):
+        user = str(uuid.uuid4())
+        pg_repo.upsert_note(user, "n1", {"title": "T", "text": "original"}, {})
+        # 지연 로드 전 빈 text가 들어와도 기존 본문을 유지해야 한다.
+        pg_repo.upsert_note(user, "n1", {"title": "T2", "text": ""}, {})
+        got = pg_repo.get_note(user, "n1")
+        assert got["paper"]["text"] == "original"
+        assert got["paper"]["title"] == "T2"
+
+    def test_store_get_pdf(self, pg_repo):
+        user = str(uuid.uuid4())
+        pg_repo.store_pdf(user, "n1", "paper.pdf", b"%PDF-1.4\nbody")
+        assert pg_repo.get_pdf(user, "n1") == ("paper.pdf", b"%PDF-1.4\nbody")
+
+        note = pg_repo.get_note(user, "n1")
+        assert note is not None
+        assert note["paper"]["pdfFilename"] == "paper.pdf"
+        assert note["paper"]["pdfUrl"] == "/api/papers/n1/pdf"
+
+    def test_list_notes_excludes_text_but_get_includes(self, pg_repo):
+        user = str(uuid.uuid4())
+        pg_repo.upsert_note(user, "n1", {"title": "T", "text": "body"}, {"tags": ["a"]})
+        listed = pg_repo.list_notes(user)
+        assert listed["library"]["n1"]["title"] == "T"
+        assert listed["library"]["n1"]["text"] == ""  # 목록은 본문 제외
+        assert listed["notes"]["n1"]["tags"] == ["a"]
+        assert pg_repo.get_note(user, "n1")["paper"]["text"] == "body"  # 단건은 본문 포함
+
+    def test_notes_are_scoped_by_user(self, pg_repo):
+        owner = str(uuid.uuid4())
+        other = str(uuid.uuid4())
+        pg_repo.upsert_note(owner, "n1", {"title": "Mine"}, {})
+        assert pg_repo.get_note(other, "n1") is None
+        assert pg_repo.list_notes(other) == {"library": {}, "notes": {}}
+
+    def test_legacy_papers_are_migrated_to_split_tables(self, pg_repo):
+        from psycopg.types.json import Jsonb
+
+        user = str(uuid.uuid4())
+        with pg_repo.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO papers (
+                  id, user_id, title, authors, link, text, note,
+                  pdf_filename, pdf_content, created_at, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    "legacy",
+                    user,
+                    "Legacy",
+                    "Author",
+                    "https://example.com",
+                    "legacy body",
+                    Jsonb({"tags": ["old"]}),
+                    "legacy.pdf",
+                    b"%PDF",
+                    "2026-01-01T00:00:00+00:00",
+                    "2026-01-01T00:00:00+00:00",
+                ),
+            )
+
+        pg_repo.init()  # 마이그레이션 트리거
+        got = pg_repo.get_note(user, "legacy")
+        assert got is not None
+        assert got["paper"]["title"] == "Legacy"
+        assert got["paper"]["text"] == "legacy body"
+        assert got["paper"]["pdfUrl"] == "/api/papers/legacy/pdf"
+        assert got["note"]["tags"] == ["old"]
+        assert pg_repo.get_pdf(user, "legacy") == ("legacy.pdf", b"%PDF")

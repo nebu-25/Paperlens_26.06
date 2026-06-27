@@ -24,6 +24,24 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # 운영 저장소(PostgreSQL) 통합 테스트를 실제 DB에 대해 실행한다.
+    # 자격증명은 docker-compose.postgres.yml과 동일하게 맞춘다.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: paperlens
+          POSTGRES_USER: paperlens
+          POSTGRES_PASSWORD: paperlens_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U paperlens -d paperlens"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PAPERLENS_TEST_DATABASE_URL: postgresql://paperlens:paperlens_dev@localhost:5432/paperlens
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
