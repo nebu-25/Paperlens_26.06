@@ -17,6 +17,7 @@ const baseNote: ReviewNote = {
   tags: [],
   sectionSummaries: [],
   highlights: [],
+  manualSummaries: [],
   terms: [],
   questions: [],
   template: { q1: '', q2: '', q3: '', q4: '', q5: '' },
@@ -44,24 +45,15 @@ describe('buildMarkdown', () => {
     expect(md).toContain('- 저자: Vaswani et al.');
   });
 
-  it('includes only sections with content (both summary modes preserved)', () => {
+  it('includes manual summary template content', () => {
     const note: ReviewNote = {
       ...baseNote,
-      oneLineSummary: 'one line',
-      sectionSummaries: [
-        { id: 'a', section: 'Intro', content: 'kept', source: 'user' },
-        { id: 'b', section: 'Empty', content: '   ', source: 'user' },
-      ],
-      template: { q1: 'tmpl answer', q2: '', q3: '', q4: '', q5: '' },
+      manualSummaries: [{ id: 'm', text: 'manual method note', color: 'green' }],
     };
     const md = buildMarkdown(paper, note);
-    expect(md).toContain('## 한 줄 요약');
-    expect(md).toContain('### Intro');
-    expect(md).toContain('kept');
-    expect(md).not.toContain('### Empty');
-    // 토글과 무관하게 작성된 템플릿도 포함
     expect(md).toContain('## 수동 요약 템플릿');
-    expect(md).toContain('tmpl answer');
+    expect(md).toContain('### 방법론');
+    expect(md).toContain('manual method note');
   });
 
   it('groups highlights by review label', () => {
@@ -87,6 +79,7 @@ describe('buildMarkdown', () => {
         { id: 'a', text: 'background sentence', citationUse: 'premise' },
         { id: 'b', text: 'comparison sentence', citationUse: 'comparison' },
       ],
+      manualSummaries: [{ id: 'm', text: 'manual limitation note', color: 'pink', citationUse: 'limitation' }],
     };
     const md = buildMarkdown(paper, note);
     expect(md).toContain('## 인용 후보 보드');
@@ -94,6 +87,8 @@ describe('buildMarkdown', () => {
     expect(md).toContain('background sentence');
     expect(md).toContain('### 결과 비교');
     expect(md).toContain('comparison sentence');
+    expect(md).toContain('### 한계 언급');
+    expect(md).toContain('manual limitation note');
   });
 
   it('can exclude selected export sections', () => {
@@ -109,7 +104,7 @@ describe('buildMarkdown', () => {
       citationBoard: false,
       questions: false,
     });
-    expect(md).not.toContain('## 핵심 문장 하이라이트');
+    expect(md).not.toContain('## 하이라이트');
     expect(md).not.toContain('## 인용 후보 보드');
     expect(md).not.toContain('## 읽으며 생긴 질문');
   });

@@ -101,6 +101,7 @@ describe('searchableText', () => {
       tags: ['Transformer'],
       sectionSummaries: [{ id: 's', section: 'Intro', content: 'detail', source: 'user' }],
       highlights: [{ id: 'h', text: 'Quoted' }],
+      manualSummaries: [{ id: 'm', text: 'Manual note', color: 'yellow' }],
       terms: [{ id: 't', term: 'BLEU', explanation: 'metric', addedByUser: true, aiExplained: false }],
       questions: [{ id: 'q', text: 'Why?' }],
       template: { q1: '', q2: '', q3: '', q4: '', q5: '' },
@@ -108,7 +109,18 @@ describe('searchableText', () => {
     };
     const haystack = searchableText(paper, note);
     expect(haystack).toBe(haystack.toLowerCase());
-    for (const needle of ['attention', 'vaswani', 'nlp', 'transformer', 'detail', 'quoted', 'bleu', 'why?', 'memo']) {
+    for (const needle of [
+      'attention',
+      'vaswani',
+      'nlp',
+      'transformer',
+      'detail',
+      'manual note',
+      'quoted',
+      'bleu',
+      'why?',
+      'memo',
+    ]) {
       expect(haystack).toContain(needle);
     }
   });

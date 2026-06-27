@@ -45,6 +45,7 @@ export const EMPTY_NOTE: ReviewNote = {
   tags: [],
   sectionSummaries: defaultSectionSummaries(),
   highlights: [],
+  manualSummaries: [],
   terms: [],
   questions: [],
   template: { q1: '', q2: '', q3: '', q4: '', q5: '' },
@@ -57,6 +58,10 @@ export function normalizeNote(raw: Partial<ReviewNote>): ReviewNote {
     ...EMPTY_NOTE,
     ...raw,
     tags: Array.isArray(raw.tags) ? raw.tags : [],
+    highlights: Array.isArray(raw.highlights) ? raw.highlights : [],
+    manualSummaries: Array.isArray(raw.manualSummaries) ? raw.manualSummaries : [],
+    terms: Array.isArray(raw.terms) ? raw.terms : [],
+    questions: Array.isArray(raw.questions) ? raw.questions : [],
     sectionSummaries:
       Array.isArray(raw.sectionSummaries) && raw.sectionSummaries.length > 0
         ? raw.sectionSummaries
@@ -76,6 +81,7 @@ export function searchableText(paper: Paper, note: ReviewNote): string {
     note.oneLineSummary,
   ];
   for (const s of note.sectionSummaries ?? []) parts.push(s.section, s.content);
+  for (const item of note.manualSummaries ?? []) parts.push(item.text);
   parts.push(...Object.values(note.template ?? {}));
   for (const t of note.terms ?? []) parts.push(t.term, t.explanation);
   for (const q of note.questions ?? []) parts.push(q.text);

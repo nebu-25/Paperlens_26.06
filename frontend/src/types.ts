@@ -78,6 +78,13 @@ export interface Question {
   text: string;
 }
 
+export interface ManualSummaryItem {
+  id: string;
+  text: string;
+  color: HighlightColor;
+  citationUse?: CitationUse;
+}
+
 export interface SectionSummary {
   id: string;
   section: string;
@@ -95,6 +102,7 @@ export interface ReviewNote {
   tags: string[];
   sectionSummaries: SectionSummary[];
   highlights: Highlight[];
+  manualSummaries: ManualSummaryItem[];
   terms: Term[];
   questions: Question[];
   template: {

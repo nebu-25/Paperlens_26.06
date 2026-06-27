@@ -6,6 +6,7 @@ import {
   Highlighter,
   Library,
   PencilLine,
+  Plus,
   Printer,
   Save,
   Search,
@@ -36,7 +37,7 @@ import { LandingPage } from './LandingPage';
 import { QuestionsCard } from './QuestionsCard';
 import { SectionCard } from './SectionCard';
 import { TagEditor } from './TagEditor';
-import type { CitationUse, ExtractionQuality } from '../types';
+import type { CitationUse, ExtractionQuality, HighlightColor, ManualSummaryItem } from '../types';
 
 const SERVICE_ROUTE = 'service_home';
 
@@ -56,14 +57,11 @@ function extractionQualityLabel(quality?: ExtractionQuality) {
 }
 
 const EXPORT_OPTION_LABELS: { key: keyof ExportOptions; label: string }[] = [
-  { key: 'oneLineSummary', label: '한 줄 요약' },
-  { key: 'sectionSummaries', label: '섹션별 요약' },
   { key: 'template', label: '수동 요약 템플릿' },
   { key: 'terms', label: '용어 사전' },
   { key: 'questions', label: '질문' },
   { key: 'highlights', label: '하이라이트' },
-  { key: 'citationBoard', label: '인용 후보 보드' },
-  { key: 'memos', label: '섹션별 메모' },
+  { key: 'citationBoard', label: '인용 후보' },
 ];
 
 function appBasePath() {
@@ -182,14 +180,21 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
   const [paperPdfPreviewError, setPaperPdfPreviewError] = useState('');
   const [sourceEditOpen, setSourceEditOpen] = useState(false);
   const [sourceDraft, setSourceDraft] = useState('');
+  const [manualSummaryDraft, setManualSummaryDraft] = useState('');
+  const [manualSummaryColor, setManualSummaryColor] = useState<HighlightColor>('yellow');
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const uploadPercent = uploadPhasePercent[uploadPhase] ?? 0;
   const samplePercent = samplePhasePercent[samplePhase] ?? 0;
   const sampleStatusText =
     samplePhaseText[samplePhase] || (uploading ? uploadPhaseText[uploadPhase] : '샘플 PDF 준비 중');
   const hasHighlightColor = (color: string) => note.highlights.some((h) => (h.color ?? 'yellow') === color);
-  const hasCitationUse = (use: CitationUse) => note.highlights.some((h) => h.citationUse === use);
-  const citationHighlights = note.highlights.filter((h) => h.citationUse);
+  const hasCitationUse = (use: CitationUse) =>
+    note.highlights.some((h) => h.citationUse === use)
+    || note.manualSummaries.some((item) => item.citationUse === use);
+  const citationItems = [
+    ...note.highlights.filter((h) => h.citationUse).map((item) => ({ ...item, source: 'highlight' as const })),
+    ...note.manualSummaries.filter((item) => item.citationUse).map((item) => ({ ...item, source: 'manual' as const })),
+  ];
   const reviewRoadmap = [
     {
       label: '문제 파악',
@@ -218,7 +223,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
     {
       label: '정리',
       helper: '내 논문에서 사용할 후보 문장을 인용 후보 보드로 분류하세요.',
-      done: citationHighlights.length > 0,
+      done: citationItems.length > 0,
     },
   ];
   const visibleHighlights = note.highlights.filter(
@@ -297,6 +302,18 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
       message:
         '추출 품질: 사용자 보정됨. 직접 입력한 원문이 저장 대상에 포함됩니다. 서버 동기화가 완료되면 로그아웃 후에도 유지됩니다. 저장 상태가 "저장됨"으로 바뀐 뒤 이동하거나 로그아웃하는 것이 안전합니다.',
     });
+  };
+
+  const addManualSummary = () => {
+    const text = manualSummaryDraft.trim();
+    if (!text) return;
+    const next: ManualSummaryItem = {
+      id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 9),
+      text,
+      color: manualSummaryColor,
+    };
+    updateNote('manualSummaries', [...note.manualSummaries, next]);
+    setManualSummaryDraft('');
   };
 
   useEffect(() => {
@@ -1013,64 +1030,104 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   </p>
                 </SectionCard>
 
-                <SectionCard title="인용 후보 보드" icon={<PencilLine size={16} />}>
-                  <div className="mb-3 rounded border border-line bg-paper p-3 text-xs leading-relaxed text-muted">
-                    <b className="mb-1 block text-ink">이용 방법</b>
-                    하이라이트 탭의 문장마다 인용 목적을 선택하면 이 보드에 자동으로 분류됩니다.
-                    하이라이트 라벨은 논문 안에서의 의미를, 인용 목적은 내 논문에서의 사용 방식을
-                    구분합니다.
-                    <b className="mb-1 mt-3 block text-ink">데이터 기준</b>
-                    같은 문장도 논문 안에서는 근거일 수 있고, 내 논문에서는 결과 비교나 반론으로
-                    사용할 수 있습니다. 이 보드는 후자의 작업용 분류만 모읍니다.
-                  </div>
-                  {citationHighlights.length === 0 ? (
-                    <p className="text-xs text-muted">
-                      아직 인용 후보로 분류한 하이라이트가 없습니다. 아래 하이라이트 목록에서
-                      인용 목적을 선택하세요.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {CITATION_USE_OPTIONS.map((option) => {
-                        const items = citationHighlights.filter((h) => h.citationUse === option.value);
-                        if (items.length === 0) return null;
-                        return (
-                          <section key={option.value} className="rounded border border-line bg-white p-3">
-                            <div className="mb-2 flex items-start justify-between gap-2">
-                              <div>
-                                <h4 className="text-sm font-semibold text-ink">{option.label}</h4>
-                                <p className="text-xs leading-relaxed text-muted">{option.helper}</p>
-                              </div>
-                              <span className="shrink-0 rounded bg-paper px-2 py-0.5 text-xs text-muted">
-                                {items.length}
-                              </span>
-                            </div>
-                            <ul className="space-y-2">
-                              {items.map((h) => {
-                                const style = highlightStyle(h.color);
-                                return (
-                                  <li key={h.id} className={`rounded p-2 text-sm ${style.listClass}`}>
-                                    <span className="mb-1 inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
-                                      {style.label}
-                                    </span>
-                                    <span className="block">“{h.text}”</span>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </section>
-                        );
-                      })}
-                    </div>
-                  )}
-                </SectionCard>
-
                 <QuestionsCard
                   questions={note.questions}
                   onChange={(q) => updateNote('questions', q)}
                 />
 
-                {/* 핵심 문장 하이라이트 (영역 6) */}
-                <SectionCard title="핵심 문장 하이라이트" icon={<Highlighter size={16} />}>
+                <SectionCard title="수동 요약 템플릿" icon={<PencilLine size={16} />}>
+                  <div className="mb-2 flex flex-col gap-2 sm:flex-row">
+                    <select
+                      className="rounded border border-line bg-white p-2 text-sm outline-none focus:border-action"
+                      value={manualSummaryColor}
+                      onChange={(e) => setManualSummaryColor(e.target.value as HighlightColor)}
+                    >
+                      {HIGHLIGHT_COLORS.map((color) => (
+                        <option key={color.value} value={color.value}>
+                          {color.meaning}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="min-w-0 flex-1 rounded border border-line p-2 text-sm outline-none focus:border-action"
+                      placeholder="PDF를 읽고 직접 정리한 내용을 추가하세요."
+                      value={manualSummaryDraft}
+                      onChange={(e) => setManualSummaryDraft(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && addManualSummary()}
+                    />
+                    <button
+                      type="button"
+                      className="flex shrink-0 items-center justify-center gap-1 rounded border border-line px-3 text-sm"
+                      onClick={addManualSummary}
+                    >
+                      <Plus size={14} /> 추가
+                    </button>
+                  </div>
+                  {note.manualSummaries.length === 0 ? (
+                    <p className="text-xs text-muted">
+                      문자 추출이 부족할 때 PDF 뷰어를 읽고 주장, 방법론, 결과, 한계/비판,
+                      질문/후속 확인 기준으로 직접 정리하세요.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {note.manualSummaries.map((item) => {
+                        const style = highlightStyle(item.color);
+                        return (
+                          <li key={item.id} className={`rounded p-2 text-sm ${style.listClass}`}>
+                            <div className="mb-2 flex items-start justify-between gap-2">
+                              <span className="min-w-0">
+                                <span className="mb-1 inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                                  {style.meaning}
+                                </span>
+                                <span className="block">“{item.text}”</span>
+                              </span>
+                              <button
+                                className="shrink-0 text-muted hover:text-ink"
+                                onClick={() =>
+                                  updateNote(
+                                    'manualSummaries',
+                                    note.manualSummaries.filter((x) => x.id !== item.id),
+                                  )
+                                }
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                            <select
+                              className="rounded border border-line bg-white px-2 py-1 text-xs text-muted outline-none focus:border-action"
+                              value={item.citationUse ?? ''}
+                              title="인용 후보 보드에서 사용할 목적"
+                              onChange={(e) =>
+                                updateNote(
+                                  'manualSummaries',
+                                  note.manualSummaries.map((x) =>
+                                    x.id === item.id
+                                      ? {
+                                          ...x,
+                                          citationUse: e.target.value
+                                            ? (e.target.value as CitationUse)
+                                            : undefined,
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                            >
+                              <option value="">인용 목적</option>
+                              {CITATION_USE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </SectionCard>
+
+                <SectionCard title="하이라이트" icon={<Highlighter size={16} />}>
                   <div className="mb-3 flex flex-wrap gap-1">
                     <button
                       type="button"
@@ -1169,8 +1226,58 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   )}
                 </SectionCard>
 
-                {/* 핵심 용어 사전 (영역 4) */}
-                <SectionCard title="핵심 용어 사전" icon={<Library size={16} />}>
+                <SectionCard title="인용 후보 보드" icon={<PencilLine size={16} />}>
+                  <div className="mb-3 rounded border border-line bg-paper p-3 text-xs leading-relaxed text-muted">
+                    <b className="mb-1 block text-ink">이용 방법</b>
+                    하이라이트나 수동 요약 템플릿 항목마다 인용 목적을 선택하면 이 보드에 자동으로
+                    분류됩니다. 하이라이트 라벨은 논문 안에서의 의미를, 인용 목적은 내 논문에서의
+                    사용 방식을 구분합니다.
+                    <b className="mb-1 mt-3 block text-ink">데이터 기준</b>
+                    같은 문장도 논문 안에서는 근거일 수 있고, 내 논문에서는 결과 비교나 반론으로
+                    사용할 수 있습니다. 이 보드는 후자의 작업용 분류만 모읍니다.
+                  </div>
+                  {citationItems.length === 0 ? (
+                    <p className="text-xs text-muted">
+                      아직 인용 후보로 분류한 항목이 없습니다. 하이라이트 또는 수동 요약 템플릿에서
+                      인용 목적을 선택하세요.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {CITATION_USE_OPTIONS.map((option) => {
+                        const items = citationItems.filter((h) => h.citationUse === option.value);
+                        if (items.length === 0) return null;
+                        return (
+                          <section key={option.value} className="rounded border border-line bg-white p-3">
+                            <div className="mb-2 flex items-start justify-between gap-2">
+                              <div>
+                                <h4 className="text-sm font-semibold text-ink">{option.label}</h4>
+                                <p className="text-xs leading-relaxed text-muted">{option.helper}</p>
+                              </div>
+                              <span className="shrink-0 rounded bg-paper px-2 py-0.5 text-xs text-muted">
+                                {items.length}
+                              </span>
+                            </div>
+                            <ul className="space-y-2">
+                              {items.map((h) => {
+                                const style = highlightStyle(h.color);
+                                return (
+                                  <li key={`${h.source}-${h.id}`} className={`rounded p-2 text-sm ${style.listClass}`}>
+                                    <span className="mb-1 inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                                      {h.source === 'manual' ? '수동 요약' : style.label}
+                                    </span>
+                                    <span className="block">“{h.text}”</span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </section>
+                        );
+                      })}
+                    </div>
+                  )}
+                </SectionCard>
+
+                <SectionCard title="용어 사전" icon={<Library size={16} />}>
                   {note.terms.length === 0 ? (
                     <p className="text-xs text-muted">
                       본문에서 모르는 단어를 드래그해 추가하세요.
@@ -1227,9 +1334,8 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   )}
                 </SectionCard>
 
-                {/* 전체 리뷰 노트 (영역 9) — 완성도 체크리스트 */}
                 <SectionCard
-                  title="전체 리뷰 노트"
+                  title="노트 내려받기"
                   icon={<FileText size={16} />}
                   action={
                     <span className="rounded bg-paper px-2 py-0.5 text-xs text-muted">
@@ -1238,17 +1344,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   }
                 >
                   <div className="rounded bg-white text-sm">
-                    <div className="mb-2 flex items-center justify-between text-xs text-muted">
-                      <span>로드맵 기준 리뷰 완성도</span>
-                      <span>{reviewProgressPercent}%</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-paper">
-                      <div
-                        className="h-full rounded-full bg-action transition-all"
-                        style={{ width: `${reviewProgressPercent}%` }}
-                      />
-                    </div>
-                    <p className="mt-3 text-xs leading-relaxed text-muted">
+                    <p className="text-xs leading-relaxed text-muted">
                       {nextRoadmapStep ? (
                         <>
                           다음으로 <b className="text-ink">{currentRoadmapStep.label}</b> 단계를 보완하면

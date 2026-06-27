@@ -3,25 +3,24 @@ import { buildChecklist, countDone } from './reviewProgress';
 import { EMPTY_NOTE } from './notes';
 
 describe('buildChecklist', () => {
-  it('checks section summary progress in section mode', () => {
+  it('checks current review feature progress', () => {
     const checklist = buildChecklist({
       ...EMPTY_NOTE,
-      oneLineSummary: 'core idea',
-      sectionSummaries: [{ id: 's', section: 'Intro', content: 'detail', source: 'user' }],
+      highlights: [{ id: 'h', text: 'important sentence', color: 'yellow' }],
+      terms: [{ id: 't', term: 'FMEA', explanation: 'risk method', addedByUser: true, aiExplained: false }],
     });
 
-    expect(checklist.find((item) => item.label === '한 줄 요약')?.done).toBe(true);
-    expect(checklist.find((item) => item.label === '섹션별 요약')?.done).toBe(true);
+    expect(checklist.find((item) => item.label === '하이라이트')?.done).toBe(true);
+    expect(checklist.find((item) => item.label === '용어 사전')?.done).toBe(true);
     expect(countDone(checklist)).toBe(2);
   });
 
-  it('checks template progress in template mode', () => {
+  it('checks manual summary template progress', () => {
     const checklist = buildChecklist({
       ...EMPTY_NOTE,
-      summaryMode: 'template',
-      template: { ...EMPTY_NOTE.template, q4: 'limited sample size' },
+      manualSummaries: [{ id: 'm', text: 'manual result summary', color: 'blue' }],
     });
 
-    expect(checklist.find((item) => item.label === '5문항 템플릿')?.done).toBe(true);
+    expect(checklist.find((item) => item.label === '수동 요약 템플릿')?.done).toBe(true);
   });
 });
