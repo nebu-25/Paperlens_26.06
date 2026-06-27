@@ -16,9 +16,14 @@ OpenRouter AI only when AI_API_KEY is set
 ## Frontend
 
 - `frontend/src/main.tsx`: 앱 엔트리
-- `frontend/src/components/App.tsx`: 랜딩/서비스 경로 분기, 사이드바, 업로드 영역, 원문 패널, 리뷰 노트 패널 렌더링
+- `frontend/src/components/App.tsx`: 랜딩/서비스 경로 분기와 인증 가드, `ReviewWorkspace` 조합(`WorkspaceContext` Provider). 패널은 직접 렌더하지 않고 아래 `workspace/` 컴포넌트로 위임
+- `frontend/src/components/workspace/`: 워크스페이스 패널 분해
+  - `WorkspaceContext.ts`: store를 공유하는 Context와 `useWorkspace()` 훅 (prop drilling 방지)
+  - `WorkspaceHeader.tsx` · `UploadBar.tsx` · `PaperSidebar.tsx` · `SelectionToolbar.tsx`
+  - `SourcePanel.tsx`: 원문/PDF 보기 토글, 원문 직접 편집, PDF 미리보기 로드 (패널 전용 상태·이펙트 보유)
+  - `ReviewNotePanel.tsx`: 메타정보, 리뷰 로드맵, 수동 요약, 하이라이트, 인용 후보 보드, 용어 사전, 내보내기
 - `frontend/src/components/LandingPage.tsx`: 사용설명서와 로그인 진입 화면
-- `frontend/src/hooks/useReviewStore.tsx`: 등록, 업로드, 하이라이트, 용어 추가, AI 설명, 내보내기 액션
+- `frontend/src/hooks/useReviewStore.tsx`: 등록, 업로드, 하이라이트, 용어 추가, AI 설명, 내보내기 액션 (`ReviewStore` 타입 export)
 - `frontend/src/hooks/useReviewPersistence.ts`: 서버 저장, localStorage 폴백, 재동기화
 - `frontend/src/hooks/useAuthSession.ts`: Supabase session 구독
 - `frontend/src/components/AuthControls.tsx`: 이메일/비밀번호, Google 로그인 UI
@@ -43,7 +48,7 @@ GitHub Pages 배포의 경로 구성은 아래와 같습니다.
 - `backend/app/auth.py`: Supabase JWT 검증, Supabase user endpoint fallback, 요청 사용자 id 추출
 - `backend/app/routers/papers.py`: PDF 업로드, 텍스트 추출, 섹션 감지, DOI/CrossRef/arXiv/레이아웃 메타데이터 추정
 - `backend/app/routers/notes.py`: 노트 CRUD
-- `backend/app/routers/ai.py`: OpenRouter 기반 용어 설명 API
+- `backend/app/routers/ai.py`: OpenRouter 기반 용어 설명 API. 인증 활성 시 토큰 요구 + 사용자별 분당 레이트리밋(`AI_RATE_LIMIT_PER_MINUTE`)
 - `backend/app/repositories/`: SQLite/PostgreSQL 저장소 구현
 
 ## Main APIs

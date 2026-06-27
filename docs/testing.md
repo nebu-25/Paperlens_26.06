@@ -17,6 +17,10 @@ npm run build
 - `frontend/src/lib/library.test.ts`: 라이브러리 검색과 태그 필터
 - `frontend/src/lib/export.test.ts`: Markdown/PDF HTML 생성, HTML escape, 파일명 보호
 - `frontend/src/lib/reviewProgress.test.ts`: 리뷰 진행률 체크리스트
+- `frontend/src/hooks/useReviewStore.test.ts`: 핵심 상태/액션(논문 누적 등록, 태그 갱신, 하이라이트/용어 추가, 태그 필터, 삭제)
+- `frontend/src/components/NoticeBanner.test.tsx`: 알림 배너 접근성(심각도별 role/aria-live, 색상 비의존 접두사)
+
+순수 로직(`lib/*`)은 node 환경에서 돌고, DOM/컴포넌트 테스트는 파일 상단 `// @vitest-environment happy-dom` 도크블록으로 개별 전환합니다(devDep: `@testing-library/react`, `happy-dom`).
 
 ## Backend
 
@@ -38,8 +42,18 @@ pytest
 테스트 범위:
 
 - `backend/tests/test_papers.py`: DOI 정규화, CrossRef/arXiv 파싱, 섹션 감지, PDF reflow, 깨진 텍스트 감지, OCR fallback, 한국 논문 저자/소속 휴리스틱
-- `backend/tests/test_ai.py`: AI 미설정 응답, 용어 설명 endpoint 503, OpenRouter 응답 파싱
-- `backend/tests/test_db.py`: 저장소 facade와 노트 CRUD
+- `backend/tests/test_ai.py`: AI 미설정 응답, 용어 설명 endpoint 503, OpenRouter 응답 파싱, 사용자별 레이트리밋(429/Retry-After·사용자 격리)
+- `backend/tests/test_auth.py`: Supabase JWT 검증(서명·exp·sub·`aud`·`iss`), `/auth/v1/user` fallback과 캐시
+- `backend/tests/test_diagnostics.py`: 진단 endpoint
+- `backend/tests/test_db.py`: 저장소 facade와 SQLite CRUD/마이그레이션. PostgreSQL 라운드트립 통합 테스트(`TestPostgreSQLRoundTrip`)는 `PAPERLENS_TEST_DATABASE_URL`이 있을 때만 실행되고, 없으면 skip
+
+PostgreSQL 통합 테스트를 로컬에서 돌리려면 Postgres를 띄우고 연결 문자열을 주입합니다.
+
+```bash
+docker compose -f docker-compose.postgres.yml up -d
+cd backend
+PAPERLENS_TEST_DATABASE_URL=postgresql://paperlens:paperlens_dev@127.0.0.1:5432/paperlens pytest tests/test_db.py
+```
 
 ## Local API Smoke
 
