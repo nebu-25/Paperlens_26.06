@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_anon_key: str = ""
     supabase_jwt_secret: str = ""
+    # 검증 시 요구할 audience(aud) 클레임. Supabase 로그인 토큰은 기본적으로 "authenticated".
+    # 빈 값으로 두면 aud 검사를 비활성화한다(권장하지 않음).
+    supabase_jwt_aud: str = "authenticated"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -49,6 +52,13 @@ class Settings(BaseSettings):
     @property
     def auth_enabled(self) -> bool:
         return bool(self.supabase_jwt_secret.strip())
+
+    @property
+    def supabase_expected_issuer(self) -> str:
+        # Supabase가 발급하는 토큰의 iss는 "{SUPABASE_URL}/auth/v1" 형태다.
+        # supabase_url이 설정된 경우에만 iss 검증에 사용한다.
+        url = self.supabase_url.strip().rstrip("/")
+        return f"{url}/auth/v1" if url else ""
 
     @property
     def auth_diagnostics(self) -> dict[str, object]:

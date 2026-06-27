@@ -49,7 +49,19 @@ def _verify_supabase_jwt(token: str) -> dict[str, object]:
         raise HTTPException(status_code=401, detail="인증 토큰이 만료되었습니다.")
     if not payload.get("sub"):
         raise HTTPException(status_code=401, detail="인증 사용자 정보를 찾을 수 없습니다.")
+    _verify_claim(payload, "aud", settings.supabase_jwt_aud.strip(), "대상(aud)")
+    _verify_claim(payload, "iss", settings.supabase_expected_issuer, "발급자(iss)")
     return payload
+
+
+def _verify_claim(payload: dict[str, object], claim: str, expected: str, label: str) -> None:
+    """기대값이 설정된 경우에만 클레임을 검증한다(aud는 문자열·배열 모두 허용)."""
+    if not expected:
+        return
+    value = payload.get(claim)
+    candidates = value if isinstance(value, list) else [value]
+    if expected not in [str(candidate) for candidate in candidates if candidate is not None]:
+        raise HTTPException(status_code=401, detail=f"인증 토큰 {label}이 올바르지 않습니다.")
 
 
 def _token_cache_key(token: str) -> str:

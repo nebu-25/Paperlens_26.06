@@ -60,8 +60,64 @@ def test_current_user_id_returns_local_when_auth_disabled(monkeypatch):
 
 def test_current_user_id_verifies_supabase_token(monkeypatch):
     monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
-    token = _token({"sub": "user-1", "exp": int(time.time()) + 60})
+    token = _token({"sub": "user-1", "exp": int(time.time()) + 60, "aud": "authenticated"})
     assert auth.current_user_id(f"Bearer {token}") == "user-1"
+
+
+def test_current_user_id_rejects_wrong_audience(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    token = _token({"sub": "user-1", "exp": int(time.time()) + 60, "aud": "anon"})
+    with pytest.raises(HTTPException) as exc:
+        auth.current_user_id(f"Bearer {token}")
+    assert exc.value.status_code == 401
+    assert "대상(aud)" in exc.value.detail
+
+
+def test_current_user_id_rejects_missing_audience(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    token = _token({"sub": "user-1", "exp": int(time.time()) + 60})
+    with pytest.raises(HTTPException) as exc:
+        auth.current_user_id(f"Bearer {token}")
+    assert exc.value.status_code == 401
+
+
+def test_current_user_id_accepts_audience_list(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    token = _token(
+        {"sub": "user-1", "exp": int(time.time()) + 60, "aud": ["authenticated", "other"]}
+    )
+    assert auth.current_user_id(f"Bearer {token}") == "user-1"
+
+
+def test_current_user_id_verifies_issuer_when_url_set(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    monkeypatch.setattr(settings, "supabase_url", "https://project.supabase.co")
+    token = _token(
+        {
+            "sub": "user-1",
+            "exp": int(time.time()) + 60,
+            "aud": "authenticated",
+            "iss": "https://project.supabase.co/auth/v1",
+        }
+    )
+    assert auth.current_user_id(f"Bearer {token}") == "user-1"
+
+
+def test_current_user_id_rejects_wrong_issuer(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    monkeypatch.setattr(settings, "supabase_url", "https://project.supabase.co")
+    token = _token(
+        {
+            "sub": "user-1",
+            "exp": int(time.time()) + 60,
+            "aud": "authenticated",
+            "iss": "https://evil.example.com/auth/v1",
+        }
+    )
+    with pytest.raises(HTTPException) as exc:
+        auth.current_user_id(f"Bearer {token}")
+    assert exc.value.status_code == 401
+    assert "발급자(iss)" in exc.value.detail
 
 
 def test_current_user_id_falls_back_to_supabase_user_endpoint(monkeypatch):

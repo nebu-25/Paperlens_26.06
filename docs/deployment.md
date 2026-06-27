@@ -54,6 +54,7 @@ Backend:
 | `SUPABASE_URL` | Supabase 프로젝트 URL |
 | `SUPABASE_ANON_KEY` | Supabase anon/publishable key. 현재 운영은 `sb_publishable_...` 형식 |
 | `SUPABASE_JWT_SECRET` | FastAPI가 HS256 access token을 직접 검증할 때 쓰는 JWT secret |
+| `SUPABASE_JWT_AUD` | 선택. HS256 토큰 검증 시 요구할 audience(aud). 기본 `authenticated`. 빈 값으로 두면 aud 검사 비활성(비권장) |
 
 Frontend build:
 
@@ -109,7 +110,7 @@ https://<supabase-project-ref>.supabase.co/auth/v1/callback
 
 FastAPI는 Supabase access token을 다음 순서로 처리합니다.
 
-1. `SUPABASE_JWT_SECRET`으로 HS256 JWT를 직접 검증합니다.
+1. `SUPABASE_JWT_SECRET`으로 HS256 JWT를 직접 검증합니다. 서명·`exp`·`sub`에 더해 `aud`(기본 `authenticated`, `SUPABASE_JWT_AUD`로 변경)와 `iss`(`SUPABASE_URL`이 설정된 경우 `{SUPABASE_URL}/auth/v1`)를 확인해, 다른 프로젝트·대상으로 발급된 토큰을 거부합니다.
 2. 지원하지 않는 서명 알고리즘이면 `SUPABASE_URL`의 `/auth/v1/user`에 access token과 `SUPABASE_ANON_KEY`를 보내 사용자 id를 확인합니다.
 
 Fallback 사용자 조회 결과는 token hash 기준으로 최대 5분 동안, token의 `exp`를 넘지 않는 범위에서 캐시합니다. 같은 로그인 세션의 자동 저장 요청이 반복되어도 Supabase Auth endpoint를 매번 호출하지 않기 위함입니다.
