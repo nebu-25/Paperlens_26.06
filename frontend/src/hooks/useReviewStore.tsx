@@ -17,6 +17,7 @@ import { buildChecklist, countDone } from '../lib/reviewProgress';
 import type {
   AppNotice,
   DetectedSection,
+  ExtractionQuality,
   HighlightColor,
   Paper,
   ReviewNote,
@@ -26,6 +27,13 @@ import type {
 } from '../types';
 import { usePaperBodyNodes } from './usePaperBodyNodes';
 import { useReviewPersistence } from './useReviewPersistence';
+
+type ExtractionQualityResponse = {
+  score?: number;
+  status?: ExtractionQuality['status'];
+  reasons?: string[];
+  source?: ExtractionQuality['source'];
+};
 
 export function useReviewStore({
   accessToken,
@@ -117,6 +125,31 @@ export function useReviewStore({
     const asciiMatch = value.match(/filename="?([^";]+)"?/i);
     if (asciiMatch?.[1]) return asciiMatch[1].trim();
     return fallback;
+  }
+
+  function normalizeExtractionQuality(value?: ExtractionQualityResponse): ExtractionQuality | undefined {
+    if (!value || typeof value.score !== 'number' || !value.status) return undefined;
+    return {
+      score: Math.max(0, Math.min(100, Math.round(value.score))),
+      status: value.status,
+      reasons: value.reasons ?? [],
+      source: value.source ?? 'auto',
+    };
+  }
+
+  function extractionQualityLabel(quality?: ExtractionQuality): string {
+    if (!quality) return '';
+    if (quality.source === 'user_edited') return '사용자 보정됨';
+    if (quality.status === 'good') return '양호';
+    if (quality.status === 'review') return '확인 필요';
+    if (quality.status === 'poor') return '낮음';
+    return '추출 실패';
+  }
+
+  function withExtractionQualityMessage(message: string, quality?: ExtractionQuality): string {
+    const label = extractionQualityLabel(quality);
+    if (!quality || !label) return message;
+    return `추출 품질: ${label} (${quality.score}/100). ${message}`;
   }
 
   function sampleFilenameFromResponse(res: Response): string {
@@ -313,6 +346,7 @@ export function useReviewStore({
         metadata_source?: string;
         metadata_confidence?: string;
         metadata_warnings?: string[];
+        extraction_quality?: ExtractionQualityResponse;
         pdf_url?: string;
         pdf_filename?: string;
         scanned?: boolean;
@@ -325,6 +359,7 @@ export function useReviewStore({
       const metadataWarnings = data.notice
         ? [...(data.metadata_warnings ?? []), data.notice]
         : (data.metadata_warnings ?? []);
+      const extractionQuality = normalizeExtractionQuality(data.extraction_quality);
       setUploadPhase('creating');
       options.onPhase?.('creating');
       if (attachTargetId && libraryRef.current[attachTargetId]) {
@@ -344,6 +379,7 @@ export function useReviewStore({
               metadataSource: data.metadata_source,
               metadataConfidence: data.metadata_confidence,
               metadataWarnings,
+              extractionQuality,
               pdfUrl: pdfUrl || current.pdfUrl || '',
               pdfFilename: data.pdf_filename || current.pdfFilename || '',
               sections: data.sections ?? current.sections,
@@ -383,6 +419,7 @@ export function useReviewStore({
           metadataSource: data.metadata_source,
           metadataConfidence: data.metadata_confidence,
           metadataWarnings,
+          extractionQuality,
           pdfUrl,
           pdfFilename: data.pdf_filename || '',
           sections: data.sections ?? [],
@@ -394,7 +431,7 @@ export function useReviewStore({
         setUploadNotice({
           tone: 'warning',
           title: data.scanned ? '스캔 PDF로 보입니다' : '원문 텍스트 확인 필요',
-          message: data.notice,
+          message: withExtractionQualityMessage(data.notice, extractionQuality),
         });
       } else {
         const sectionCount = detectedSectionNames(data.sections).length;
@@ -407,9 +444,9 @@ export function useReviewStore({
           tone: 'success',
           title: attachTargetId ? 'PDF 본문 연결 완료' : 'PDF 등록 완료',
           message:
-            (attachTargetId
+            withExtractionQualityMessage((attachTargetId
               ? '현재 리뷰 노트에 원문 텍스트를 연결했습니다.'
-              : '원문 텍스트와 메타정보를 반영해 새 리뷰 노트를 만들었습니다.') + sectionNote,
+              : '원문 텍스트와 메타정보를 반영해 새 리뷰 노트를 만들었습니다.') + sectionNote, extractionQuality),
         });
       }
     } catch (error) {
@@ -582,6 +619,7 @@ export function useReviewStore({
           metadata_source?: string;
           metadata_confidence?: string;
           metadata_warnings?: string[];
+          extraction_quality?: ExtractionQualityResponse;
           pdf_url?: string;
           pdf_filename?: string;
           scanned?: boolean;
@@ -593,6 +631,7 @@ export function useReviewStore({
         const metadataWarnings = data.notice
           ? [...(data.metadata_warnings ?? []), data.notice]
           : (data.metadata_warnings ?? []);
+        const extractionQuality = normalizeExtractionQuality(data.extraction_quality);
         setUploadPhase('creating');
         registerPaper({
           title: unknownTitle ? data.filename.replace(/\.pdf$/i, '') : (data.title ?? ''),
@@ -604,6 +643,7 @@ export function useReviewStore({
           metadataSource: data.metadata_source,
           metadataConfidence: data.metadata_confidence,
           metadataWarnings,
+          extractionQuality,
           pdfUrl: data.pdf_url ? resolveApiUrl(data.pdf_url) : '',
           pdfFilename: data.pdf_filename || data.filename || '',
           sections: data.sections ?? [],
@@ -612,7 +652,10 @@ export function useReviewStore({
         setUploadNotice({
           tone: data.notice ? 'warning' : 'success',
           title: data.notice ? 'PDF 원문 확인 필요' : 'PDF URL 등록 완료',
-          message: data.notice || 'URL에서 PDF를 내려받아 원문과 메타정보를 반영했습니다.',
+          message: withExtractionQualityMessage(
+            data.notice || 'URL에서 PDF를 내려받아 원문과 메타정보를 반영했습니다.',
+            extractionQuality,
+          ),
         });
         setDoiInput('');
         return;

@@ -9,6 +9,16 @@ export interface DetectedSection {
   start?: number;
 }
 
+export type ExtractionQualityStatus = 'good' | 'review' | 'poor' | 'failed';
+export type ExtractionQualitySource = 'auto' | 'user_edited';
+
+export interface ExtractionQuality {
+  score: number;
+  status: ExtractionQualityStatus;
+  reasons: string[];
+  source: ExtractionQualitySource;
+}
+
 export interface Paper {
   id: string;
   title: string;
@@ -20,6 +30,7 @@ export interface Paper {
   metadataSource?: string;
   metadataConfidence?: string;
   metadataWarnings?: string[];
+  extractionQuality?: ExtractionQuality;
   pdfUrl?: string;
   pdfFilename?: string;
   sections?: DetectedSection[];

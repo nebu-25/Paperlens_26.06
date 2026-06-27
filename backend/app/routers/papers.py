@@ -962,6 +962,68 @@ def _extraction_quality_warnings(text: str, page_count: int) -> list[str]:
     return warnings
 
 
+def _extraction_quality(
+    text: str,
+    page_count: int,
+    warnings: list[str] | None = None,
+) -> dict[str, object]:
+    """자동 추출 결과의 품질 상태를 계산한다.
+
+    점수는 사용자에게 원문 대조/직접 편집 필요성을 알려주기 위한 휴리스틱이다.
+    경고 문구와 함께 제공해 점수만 과신하지 않도록 한다.
+    """
+    reasons = warnings if warnings is not None else _extraction_quality_warnings(text, page_count)
+    if not text.strip():
+        return {"score": 0, "status": "failed", "reasons": reasons, "source": "auto"}
+
+    stats = _text_quality_stats(text)
+    total = int(stats["total"])
+    letters = int(stats["hangul"]) + int(stats["latin"])
+    digits = int(stats["digits"])
+    broken_ratio = float(stats["broken_ratio"])
+    content_lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not _is_noise_block(line)
+    ]
+    score = 100
+
+    expected_chars = max(120, page_count * 450)
+    density = min(1.0, total / expected_chars)
+    if density < 0.25:
+        score -= 35
+    elif density < 0.5:
+        score -= 18
+
+    if content_lines and len(content_lines) <= max(2, min(page_count, 5)) and total < max(160, page_count * 80):
+        score -= 15
+
+    if total >= 40:
+        symbol_digit_ratio = digits / total
+        letter_ratio = letters / total
+        if symbol_digit_ratio > 0.45 and letter_ratio < 0.35:
+            score -= 18
+        elif letter_ratio < 0.45:
+            score -= 8
+
+    if broken_ratio >= 0.05:
+        score -= 35
+    elif broken_ratio >= 0.01:
+        score -= 18
+
+    if reasons:
+        score -= min(12, len(reasons) * 4)
+
+    score = max(0, min(100, score))
+    if score >= 80 and not reasons:
+        status = "good"
+    elif score >= 55:
+        status = "review"
+    else:
+        status = "poor"
+    return {"score": score, "status": status, "reasons": reasons, "source": "auto"}
+
+
 def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
     if not ocr_text.strip():
         return False
@@ -1115,6 +1177,7 @@ def _extract_pdf_content(
     # OCR은 서버 비용·런타임 의존성이 커서 자동 실행하지 않는다. 추출 텍스트가 조금이라도 있으면 보존한다.
     scanned = len(text.strip()) == 0
     extraction_warnings = _extraction_quality_warnings(text, page_count)
+    extraction_quality = _extraction_quality(text, page_count, extraction_warnings)
 
     sections = [] if scanned else _detect_sections(text)
 
@@ -1179,6 +1242,7 @@ def _extract_pdf_content(
         "metadata_source": metadata_source,
         "metadata_confidence": metadata_confidence,
         "metadata_warnings": metadata_warnings,
+        "extraction_quality": extraction_quality,
         "scanned": scanned,
         "notice": (
             "텍스트가 추출되지 않았습니다. 스캔(이미지) PDF로 보이며 OCR이 필요합니다. "

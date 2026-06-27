@@ -36,12 +36,24 @@ import { LandingPage } from './LandingPage';
 import { QuestionsCard } from './QuestionsCard';
 import { SectionCard } from './SectionCard';
 import { TagEditor } from './TagEditor';
-import type { CitationUse } from '../types';
+import type { CitationUse, ExtractionQuality } from '../types';
 
 const SERVICE_ROUTE = 'service_home';
 
 type AppRoute = 'landing' | 'service';
 type PaperViewMode = 'text' | 'pdf';
+
+const EXTRACTION_QUALITY_LABEL: Record<ExtractionQuality['status'], string> = {
+  good: '양호',
+  review: '확인 필요',
+  poor: '낮음',
+  failed: '추출 실패',
+};
+
+function extractionQualityLabel(quality?: ExtractionQuality) {
+  if (!quality) return '';
+  return quality.source === 'user_edited' ? '사용자 보정됨' : EXTRACTION_QUALITY_LABEL[quality.status];
+}
 
 const EXPORT_OPTION_LABELS: { key: keyof ExportOptions; label: string }[] = [
   { key: 'oneLineSummary', label: '한 줄 요약' },
@@ -219,7 +231,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
   const [hiddenPaperNotices, setHiddenPaperNotices] = useState<Set<string>>(() => new Set());
   const missingPdfNoticeKey = paper ? `missing-pdf:${paper.id}:${needsPdfText(paper)}` : '';
   const metadataNoticeKey = paper
-    ? `metadata:${paper.id}:${(paper.metadataWarnings ?? []).join('\u001f')}`
+    ? `metadata:${paper.id}:${paper.extractionQuality?.status ?? ''}:${paper.extractionQuality?.source ?? ''}:${(paper.metadataWarnings ?? []).join('\u001f')}`
     : '';
   const hidePaperNotice = (key: string) => {
     if (!key) return;
@@ -237,6 +249,16 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
     ? hiddenPaperNotices.has(missingPdfNoticeKey)
     : false;
   const metadataNoticeHidden = metadataNoticeKey ? hiddenPaperNotices.has(metadataNoticeKey) : false;
+  const extractionQuality = paper?.extractionQuality;
+  const extractionQualityText = extractionQualityLabel(extractionQuality);
+  const shouldShowTextStatusNotice = Boolean(
+    paper
+      && (
+        (paper.metadataWarnings?.length ?? 0) > 0
+        || extractionQuality?.source === 'user_edited'
+        || (extractionQuality && extractionQuality.status !== 'good')
+      ),
+  );
 
   useEffect(() => {
     setPaperViewMode('text');
@@ -259,12 +281,21 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
   };
 
   const saveSourceEdit = () => {
-    updatePaper({ text: sourceDraft });
+    updatePaper({
+      text: sourceDraft,
+      extractionQuality: {
+        score: 100,
+        status: 'good',
+        reasons: [],
+        source: 'user_edited',
+      },
+    });
     setSourceEditOpen(false);
     setSyncNotice({
       tone: 'info',
       title: '원문 텍스트 저장',
-      message: '직접 입력한 원문이 저장 대상에 포함됩니다. 기존 하이라이트 위치는 원문 변경 후 달라질 수 있습니다.',
+      message:
+        '추출 품질: 사용자 보정됨. 직접 입력한 원문이 저장 대상에 포함됩니다. 기존 하이라이트 위치는 원문 변경 후 달라질 수 있습니다.',
     });
   };
 
@@ -658,10 +689,10 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                     원문 PDF 연결 알림 보기
                   </button>
                 )}
-                {paper.metadataWarnings && paper.metadataWarnings.length > 0 && !metadataNoticeHidden && (
+                {shouldShowTextStatusNotice && !metadataNoticeHidden && (
                   <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
                     <div className="mb-1 flex items-start justify-between gap-2">
-                      <div className="font-semibold">원문 텍스트 확인 필요</div>
+                      <div className="font-semibold">원문 텍스트 상태</div>
                       <button
                         type="button"
                         className="shrink-0 leading-none hover:text-ink"
@@ -672,14 +703,26 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                         ×
                       </button>
                     </div>
-                    <p>
-                      PDF에서 일부 수식이나 특수 문자가 텍스트로 정확히 변환되지 않았을 수 있습니다.
-                    </p>
-                    <ul className="mt-2 list-disc space-y-1 pl-4">
-                      {paper.metadataWarnings.map((warning, index) => (
-                        <li key={`${warning}-${index}`}>{warning}</li>
-                      ))}
-                    </ul>
+                    {extractionQuality && (
+                      <p>
+                        추출 품질: {extractionQualityText} ({extractionQuality.score}/100)
+                        {extractionQuality.source === 'user_edited'
+                          ? ' · 사용자가 원문을 직접 보정했습니다.'
+                          : ' · 필요하면 PDF 원본과 대조한 뒤 원문을 편집하세요.'}
+                      </p>
+                    )}
+                    {(paper.metadataWarnings?.length ?? 0) > 0 && (
+                      <>
+                        <p className="mt-2">
+                          PDF에서 일부 수식이나 특수 문자가 텍스트로 정확히 변환되지 않았을 수 있습니다.
+                        </p>
+                        <ul className="mt-2 list-disc space-y-1 pl-4">
+                          {(paper.metadataWarnings ?? []).map((warning, index) => (
+                            <li key={`${warning}-${index}`}>{warning}</li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

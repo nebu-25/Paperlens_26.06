@@ -46,11 +46,24 @@ class TestRoundTrip:
         assert {"paper_metadata", "paper_texts", "review_notes", "paper_files"}.issubset(tables)
 
     def test_upsert_get_delete(self, db):
-        paper = {"title": "T", "authors": "A", "link": "L", "text": "body"}
+        paper = {
+            "title": "T",
+            "authors": "A",
+            "link": "L",
+            "text": "body",
+            "extractionQuality": {
+                "score": 64,
+                "status": "review",
+                "reasons": ["추출량 확인 필요"],
+                "source": "auto",
+            },
+        }
         db.upsert_note(USER_ID, "n1", paper, {"tags": ["x"]})
         got = db.get_note(USER_ID, "n1")
         assert got is not None
         assert got["paper"]["title"] == "T"
+        assert got["paper"]["extractionQuality"]["status"] == "review"
+        assert got["paper"]["extractionQuality"]["score"] == 64
         assert got["note"]["tags"] == ["x"]
 
         db.delete_note(USER_ID, "n1")

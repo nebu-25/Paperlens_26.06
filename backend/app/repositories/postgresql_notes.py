@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS paper_metadata (
   metadata_source     TEXT NOT NULL DEFAULT '',
   metadata_confidence TEXT NOT NULL DEFAULT '',
   metadata_warnings   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  extraction_quality  JSONB NOT NULL DEFAULT '{}'::jsonb,
   pdf_filename        TEXT NOT NULL DEFAULT '',
   created_at          TIMESTAMPTZ NOT NULL,
   updated_at          TIMESTAMPTZ NOT NULL
@@ -68,6 +69,7 @@ CREATE TABLE IF NOT EXISTS papers (
   metadata_source     TEXT NOT NULL DEFAULT '',
   metadata_confidence TEXT NOT NULL DEFAULT '',
   metadata_warnings   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  extraction_quality  JSONB NOT NULL DEFAULT '{}'::jsonb,
   pdf_filename        TEXT NOT NULL DEFAULT '',
   pdf_content         BYTEA,
   text                TEXT NOT NULL DEFAULT '',
@@ -103,9 +105,15 @@ class PostgreSQLNotesRepository:
         with self.connect() as conn:
             _execute_script(conn, _LEGACY_SCHEMA)
             conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS user_id UUID")
+            conn.execute(
+                "ALTER TABLE papers ADD COLUMN IF NOT EXISTS extraction_quality JSONB NOT NULL DEFAULT '{}'::jsonb"
+            )
             conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS pdf_filename TEXT NOT NULL DEFAULT ''")
             conn.execute("ALTER TABLE papers ADD COLUMN IF NOT EXISTS pdf_content BYTEA")
             _execute_script(conn, _SCHEMA)
+            conn.execute(
+                "ALTER TABLE paper_metadata ADD COLUMN IF NOT EXISTS extraction_quality JSONB NOT NULL DEFAULT '{}'::jsonb"
+            )
             self._migrate_from_legacy_papers(conn)
 
     def _migrate_from_legacy_papers(self, conn) -> None:
@@ -113,11 +121,11 @@ class PostgreSQLNotesRepository:
             """
             INSERT INTO paper_metadata (
               id, user_id, title, authors, link, doi, source_key, suggested_tags,
-              metadata_source, metadata_confidence, metadata_warnings, pdf_filename,
+              metadata_source, metadata_confidence, metadata_warnings, extraction_quality, pdf_filename,
               created_at, updated_at
             )
             SELECT id, user_id, title, authors, link, doi, source_key, suggested_tags,
-                   metadata_source, metadata_confidence, metadata_warnings, pdf_filename,
+                   metadata_source, metadata_confidence, metadata_warnings, extraction_quality, pdf_filename,
                    created_at, updated_at
             FROM papers
             WHERE user_id IS NOT NULL
@@ -205,13 +213,13 @@ class PostgreSQLNotesRepository:
                 """
                 INSERT INTO paper_metadata (
                   id, user_id, title, authors, link, doi, source_key, suggested_tags,
-                  metadata_source, metadata_confidence, metadata_warnings, pdf_filename,
+                  metadata_source, metadata_confidence, metadata_warnings, extraction_quality, pdf_filename,
                   created_at, updated_at
                 )
                 VALUES (
                   %(id)s, %(user_id)s, %(title)s, %(authors)s, %(link)s, %(doi)s, %(source_key)s,
                   %(suggested_tags)s, %(metadata_source)s, %(metadata_confidence)s,
-                  %(metadata_warnings)s, %(pdf_filename)s, %(now)s, %(now)s
+                  %(metadata_warnings)s, %(extraction_quality)s, %(pdf_filename)s, %(now)s, %(now)s
                 )
                 ON CONFLICT(id) DO UPDATE SET
                   title=excluded.title, authors=excluded.authors,
@@ -220,6 +228,7 @@ class PostgreSQLNotesRepository:
                   metadata_source=excluded.metadata_source,
                   metadata_confidence=excluded.metadata_confidence,
                   metadata_warnings=excluded.metadata_warnings,
+                  extraction_quality=excluded.extraction_quality,
                   pdf_filename=CASE
                     WHEN excluded.pdf_filename = '' THEN paper_metadata.pdf_filename
                     ELSE excluded.pdf_filename
@@ -311,6 +320,7 @@ class PostgreSQLNotesRepository:
             "metadata_source": str(paper.get("metadataSource", "")),
             "metadata_confidence": str(paper.get("metadataConfidence", "")),
             "metadata_warnings": jsonb(paper.get("metadataWarnings") or []),
+            "extraction_quality": jsonb(paper.get("extractionQuality") or {}),
             "pdf_filename": str(paper.get("pdfFilename", "")),
             "now": now,
         }
@@ -328,6 +338,7 @@ class PostgreSQLNotesRepository:
             "metadataSource": row["metadata_source"],
             "metadataConfidence": row["metadata_confidence"],
             "metadataWarnings": row.get("metadata_warnings") or [],
+            "extractionQuality": row.get("extraction_quality") or {},
             "pdfFilename": pdf_filename,
             "pdfUrl": f"/api/papers/{row['id']}/pdf" if pdf_filename else "",
             "text": (row.get("text") or "") if include_text else "",

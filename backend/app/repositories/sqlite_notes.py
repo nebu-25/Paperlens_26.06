@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS paper_metadata (
   metadata_source     TEXT NOT NULL DEFAULT '',
   metadata_confidence TEXT NOT NULL DEFAULT '',
   metadata_warnings   TEXT NOT NULL DEFAULT '[]',
+  extraction_quality  TEXT NOT NULL DEFAULT '{}',
   pdf_filename        TEXT NOT NULL DEFAULT '',
   created_at          TEXT NOT NULL,
   updated_at          TEXT NOT NULL
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS papers (
   metadata_source TEXT NOT NULL DEFAULT '',
   metadata_confidence TEXT NOT NULL DEFAULT '',
   metadata_warnings TEXT NOT NULL DEFAULT '[]',
+  extraction_quality TEXT NOT NULL DEFAULT '{}',
   pdf_filename TEXT NOT NULL DEFAULT '',
   pdf_content  BLOB,
   text       TEXT NOT NULL DEFAULT '',
@@ -105,6 +107,7 @@ class SQLiteNotesRepository:
             conn.executescript(_LEGACY_SCHEMA)
             self._migrate_legacy_columns(conn)
             conn.executescript(_SCHEMA)
+            self._migrate_split_columns(conn)
             self._migrate_from_legacy_papers(conn)
             conn.commit()
         finally:
@@ -128,6 +131,9 @@ class SQLiteNotesRepository:
             "metadata_warnings": (
                 "ALTER TABLE papers ADD COLUMN metadata_warnings TEXT NOT NULL DEFAULT '[]'"
             ),
+            "extraction_quality": (
+                "ALTER TABLE papers ADD COLUMN extraction_quality TEXT NOT NULL DEFAULT '{}'"
+            ),
             "pdf_filename": "ALTER TABLE papers ADD COLUMN pdf_filename TEXT NOT NULL DEFAULT ''",
             "pdf_content": "ALTER TABLE papers ADD COLUMN pdf_content BLOB",
         }
@@ -135,16 +141,23 @@ class SQLiteNotesRepository:
             if column not in columns:
                 conn.execute(statement)
 
+    def _migrate_split_columns(self, conn: sqlite3.Connection) -> None:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(paper_metadata)").fetchall()}
+        if "extraction_quality" not in columns:
+            conn.execute(
+                "ALTER TABLE paper_metadata ADD COLUMN extraction_quality TEXT NOT NULL DEFAULT '{}'"
+            )
+
     def _migrate_from_legacy_papers(self, conn: sqlite3.Connection) -> None:
         conn.execute(
             """
             INSERT OR IGNORE INTO paper_metadata (
               id, user_id, title, authors, link, doi, source_key, suggested_tags,
-              metadata_source, metadata_confidence, metadata_warnings, pdf_filename,
+              metadata_source, metadata_confidence, metadata_warnings, extraction_quality, pdf_filename,
               created_at, updated_at
             )
             SELECT id, user_id, title, authors, link, doi, source_key, suggested_tags,
-                   metadata_source, metadata_confidence, metadata_warnings, pdf_filename,
+                   metadata_source, metadata_confidence, metadata_warnings, extraction_quality, pdf_filename,
                    created_at, updated_at
             FROM papers
             """
@@ -229,6 +242,7 @@ class SQLiteNotesRepository:
         note_json = json.dumps(note, ensure_ascii=False)
         suggested_tags_json = json.dumps(paper.get("suggestedTags") or [], ensure_ascii=False)
         metadata_warnings_json = json.dumps(paper.get("metadataWarnings") or [], ensure_ascii=False)
+        extraction_quality_json = json.dumps(paper.get("extractionQuality") or {}, ensure_ascii=False)
         text = str(paper.get("text", ""))
         conn = self.connect()
         try:
@@ -236,12 +250,12 @@ class SQLiteNotesRepository:
                 """
                 INSERT INTO paper_metadata (
                   id, user_id, title, authors, link, doi, source_key, suggested_tags,
-                  metadata_source, metadata_confidence, metadata_warnings, pdf_filename,
+                  metadata_source, metadata_confidence, metadata_warnings, extraction_quality, pdf_filename,
                   created_at, updated_at
                 )
                 VALUES (
                   :id, :user_id, :title, :authors, :link, :doi, :source_key, :suggested_tags,
-                  :metadata_source, :metadata_confidence, :metadata_warnings, :pdf_filename,
+                  :metadata_source, :metadata_confidence, :metadata_warnings, :extraction_quality, :pdf_filename,
                   :now, :now
                 )
                 ON CONFLICT(id) DO UPDATE SET
@@ -251,6 +265,7 @@ class SQLiteNotesRepository:
                   metadata_source=excluded.metadata_source,
                   metadata_confidence=excluded.metadata_confidence,
                   metadata_warnings=excluded.metadata_warnings,
+                  extraction_quality=excluded.extraction_quality,
                   pdf_filename=CASE
                     WHEN excluded.pdf_filename = '' THEN paper_metadata.pdf_filename
                     ELSE excluded.pdf_filename
@@ -258,7 +273,15 @@ class SQLiteNotesRepository:
                   updated_at=excluded.updated_at
                 WHERE paper_metadata.user_id = excluded.user_id
                 """,
-                self._paper_params(user_id, note_id, paper, now, suggested_tags_json, metadata_warnings_json),
+                self._paper_params(
+                    user_id,
+                    note_id,
+                    paper,
+                    now,
+                    suggested_tags_json,
+                    metadata_warnings_json,
+                    extraction_quality_json,
+                ),
             )
             if text:
                 conn.execute(
@@ -348,6 +371,7 @@ class SQLiteNotesRepository:
         now: str,
         suggested_tags_json: str,
         metadata_warnings_json: str,
+        extraction_quality_json: str,
     ) -> dict[str, object]:
         return {
             "id": note_id,
@@ -361,6 +385,7 @@ class SQLiteNotesRepository:
             "metadata_source": str(paper.get("metadataSource", "")),
             "metadata_confidence": str(paper.get("metadataConfidence", "")),
             "metadata_warnings": metadata_warnings_json,
+            "extraction_quality": extraction_quality_json,
             "pdf_filename": str(paper.get("pdfFilename", "")),
             "now": now,
         }
@@ -378,6 +403,7 @@ class SQLiteNotesRepository:
             "metadataSource": row["metadata_source"],
             "metadataConfidence": row["metadata_confidence"],
             "metadataWarnings": json.loads(row["metadata_warnings"] or "[]"),
+            "extractionQuality": json.loads(row["extraction_quality"] or "{}"),
             "pdfFilename": pdf_filename,
             "pdfUrl": f"/api/papers/{row['id']}/pdf" if pdf_filename else "",
             "text": (row["text"] or "") if include_text else "",

@@ -219,6 +219,30 @@ class TestExtractionQualityWarnings:
         assert papers._extraction_quality_warnings(text, page_count=1) == []
 
 
+class TestExtractionQuality:
+    def test_failed_when_text_is_empty(self):
+        quality = papers._extraction_quality("", page_count=1)
+
+        assert quality["score"] == 0
+        assert quality["status"] == "failed"
+        assert quality["source"] == "auto"
+
+    def test_good_for_contentful_text(self):
+        text = "요약\n" + ("의료영상 데이터 표준화와 기계학습 적용을 설명하는 본문입니다. " * 20)
+        quality = papers._extraction_quality(text, page_count=1)
+
+        assert quality["status"] == "good"
+        assert int(quality["score"]) >= 80
+        assert quality["reasons"] == []
+
+    def test_review_or_poor_for_sparse_text(self):
+        quality = papers._extraction_quality("2019년 학술대회\n\n- 346 -", page_count=2)
+
+        assert quality["status"] in {"review", "poor"}
+        assert int(quality["score"]) < 80
+        assert quality["reasons"]
+
+
 class TestPreferOcrText:
     def test_prefers_ocr_when_scanned_original_is_empty(self):
         assert papers._prefer_ocr_text("", "OCR로 읽은 본문", scanned=True) is True
