@@ -38,6 +38,7 @@ import { TagEditor } from './TagEditor';
 const SERVICE_ROUTE = 'service_home';
 
 type AppRoute = 'landing' | 'service';
+type PaperViewMode = 'text' | 'pdf';
 
 function appBasePath() {
   return (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
@@ -150,6 +151,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
     exportPdf,
   } = useReviewStore({ accessToken, authReady, authEnabled });
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
+  const [paperViewMode, setPaperViewMode] = useState<PaperViewMode>('text');
   const [paperPdfObjectUrl, setPaperPdfObjectUrl] = useState('');
   const [paperPdfPreviewError, setPaperPdfPreviewError] = useState('');
   const uploadPercent = uploadPhasePercent[uploadPhase] ?? 0;
@@ -211,6 +213,14 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
     ? hiddenPaperNotices.has(missingPdfNoticeKey)
     : false;
   const metadataNoticeHidden = metadataNoticeKey ? hiddenPaperNotices.has(metadataNoticeKey) : false;
+
+  useEffect(() => {
+    setPaperViewMode('text');
+  }, [paper?.id]);
+
+  useEffect(() => {
+    if (!paperPdfUrl && paperViewMode === 'pdf') setPaperViewMode('text');
+  }, [paperPdfUrl, paperViewMode]);
 
   useEffect(() => {
     if (!paperPdfUrl) {
@@ -528,9 +538,37 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
               }`}
             >
               <div className="sticky top-0 z-10 shrink-0 border-b border-line bg-paper/95 p-5 pb-3 sm:p-6 sm:pb-3">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-base font-semibold">원문 패널</h2>
-                  <span className="rounded bg-paper px-2 py-1 text-xs text-muted">AI 없이 동작</span>
+                  <div className="flex items-center gap-2">
+                    <div className="inline-flex rounded border border-line bg-white p-1" aria-label="논문 보기 전환">
+                      <button
+                        type="button"
+                        className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold ${
+                          paperViewMode === 'text' ? 'bg-action text-white' : 'text-muted hover:bg-paper'
+                        }`}
+                        aria-pressed={paperViewMode === 'text'}
+                        onClick={() => setPaperViewMode('text')}
+                      >
+                        <Highlighter size={13} />
+                        원문
+                      </button>
+                      <button
+                        type="button"
+                        className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold ${
+                          paperViewMode === 'pdf' ? 'bg-action text-white' : 'text-muted hover:bg-paper'
+                        } disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent`}
+                        aria-pressed={paperViewMode === 'pdf'}
+                        disabled={!paperPdfUrl}
+                        title={paperPdfUrl ? '저장된 PDF 원본 보기' : 'PDF 원본이 연결되면 사용할 수 있습니다'}
+                        onClick={() => setPaperViewMode('pdf')}
+                      >
+                        <FileText size={13} />
+                        PDF
+                      </button>
+                    </div>
+                    <span className="rounded bg-paper px-2 py-1 text-xs text-muted">AI 없이 동작</span>
+                  </div>
                 </div>
                 {needsPdfText(paper) && !missingPdfNoticeHidden && (
                   <div className="mt-3 rounded border border-sky-300 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
@@ -600,30 +638,31 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                 )}
               </div>
               <div
-                className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 text-sm leading-7 text-neutral-800 sm:px-6"
+                className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm leading-7 text-neutral-800 sm:px-6"
               >
-                <section className="rounded border border-line bg-white p-4">
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-ink">하이라이트 가능한 원문</h3>
-                    <span className="text-xs text-muted">드래그 후 하이라이트/용어 추가</span>
-                  </div>
-                  <div
-                    ref={bodyRef}
-                    className="notranslate max-h-[62vh] overflow-y-auto rounded border border-line bg-paper/40 p-4"
-                    translate="no"
-                    onMouseUp={onTextMouseUp}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    <div className="notranslate select-text whitespace-pre-wrap" translate="no">
-                      {paper.text ? (
-                        bodyNodes
-                      ) : (
-                        <p className="text-xs text-muted">원문을 불러오는 중이거나 본문이 없습니다.</p>
-                      )}
+                {paperViewMode === 'text' ? (
+                  <section className="rounded border border-line bg-white p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-ink">하이라이트 가능한 원문</h3>
+                      <span className="text-xs text-muted">드래그 후 하이라이트/용어 추가</span>
                     </div>
-                  </div>
-                </section>
-                {(paperPdfObjectUrl || paperPdfPreviewError) && (
+                    <div
+                      ref={bodyRef}
+                      className="notranslate h-[calc(100vh-21rem)] min-h-[420px] overflow-y-auto rounded border border-line bg-paper/40 p-4"
+                      translate="no"
+                      onMouseUp={onTextMouseUp}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <div className="notranslate select-text whitespace-pre-wrap" translate="no">
+                        {paper.text ? (
+                          bodyNodes
+                        ) : (
+                          <p className="text-xs text-muted">원문을 불러오는 중이거나 본문이 없습니다.</p>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                ) : (
                   <section className="rounded border border-line bg-white p-4">
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <div className="min-w-0">
@@ -645,13 +684,17 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                     </div>
                     {paperPdfObjectUrl ? (
                       <iframe
-                        className="h-[72vh] min-h-[560px] w-full rounded border border-line bg-paper"
+                        className="h-[calc(100vh-21rem)] min-h-[560px] w-full rounded border border-line bg-paper"
                         title={`${paper.title || '논문'} PDF 원본`}
                         src={paperPdfObjectUrl}
                       />
-                    ) : (
+                    ) : paperPdfPreviewError ? (
                       <div className="rounded border border-line bg-paper p-3 text-xs leading-relaxed text-muted">
                         {paperPdfPreviewError}
+                      </div>
+                    ) : (
+                      <div className="rounded border border-line bg-paper p-3 text-xs leading-relaxed text-muted">
+                        PDF 원본 미리보기를 준비하고 있습니다.
                       </div>
                     )}
                   </section>
