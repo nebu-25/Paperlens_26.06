@@ -207,10 +207,21 @@ class TestPreferOcrText:
         assert papers._prefer_ocr_text(original, "짧음", scanned=False) is False
 
 
+class TestSparseExtraction:
+    def test_detects_sparse_header_only_text(self):
+        text = "2019년 춘계학술발표대회 논문집 제26권 제1호(2019. 5)\n\nL L L L\n"
+        assert papers._looks_like_sparse_extraction(text, page_count=2) is True
+
+    def test_keeps_contentful_text(self):
+        text = "요약\n" + ("의료영상 데이터 표준화와 기계학습 적용을 설명하는 본문입니다. " * 8)
+        assert papers._looks_like_sparse_extraction(text, page_count=1) is False
+
+
 class TestNoiseBlock:
     def test_page_number_is_noise(self):
         assert papers._is_noise_block("3") is True
         assert papers._is_noise_block("  12 ") is True
+        assert papers._is_noise_block("- 346 -") is True
 
     def test_arxiv_stamp_is_noise(self):
         assert papers._is_noise_block("arXiv:1706.03762v7  [cs.CL]  2 Aug 2023") is True
@@ -297,6 +308,28 @@ class TestReflowDocument:
         assert text.index("Abstract full width sentence.") < text.index("Left body one")
         assert text.index("Keywords full width.") < text.index("Left body one")
         assert text.index("Left body four") < text.index("Right body one")
+
+    def test_removes_repeated_running_header_in_short_documents(self):
+        header = "2019년 춘계학술발표대회 논문집 제26권 제1호(2019. 5)"
+        page1 = FakePage(
+            [
+                {"text": header, "x0": 80, "x1": 520, "y0": 20, "y1": 32},
+                {"text": "- 346 -", "x0": 285, "x1": 315, "y0": 750, "y1": 762},
+            ]
+        )
+        page2 = FakePage(
+            [
+                {"text": header, "x0": 80, "x1": 520, "y0": 20, "y1": 32},
+                {"text": "- 347 -", "x0": 285, "x1": 315, "y0": 750, "y1": 762},
+            ]
+        )
+
+        text = papers._reflow_document(FakeDocument([page1, page2]))
+
+        assert header not in text
+        assert "346" not in text
+        assert "347" not in text
+        assert papers._looks_like_sparse_extraction(text, page_count=2) is True
 
 
 class TestArxivId:

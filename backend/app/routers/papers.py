@@ -534,6 +534,8 @@ def _is_noise_block(para: str) -> bool:
         return True
     if stripped.isdigit() and len(stripped) <= 4:  # 단독 페이지 번호
         return True
+    if re.fullmatch(r"[-–—]\s*\d{1,4}\s*[-–—]", stripped):  # "- 346 -" 형태 페이지 번호
+        return True
     if stripped.casefold().startswith("arxiv:"):  # 측면 세로 arXiv 스탬프(식별자는 따로 추출)
         return True
     return False
@@ -673,7 +675,7 @@ def _detect_running_lines(pages_lines: list[list[dict[str, object]]], page_count
             norm for line in lines if len(norm := _norm_running(str(line["text"]))) >= 6
         }
         counts.update(seen)
-    threshold = max(3, int(page_count * 0.4))
+    threshold = 2 if page_count <= 3 else max(3, int(page_count * 0.4))
     return {norm for norm, count in counts.items() if count >= threshold}
 
 
@@ -813,6 +815,26 @@ def _text_quality_notice(text: str) -> str | None:
         "본문 문장 하이라이트는 사용할 수 있지만, 수식은 PDF 원본 보기에서 확인해 주세요."
         f"{sample_notice}"
     )
+
+
+def _looks_like_sparse_extraction(text: str, page_count: int) -> bool:
+    """텍스트 레이어가 사실상 헤더/페이지 번호만 남은 경우 OCR 대상으로 본다."""
+    visible = re.sub(r"\s+", "", text)
+    if not visible:
+        return True
+    content_lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not _is_noise_block(line)
+    ]
+    if page_count >= 2 and len(content_lines) <= 2:
+        return True
+    stats = _text_quality_stats(text)
+    total = int(stats["total"])
+    letters = int(stats["hangul"]) + int(stats["latin"])
+    if total < max(60, page_count * 40):
+        return True
+    return letters < max(30, total * 0.25)
 
 
 def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
@@ -962,8 +984,8 @@ def _extract_pdf_content(
         db.store_pdf(user_id, paper_id.strip(), pdf_filename, content)
         pdf_url = f"/api/papers/{paper_id.strip()}/pdf"
 
-    # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 OCR이 필요하다(기획서 FS-01).
-    scanned = len(text.strip()) == 0
+    # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있거나 헤더/페이지 번호만 남으면 OCR이 필요하다.
+    scanned = len(text.strip()) == 0 or _looks_like_sparse_extraction(text, page_count)
     text_notice = _text_quality_notice(text)
     ocr_warning = None
     if scanned or text_notice:
