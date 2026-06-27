@@ -1,10 +1,20 @@
 // 리뷰 노트 내보내기 (FR-11) — 작성된 9영역을 통합. 토글과 무관하게 내용이 있는
 // 섹션별 요약/템플릿을 모두 포함해 사용자가 쓴 내용을 잃지 않는다.
-import { MEMO_SECTIONS, TEMPLATE_QUESTIONS } from '../constants';
-import type { Paper, ReviewNote } from '../types';
+import { HIGHLIGHT_COLORS, MEMO_SECTIONS, TEMPLATE_QUESTIONS } from '../constants';
+import type { Highlight, HighlightColor, Paper, ReviewNote } from '../types';
 
 export const safeFilename = (title: string) =>
   title.replace(/[^\w가-힣 .-]/g, '_').trim().slice(0, 80) || 'review-note';
+
+const highlightMeta = (color?: HighlightColor) =>
+  HIGHLIGHT_COLORS.find((item) => item.value === color) ?? HIGHLIGHT_COLORS[0];
+
+function groupedHighlights(highlights: Highlight[]) {
+  return HIGHLIGHT_COLORS.map((meta) => ({
+    ...meta,
+    highlights: highlights.filter((h) => (h.color ?? 'yellow') === meta.value),
+  })).filter((group) => group.highlights.length > 0);
+}
 
 export function buildMarkdown(paper: Paper, note: ReviewNote): string {
   const out: string[] = [];
@@ -41,7 +51,10 @@ export function buildMarkdown(paper: Paper, note: ReviewNote): string {
 
   if (note.highlights.length) {
     out.push('## 핵심 문장 하이라이트', '');
-    for (const h of note.highlights) out.push(`> ${h.text}`, '');
+    for (const group of groupedHighlights(note.highlights)) {
+      out.push(`### ${group.label} (${group.meaning})`, '');
+      for (const h of group.highlights) out.push(`> ${h.text}`, '');
+    }
   }
 
   const memos = MEMO_SECTIONS.filter((s) => (note.memos[s] ?? '').trim());
@@ -100,7 +113,13 @@ export function buildPrintHtml(paper: Paper, note: ReviewNote): string {
 
   if (note.highlights.length) {
     b.push('<h2>핵심 문장 하이라이트</h2>');
-    for (const h of note.highlights) b.push(`<blockquote>${escapeHtml(h.text)}</blockquote>`);
+    for (const group of groupedHighlights(note.highlights)) {
+      b.push(`<h3>${escapeHtml(group.label)} (${escapeHtml(group.meaning)})</h3>`);
+      for (const h of group.highlights) {
+        const meta = highlightMeta(h.color);
+        b.push(`<blockquote class="highlight-${meta.value}">${escapeHtml(h.text)}</blockquote>`);
+      }
+    }
   }
 
   const memos = MEMO_SECTIONS.filter((s) => (note.memos[s] ?? '').trim());
@@ -116,6 +135,10 @@ export function buildPrintHtml(paper: Paper, note: ReviewNote): string {
     h1{font-size:24px;margin:0 0 12px;} h2{font-size:18px;margin:28px 0 8px;border-bottom:1px solid #dfdcd3;padding-bottom:4px;}
     h3{font-size:15px;margin:16px 0 4px;} ul.meta{list-style:none;padding:0;color:#66625d;font-size:14px;}
     blockquote{margin:8px 0;padding:8px 14px;background:#fffbe6;border-left:3px solid #f0c000;}
+    .highlight-green{background:#ecfdf5;border-left-color:#10b981;}
+    .highlight-blue{background:#f0f9ff;border-left-color:#0ea5e9;}
+    .highlight-pink{background:#fff1f2;border-left-color:#f43f5e;}
+    .highlight-orange{background:#fff7ed;border-left-color:#f97316;}
     p{margin:6px 0;}
   </style></head><body>${b.join(
     '',

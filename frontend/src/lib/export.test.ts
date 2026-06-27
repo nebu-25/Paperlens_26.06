@@ -63,6 +63,22 @@ describe('buildMarkdown', () => {
     expect(md).toContain('## 수동 요약 템플릿');
     expect(md).toContain('tmpl answer');
   });
+
+  it('groups highlights by review label', () => {
+    const note: ReviewNote = {
+      ...baseNote,
+      highlights: [
+        { id: 'a', text: 'core sentence', color: 'yellow' },
+        { id: 'b', text: 'method sentence', color: 'green' },
+        { id: 'c', text: 'result sentence', color: 'blue' },
+      ],
+    };
+    const md = buildMarkdown(paper, note);
+    expect(md).toContain('### 핵심 (핵심 주장)');
+    expect(md).toContain('### 방법 (방법론)');
+    expect(md).toContain('### 결과 (결과)');
+    expect(md.indexOf('core sentence')).toBeLessThan(md.indexOf('method sentence'));
+  });
 });
 
 describe('buildPrintHtml', () => {
@@ -80,5 +96,15 @@ describe('buildPrintHtml', () => {
     const html = buildPrintHtml(paper, baseNote);
     expect(html.startsWith('<!doctype html>')).toBe(true);
     expect(html).toContain('Attention Is All You Need');
+  });
+
+  it('prints highlights with label headings and color classes', () => {
+    const note: ReviewNote = {
+      ...baseNote,
+      highlights: [{ id: 'h', text: 'method sentence', color: 'green' }],
+    };
+    const html = buildPrintHtml(paper, note);
+    expect(html).toContain('<h3>방법 (방법론)</h3>');
+    expect(html).toContain('class="highlight-green"');
   });
 });

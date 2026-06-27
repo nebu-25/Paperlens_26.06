@@ -222,6 +222,59 @@ class TestNoiseBlock:
         assert papers._is_noise_block("We propose a new architecture.") is False
 
 
+class FakePage:
+    def __init__(self, lines):
+        self._lines = lines
+
+    def get_text(self, mode):
+        assert mode == "dict"
+        return {
+            "blocks": [
+                {
+                    "type": 0,
+                    "lines": [
+                        {
+                            "bbox": [line["x0"], line["y0"], line["x1"], line["y1"]],
+                            "spans": [{"text": line["text"], "size": line.get("size", 10)}],
+                        }
+                        for line in self._lines
+                    ],
+                }
+            ]
+        }
+
+
+class FakeDocument:
+    def __init__(self, pages):
+        self._pages = pages
+        self.page_count = len(pages)
+
+    def __iter__(self):
+        return iter(self._pages)
+
+
+class TestReflowDocument:
+    def test_reads_two_columns_before_switching_to_right_column(self):
+        page = FakePage(
+            [
+                {"text": "Left one", "x0": 50, "x1": 240, "y0": 100, "y1": 110},
+                {"text": "Right one", "x0": 320, "x1": 520, "y0": 100, "y1": 110},
+                {"text": "Left two", "x0": 50, "x1": 240, "y0": 112, "y1": 122},
+                {"text": "Right two", "x0": 320, "x1": 520, "y0": 112, "y1": 122},
+                {"text": "Left three", "x0": 50, "x1": 240, "y0": 124, "y1": 134},
+                {"text": "Right three", "x0": 320, "x1": 520, "y0": 124, "y1": 134},
+                {"text": "Left four", "x0": 50, "x1": 240, "y0": 136, "y1": 146},
+                {"text": "Right four", "x0": 320, "x1": 520, "y0": 136, "y1": 146},
+            ]
+        )
+
+        text = papers._reflow_document(FakeDocument([page]))
+
+        assert text.index("Left one") < text.index("Left four")
+        assert text.index("Left four") < text.index("Right one")
+        assert "Left one Right one Left two" not in text
+
+
 class TestArxivId:
     def test_new_style(self):
         assert papers._find_arxiv_id("see arXiv:1706.03762v7 [cs.CL]", {}) == "1706.03762v7"

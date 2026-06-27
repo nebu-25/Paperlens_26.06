@@ -556,6 +556,7 @@ def _page_text_lines(page) -> list[dict[str, object]]:
                 {
                     "text": text,
                     "x0": float(bbox[0]),
+                    "x1": float(bbox[2]),
                     "y0": float(bbox[1]),
                     "y1": float(bbox[3]),
                     "size": max(sizes) if sizes else 0.0,
@@ -563,6 +564,78 @@ def _page_text_lines(page) -> list[dict[str, object]]:
             )
     lines.sort(key=lambda item: (round(float(item["y0"])), float(item["x0"])))
     return lines
+
+
+def _page_width_from_lines(lines: list[dict[str, object]]) -> float:
+    if not lines:
+        return 0.0
+    return max(float(line["x1"]) for line in lines)
+
+
+def _median(values: list[float]) -> float:
+    return statistics.median(values) if values else 0.0
+
+
+def _split_page_columns(lines: list[dict[str, object]], page_width: float) -> list[list[dict[str, object]]]:
+    """한 페이지의 줄들을 읽기 순서 단위로 나눈다.
+
+    PDF 추출 좌표를 y→x로 단순 정렬하면 2단 논문에서 왼쪽/오른쪽 컬럼의 같은 높이 줄이
+    서로 섞인다. 좌우 컬럼이 충분히 보이면 전체 폭을 가로지르는 제목/표제 줄은 앞뒤로 두고,
+    본문은 왼쪽 컬럼 전체를 읽은 다음 오른쪽 컬럼을 읽도록 분리한다.
+    """
+    if not lines or page_width <= 0:
+        return [lines]
+
+    narrow = [
+        line
+        for line in lines
+        if (float(line["x1"]) - float(line["x0"])) <= page_width * 0.55
+    ]
+    if len(narrow) < 8:
+        return [lines]
+
+    page_mid = page_width / 2
+    left_x0 = [float(line["x0"]) for line in narrow if float(line["x0"]) < page_mid]
+    right_x0 = [float(line["x0"]) for line in narrow if float(line["x0"]) >= page_mid]
+    if len(left_x0) < 4 or len(right_x0) < 4:
+        return [lines]
+
+    left_anchor = _median(left_x0)
+    right_anchor = _median(right_x0)
+    if right_anchor - left_anchor < page_width * 0.25:
+        return [lines]
+
+    split_x = (left_anchor + right_anchor) / 2
+    left: list[dict[str, object]] = []
+    right: list[dict[str, object]] = []
+    full_width: list[dict[str, object]] = []
+    for line in lines:
+        x0 = float(line["x0"])
+        x1 = float(line["x1"])
+        width = x1 - x0
+        if width > page_width * 0.55:
+            full_width.append(line)
+        elif (x0 + x1) / 2 < split_x:
+            left.append(line)
+        else:
+            right.append(line)
+    if len(left) < 4 or len(right) < 4:
+        return [lines]
+
+    column_lines = set(id(line) for line in left + right)
+    full_width.extend(line for line in lines if id(line) not in column_lines and line not in full_width)
+    first_column_y = min(float(line["y0"]) for line in left + right)
+    last_column_y = max(float(line["y1"]) for line in left + right)
+    before = [line for line in full_width if float(line["y1"]) <= first_column_y]
+    after = [line for line in full_width if float(line["y0"]) >= last_column_y]
+    middle = [line for line in full_width if line not in before and line not in after]
+
+    groups = [before, left, right, middle, after]
+    return [
+        sorted(group, key=lambda item: (round(float(item["y0"])), float(item["x0"])))
+        for group in groups
+        if group
+    ]
 
 
 def _norm_running(text: str) -> str:
@@ -582,6 +655,41 @@ def _detect_running_lines(pages_lines: list[list[dict[str, object]]], page_count
     return {norm for norm, count in counts.items() if count >= threshold}
 
 
+def _reflow_lines(lines: list[dict[str, object]]) -> list[str]:
+    if not lines:
+        return []
+
+    left = Counter(round(float(line["x0"])) for line in lines).most_common(1)[0][0]
+    heights = [float(line["y1"]) - float(line["y0"]) for line in lines if line["y1"] > line["y0"]]
+    line_h = statistics.median(heights) if heights else 12.0
+
+    paragraphs: list[str] = []
+    current: list[str] = []
+    prev: dict[str, object] | None = None
+    for line in lines:
+        if prev is None:
+            start_new = True
+        else:
+            gap = float(line["y0"]) - float(prev["y1"])
+            # 단락 내 줄 간격은 작고 단락 사이는 크다 → 간격이 주 신호.
+            big_gap = gap > line_h * 0.8
+            # 큰 글자(헤딩)는 새 문단.
+            heading = float(line["size"]) > float(prev["size"]) * 1.2
+            # 들여쓰기는 '작은(1~2em) 들여쓰기'일 때만 단락 시작으로 본다. 수식·다열 등 큰
+            # x0 점프는 무시해 arXiv류 본문이 과편화되지 않게 한다.
+            indent = float(line["x0"]) - left
+            small_indent = line_h * 0.4 <= indent <= line_h * 2.0
+            start_new = big_gap or heading or small_indent
+        if start_new and current:
+            paragraphs.append(_join_lines(current))
+            current = []
+        current.append(str(line["text"]))
+        prev = line
+    if current:
+        paragraphs.append(_join_lines(current))
+    return [_tidy_spacing(p) for p in paragraphs if p]
+
+
 def _reflow_document(document) -> str:
     """줄 단위로 문단을 재구성해 자연스럽게 읽히는 텍스트를 만든다.
 
@@ -589,13 +697,14 @@ def _reflow_document(document) -> str:
     문장이 토막난다. 여기서는 줄의 좌표·글자크기를 보고 한 문단에 속한 줄들을 이어 붙인다.
     문단 경계는 (a) 들여쓰기된 첫 줄, (b) 평소보다 큰 세로 간격, (c) 큰 글자(헤딩)로 판단한다.
     페이지 번호·arXiv 스탬프 같은 noise와 여러 페이지에 반복되는 러닝 헤더/푸터는 제외한다.
-    (2단 컬럼은 best-effort: 한 컬럼 기준으로 동작한다.)
+    2단 컬럼은 좌우 컬럼을 감지해 왼쪽 컬럼 전체를 먼저 읽고 오른쪽 컬럼으로 넘어간다.
     """
-    pages_lines = [_page_text_lines(page) for page in document]
+    pages = list(document)
+    pages_lines = [_page_text_lines(page) for page in pages]
     running = _detect_running_lines(pages_lines, document.page_count)
 
     paragraphs: list[str] = []
-    for lines in pages_lines:
+    for page, lines in zip(pages, pages_lines, strict=False):
         body = [
             line
             for line in lines
@@ -604,33 +713,9 @@ def _reflow_document(document) -> str:
         ]
         if not body:
             continue
-        left = Counter(round(float(line["x0"])) for line in body).most_common(1)[0][0]
-        heights = [float(line["y1"]) - float(line["y0"]) for line in body if line["y1"] > line["y0"]]
-        line_h = statistics.median(heights) if heights else 12.0
-
-        current: list[str] = []
-        prev: dict[str, object] | None = None
-        for line in body:
-            if prev is None:
-                start_new = True
-            else:
-                gap = float(line["y0"]) - float(prev["y1"])
-                # 단락 내 줄 간격은 작고 단락 사이는 크다 → 간격이 주 신호.
-                big_gap = gap > line_h * 0.8
-                # 큰 글자(헤딩)는 새 문단.
-                heading = float(line["size"]) > float(prev["size"]) * 1.2
-                # 들여쓰기는 '작은(1~2em) 들여쓰기'일 때만 단락 시작으로 본다. 수식·다열 등 큰
-                # x0 점프는 무시해 arXiv류 본문이 과편화되지 않게 한다.
-                indent = float(line["x0"]) - left
-                small_indent = line_h * 0.4 <= indent <= line_h * 2.0
-                start_new = big_gap or heading or small_indent
-            if start_new and current:
-                paragraphs.append(_join_lines(current))
-                current = []
-            current.append(str(line["text"]))
-            prev = line
-        if current:
-            paragraphs.append(_join_lines(current))
+        page_width = float(getattr(getattr(page, "rect", None), "width", 0.0)) or _page_width_from_lines(body)
+        for group in _split_page_columns(body, page_width):
+            paragraphs.extend(_reflow_lines(group))
     return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p)
 
 
