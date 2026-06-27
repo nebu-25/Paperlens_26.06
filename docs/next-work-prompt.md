@@ -33,10 +33,6 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 저장 재시도는 실패 후 최대 5분까지 늘어나는 backoff를 사용합니다.
 - SQLite/PostgreSQL 저장소는 내부적으로 `paper_metadata`, `paper_texts`, `review_notes`, `paper_files` 분리 테이블을 사용합니다.
 - 기존 단일 `papers` 테이블은 앱 시작 시 분리 테이블로 복사하며 자동 삭제하지 않습니다.
-- 운영 PostgreSQL 스키마 분리 배포는 완료됐고, `user_id NULL` legacy row는 소유자를 확정할 수 없어 새 분리 테이블로 복사하지 않고 기존 `papers` 테이블에만 보존합니다.
-- PDF reflow는 2단 컬럼 페이지에서 왼쪽 컬럼 전체를 먼저 읽은 뒤 오른쪽 컬럼으로 넘어가도록 보정했습니다.
-- Markdown/PDF HTML 내보내기는 하이라이트를 의미 라벨(핵심, 방법, 결과, 한계, 질문)별로 그룹화합니다.
-- 최근 관련 커밋은 `788ba6a Improve paper extraction and export grouping`이며 `origin/main`에 푸시됐습니다.
 
 최근 확인된 배포/설정 주의점:
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
@@ -51,7 +47,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 직전 세션에서 사용자가 다른 값을 복사해 `psql`이 로컬 socket으로 접속하려 했습니다. 다음 세션에서는 Render `paperlens-backend > Environment`의 실제 `DATABASE_URL` 또는 PostgreSQL 리소스의 External Database URL을 먼저 확인해야 합니다.
 
 우선순위 개선 작업:
-1. 최신 main 배포 후 운영 수동 smoke test
+1. 배포 후 운영 수동 smoke test
    - GitHub Pages가 최신 JS 번들을 가리키는지 확인
    - Render가 최신 백엔드로 재배포됐는지 확인
    - /api/diagnostics 운영 응답에서 `auth.mode: supabase`, `auth.ready: true`, `auth.warnings: []` 확인
@@ -62,8 +58,6 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - PDF 원본 보기에서 401 콘솔 오류 없이 blob 미리보기가 뜨거나 fallback 안내가 뜨는지 확인
    - DOI 등록은 메타데이터/원문 별도 연결 안내가 뜨는지 확인
    - PDF 원문 URL 예: https://arxiv.org/pdf/2604.04977v1 등록 시 원문 추출과 PDF 원본 보기가 연결되는지 확인
-   - 2단 컬럼 PDF 등록 시 원문 텍스트가 좌우 줄 단위로 섞이지 않는지 확인
-   - Markdown/PDF HTML 내보내기에서 하이라이트가 의미 라벨별로 그룹화되는지 확인
    - 일반 웹페이지 URL 입력 시 PDF 원문 URL이 필요하다는 안내가 뜨고 노트가 생성되지 않는지 확인
    - 로그아웃 후 /service_home 접근 시 랜딩으로 되돌아가는지 확인
    - 결과를 docs/testing.md의 운영 체크리스트에 반영
@@ -90,10 +84,10 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - 번역 보기에서는 읽기/복사 중심으로 제공하고, 하이라이트는 원문 기준으로 저장하는 흐름 검토
    - 브라우저 번역 감지/안내 문구가 필요한지 검토
 
-6. PDF 추출 품질 개선
-   - 2단 컬럼 감지 휴리스틱이 제목/초록/표/참고문헌 페이지에서 과하게 분리되지 않는지 샘플을 늘려 확인
-   - KCI/학회지 PDF와 arXiv 논문에서 컬럼 순서, 제목/저자/소속 추정, 섹션 감지 품질 비교
-   - 추출 품질 문제가 남는 경우 원문 패널에 "PDF 원본 보기"와 "추출 텍스트 보기" 전환 안내 강화
+6. 스키마 분리 운영 검증
+   - 배포 전 운영 PostgreSQL 백업 생성
+   - 배포 후 분리 테이블 생성과 기존 `papers` 데이터 복사 여부 확인
+   - 기존 저장 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소가 정상 동작하는지 확인
 
 검증 명령:
 - cd frontend && npm run lint
@@ -101,8 +95,6 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - backend/.venv/bin/python -m pytest backend/tests/test_auth.py
 - backend/.venv/bin/python -m pytest backend/tests/test_auth.py backend/tests/test_diagnostics.py
 - backend/.venv/bin/python -m pytest backend/tests/test_auth.py backend/tests/test_diagnostics.py backend/tests/test_papers.py
-- cd backend && ./.venv/bin/pytest tests/test_papers.py
-- cd frontend && npm test -- src/lib/export.test.ts
 - curl -L -I https://nebu-25.github.io/Paperlens_26.06/
 - curl -L -I https://nebu-25.github.io/Paperlens_26.06/service_home/
 - curl -L -I https://nebu-25.github.io/Paperlens_26.06/favicon.svg
