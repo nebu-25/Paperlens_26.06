@@ -534,6 +534,8 @@ def _is_noise_block(para: str) -> bool:
         return True
     if stripped.isdigit() and len(stripped) <= 4:  # 단독 페이지 번호
         return True
+    if re.fullmatch(r"[-–—]\s*\d{1,4}\s*[-–—]", stripped):  # "- 346 -" 형태 페이지 번호
+        return True
     if stripped.casefold().startswith("arxiv:"):  # 측면 세로 arXiv 스탬프(식별자는 따로 추출)
         return True
     return False
@@ -576,6 +578,76 @@ def _median(values: list[float]) -> float:
     return statistics.median(values) if values else 0.0
 
 
+def _sorted_reading_lines(lines: list[dict[str, object]]) -> list[dict[str, object]]:
+    return sorted(lines, key=lambda item: (round(float(item["y0"])), float(item["x0"])))
+
+
+def _detect_column_layout(
+    lines: list[dict[str, object]], page_width: float
+) -> dict[str, float | str] | None:
+    """페이지가 2단 또는 상단 1단+하단 2단인지 판정한다."""
+    if not lines or page_width <= 0:
+        return None
+
+    narrow = [
+        line
+        for line in lines
+        if (float(line["x1"]) - float(line["x0"])) <= page_width * 0.55
+    ]
+    if len(narrow) < 8:
+        return None
+
+    page_mid = page_width / 2
+    preliminary_left = [line for line in narrow if (float(line["x0"]) + float(line["x1"])) / 2 < page_mid]
+    preliminary_right = [line for line in narrow if (float(line["x0"]) + float(line["x1"])) / 2 >= page_mid]
+    if len(preliminary_left) < 4 or len(preliminary_right) < 4:
+        return None
+
+    heights = [
+        float(line["y1"]) - float(line["y0"])
+        for line in preliminary_left + preliminary_right
+        if line["y1"] > line["y0"]
+    ]
+    line_h = statistics.median(heights) if heights else 12.0
+    paired_column_y = [
+        float(line["y0"])
+        for line in preliminary_left
+        if any(
+            abs(float(line["y0"]) - float(other["y0"])) <= line_h * 1.5
+            for other in preliminary_right
+        )
+    ]
+    if len(paired_column_y) < 4:
+        return None
+
+    first_column_y = min(paired_column_y)
+    body_narrow = [line for line in narrow if float(line["y0"]) >= first_column_y - line_h * 0.5]
+    body_left_x0 = [
+        float(line["x0"])
+        for line in body_narrow
+        if (float(line["x0"]) + float(line["x1"])) / 2 < page_mid
+    ]
+    body_right_x0 = [
+        float(line["x0"])
+        for line in body_narrow
+        if (float(line["x0"]) + float(line["x1"])) / 2 >= page_mid
+    ]
+    if len(body_left_x0) < 4 or len(body_right_x0) < 4:
+        return None
+
+    left_anchor = _median(body_left_x0)
+    right_anchor = _median(body_right_x0)
+    if right_anchor - left_anchor < page_width * 0.25:
+        return None
+
+    has_front_matter = any(float(line["y0"]) < first_column_y - line_h * 0.5 for line in lines)
+    return {
+        "kind": "mixed" if has_front_matter else "two_column",
+        "split_x": (left_anchor + right_anchor) / 2,
+        "first_column_y": first_column_y,
+    }
+
+
 def _split_page_columns(lines: list[dict[str, object]], page_width: float) -> list[list[dict[str, object]]]:
     """한 페이지의 줄들을 읽기 순서 단위로 나눈다.
 
@@ -586,26 +658,12 @@ def _split_page_columns(lines: list[dict[str, object]], page_width: float) -> li
     if not lines or page_width <= 0:
         return [lines]
 
-    narrow = [
-        line
-        for line in lines
-        if (float(line["x1"]) - float(line["x0"])) <= page_width * 0.55
-    ]
-    if len(narrow) < 8:
+    layout = _detect_column_layout(lines, page_width)
+    if not layout:
         return [lines]
 
-    page_mid = page_width / 2
-    left_x0 = [float(line["x0"]) for line in narrow if float(line["x0"]) < page_mid]
-    right_x0 = [float(line["x0"]) for line in narrow if float(line["x0"]) >= page_mid]
-    if len(left_x0) < 4 or len(right_x0) < 4:
-        return [lines]
-
-    left_anchor = _median(left_x0)
-    right_anchor = _median(right_x0)
-    if right_anchor - left_anchor < page_width * 0.25:
-        return [lines]
-
-    split_x = (left_anchor + right_anchor) / 2
+    split_x = float(layout["split_x"])
+    first_column_y = float(layout["first_column_y"])
     left: list[dict[str, object]] = []
     right: list[dict[str, object]] = []
     full_width: list[dict[str, object]] = []
@@ -621,15 +679,6 @@ def _split_page_columns(lines: list[dict[str, object]], page_width: float) -> li
             right.append(line)
     if len(left) < 4 or len(right) < 4:
         return [lines]
-
-    heights = [float(line["y1"]) - float(line["y0"]) for line in left + right if line["y1"] > line["y0"]]
-    line_h = statistics.median(heights) if heights else 12.0
-    paired_column_y = [
-        float(line["y0"])
-        for line in left
-        if any(abs(float(line["y0"]) - float(other["y0"])) <= line_h * 1.5 for other in right)
-    ]
-    first_column_y = min(paired_column_y) if paired_column_y else min(float(line["y0"]) for line in left + right)
 
     # 첫 페이지에 제목/저자/초록처럼 1단 영역이 있고 하단만 2단인 논문은 상단의 짧은 중앙
     # 정렬 라인도 좌/우 컬럼 후보로 잡힐 수 있다. 실제 좌우 컬럼이 동시에 시작되는 y좌표
@@ -653,11 +702,7 @@ def _split_page_columns(lines: list[dict[str, object]], page_width: float) -> li
     middle = [line for line in full_body if id(line) not in after_ids]
 
     groups = [before, left_body, right_body, middle, after]
-    return [
-        sorted(group, key=lambda item: (round(float(item["y0"])), float(item["x0"])))
-        for group in groups
-        if group
-    ]
+    return [_sorted_reading_lines(group) for group in groups if group]
 
 
 def _norm_running(text: str) -> str:
@@ -815,6 +860,43 @@ def _text_quality_notice(text: str) -> str | None:
     )
 
 
+def _extraction_quality_warnings(text: str, page_count: int) -> list[str]:
+    """추출 품질 경고를 반환한다. 텍스트 자체는 보존하고 사용자에게만 안내한다."""
+    warnings: list[str] = []
+    stripped = text.strip()
+    if not stripped:
+        warnings.append(
+            "PDF 텍스트 레이어에서 본문을 찾지 못했습니다. PDF 원본을 보며 원문 텍스트를 직접 입력할 수 있습니다."
+        )
+        return warnings
+
+    stats = _text_quality_stats(text)
+    total = int(stats["total"])
+    letters = int(stats["hangul"]) + int(stats["latin"])
+    digits = int(stats["digits"])
+    content_lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not _is_noise_block(line)
+    ]
+    if page_count >= 1 and total < max(80, page_count * 35):
+        warnings.append(
+            "추출된 텍스트가 매우 적습니다. PDF가 이미지 기반이거나 본문 텍스트 레이어가 없을 수 있습니다."
+        )
+    if content_lines and len(content_lines) <= max(2, min(page_count, 5)) and total < max(160, page_count * 80):
+        warnings.append(
+            "추출 결과가 헤더·푸터 또는 일부 줄에 치우쳐 있을 수 있습니다. PDF 원본과 대조해 주세요."
+        )
+    if total >= 40 and digits / total > 0.45 and letters / total < 0.35:
+        warnings.append(
+            "추출 결과에 숫자·기호 비율이 높습니다. 표, 페이지 번호, 수식이 본문보다 많이 잡혔을 수 있습니다."
+        )
+    broken_notice = _text_quality_notice(text)
+    if broken_notice:
+        warnings.append(broken_notice)
+    return warnings
+
+
 def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
     if not ocr_text.strip():
         return False
@@ -962,22 +1044,10 @@ def _extract_pdf_content(
         db.store_pdf(user_id, paper_id.strip(), pdf_filename, content)
         pdf_url = f"/api/papers/{paper_id.strip()}/pdf"
 
-    # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 OCR이 필요하다(기획서 FS-01).
+    # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 사용자가 직접 원문을 보완할 수 있게 안내한다.
+    # OCR은 서버 비용·런타임 의존성이 커서 자동 실행하지 않는다. 추출 텍스트가 조금이라도 있으면 보존한다.
     scanned = len(text.strip()) == 0
-    text_notice = _text_quality_notice(text)
-    ocr_warning = None
-    if scanned or text_notice:
-        ocr_text, ocr_warning = _ocr_document_text(
-            document,
-            language=settings.ocr_languages,
-            dpi=settings.ocr_dpi,
-            max_pages=settings.ocr_max_pages,
-        )
-        if _prefer_ocr_text(text, ocr_text, scanned=scanned):
-            text = ocr_text
-            scanned = False
-            text_notice = _text_quality_notice(text)
-            ocr_warning = None
+    extraction_warnings = _extraction_quality_warnings(text, page_count)
 
     sections = [] if scanned else _detect_sections(text)
 
@@ -1013,6 +1083,7 @@ def _extract_pdf_content(
     layout_authors = str(layout_meta.get("authors") or "")
     if not primary:
         metadata_warnings.extend(str(item) for item in layout_meta.get("warnings", []))
+    metadata_warnings.extend(extraction_warnings)
 
     title = primary.get("title") or layout_title or pdf_title or filename_title or "(제목 없음)"
     authors = primary.get("authors") or layout_authors or pdf_author or "저자 미상"
@@ -1044,10 +1115,9 @@ def _extract_pdf_content(
         "scanned": scanned,
         "notice": (
             "텍스트가 추출되지 않았습니다. 스캔(이미지) PDF로 보이며 OCR이 필요합니다. "
-            "메타정보·리뷰 노트는 직접 작성할 수 있습니다."
-            + (f" {ocr_warning}" if ocr_warning else "")
+            "PDF 원본을 보며 원문 텍스트를 직접 입력할 수 있습니다."
             if scanned
-            else " ".join(part for part in (text_notice, ocr_warning) if part) or None
+            else " ".join(extraction_warnings) or None
         ),
     }
 

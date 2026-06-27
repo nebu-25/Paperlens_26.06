@@ -168,6 +168,8 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
   const [paperViewMode, setPaperViewMode] = useState<PaperViewMode>('text');
   const [paperPdfObjectUrl, setPaperPdfObjectUrl] = useState('');
   const [paperPdfPreviewError, setPaperPdfPreviewError] = useState('');
+  const [sourceEditOpen, setSourceEditOpen] = useState(false);
+  const [sourceDraft, setSourceDraft] = useState('');
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const uploadPercent = uploadPhasePercent[uploadPhase] ?? 0;
   const samplePercent = samplePhasePercent[samplePhase] ?? 0;
@@ -238,11 +240,33 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
 
   useEffect(() => {
     setPaperViewMode('text');
-  }, [paper?.id]);
+    setSourceEditOpen(false);
+    setSourceDraft(paper?.text ?? '');
+  }, [paper?.id, paper?.text]);
 
   useEffect(() => {
     if (!paperPdfUrl && paperViewMode === 'pdf') setPaperViewMode('text');
   }, [paperPdfUrl, paperViewMode]);
+
+  useEffect(() => {
+    if (!sourceEditOpen) setSourceDraft(paper?.text ?? '');
+  }, [paper?.text, sourceEditOpen]);
+
+  const openSourceEdit = () => {
+    setPaperViewMode('text');
+    setSourceDraft(paper?.text ?? '');
+    setSourceEditOpen(true);
+  };
+
+  const saveSourceEdit = () => {
+    updatePaper({ text: sourceDraft });
+    setSourceEditOpen(false);
+    setSyncNotice({
+      tone: 'info',
+      title: '원문 텍스트 저장',
+      message: '직접 입력한 원문이 저장 대상에 포함됩니다. 기존 하이라이트 위치는 원문 변경 후 달라질 수 있습니다.',
+    });
+  };
 
   useEffect(() => {
     if (!paperPdfUrl) {
@@ -666,23 +690,78 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   <section className="rounded border border-line bg-white p-4">
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                       <h3 className="text-sm font-semibold text-ink">하이라이트 가능한 원문</h3>
-                      <span className="text-xs text-muted">드래그 후 하이라이트/용어 추가</span>
-                    </div>
-                    <div
-                      ref={bodyRef}
-                      className="notranslate h-[calc(100vh-21rem)] min-h-[420px] overflow-y-auto rounded border border-line bg-paper/40 p-4"
-                      translate="no"
-                      onMouseUp={onTextMouseUp}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      <div className="notranslate select-text whitespace-pre-wrap" translate="no">
-                        {paper.text ? (
-                          bodyNodes
-                        ) : (
-                          <p className="text-xs text-muted">원문을 불러오는 중이거나 본문이 없습니다.</p>
-                        )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted">드래그 후 하이라이트/용어 추가</span>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded border border-line bg-white px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
+                          onClick={openSourceEdit}
+                        >
+                          <PencilLine size={13} />
+                          {paper.text ? '텍스트 편집' : '직접 입력'}
+                        </button>
                       </div>
                     </div>
+                    {sourceEditOpen ? (
+                      <div className="space-y-3">
+                        <textarea
+                          className="h-[calc(100vh-23rem)] min-h-[420px] w-full resize-none rounded border border-line bg-paper/40 p-4 text-sm leading-7 outline-none focus:border-action"
+                          value={sourceDraft}
+                          placeholder="PDF 원본에서 복사한 텍스트를 붙여 넣거나, 추출된 원문을 직접 다듬으세요."
+                          onChange={(e) => setSourceDraft(e.target.value)}
+                        />
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs leading-relaxed text-muted">
+                            저장 후 이 텍스트를 기준으로 하이라이트 위치가 계산됩니다.
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="rounded border border-line px-3 py-2 text-xs text-muted hover:border-action hover:text-action"
+                              onClick={() => {
+                                setSourceDraft(paper.text ?? '');
+                                setSourceEditOpen(false);
+                              }}
+                            >
+                              취소
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded bg-action px-3 py-2 text-xs font-semibold text-white"
+                              onClick={saveSourceEdit}
+                            >
+                              원문 저장
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        ref={bodyRef}
+                        className="notranslate h-[calc(100vh-21rem)] min-h-[420px] overflow-y-auto rounded border border-line bg-paper/40 p-4"
+                        translate="no"
+                        onMouseUp={onTextMouseUp}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <div className="notranslate select-text whitespace-pre-wrap" translate="no">
+                          {paper.text ? (
+                            bodyNodes
+                          ) : (
+                            <div className="space-y-3 text-xs leading-relaxed text-muted">
+                              <p>원문을 불러오는 중이거나 본문이 없습니다.</p>
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 rounded bg-action px-3 py-2 font-semibold text-white"
+                                onClick={openSourceEdit}
+                              >
+                                <PencilLine size={13} />
+                                원문 직접 입력
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </section>
                 ) : (
                   <section className="rounded border border-line bg-white p-4">

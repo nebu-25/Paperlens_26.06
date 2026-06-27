@@ -193,6 +193,21 @@ class TestTextQualityNotice:
         assert "A = □□□" in notice
 
 
+class TestExtractionQualityWarnings:
+    def test_warns_without_dropping_empty_text(self):
+        warnings = papers._extraction_quality_warnings("", page_count=1)
+        assert warnings
+        assert "직접 입력" in warnings[0]
+
+    def test_warns_on_sparse_text(self):
+        warnings = papers._extraction_quality_warnings("2019년 학술대회\n\n- 346 -", page_count=2)
+        assert any("매우 적" in warning for warning in warnings)
+
+    def test_keeps_contentful_text_without_warning(self):
+        text = "요약\n" + ("의료영상 데이터 표준화와 기계학습 적용을 설명하는 본문입니다. " * 8)
+        assert papers._extraction_quality_warnings(text, page_count=1) == []
+
+
 class TestPreferOcrText:
     def test_prefers_ocr_when_scanned_original_is_empty(self):
         assert papers._prefer_ocr_text("", "OCR로 읽은 본문", scanned=True) is True
@@ -211,6 +226,7 @@ class TestNoiseBlock:
     def test_page_number_is_noise(self):
         assert papers._is_noise_block("3") is True
         assert papers._is_noise_block("  12 ") is True
+        assert papers._is_noise_block("- 346 -") is True
 
     def test_arxiv_stamp_is_noise(self):
         assert papers._is_noise_block("arXiv:1706.03762v7  [cs.CL]  2 Aug 2023") is True
@@ -254,6 +270,54 @@ class FakeDocument:
 
 
 class TestReflowDocument:
+    def test_detects_single_column_layout(self):
+        lines = [
+            {"text": f"Line {index}", "x0": 60, "x1": 540, "y0": 80 + index * 14, "y1": 90 + index * 14}
+            for index in range(10)
+        ]
+
+        assert papers._detect_column_layout(lines, 600) is None
+
+    def test_detects_two_column_layout(self):
+        lines = [
+            {"text": "Left one", "x0": 50, "x1": 240, "y0": 100, "y1": 110},
+            {"text": "Right one", "x0": 320, "x1": 520, "y0": 100, "y1": 110},
+            {"text": "Left two", "x0": 50, "x1": 240, "y0": 112, "y1": 122},
+            {"text": "Right two", "x0": 320, "x1": 520, "y0": 112, "y1": 122},
+            {"text": "Left three", "x0": 50, "x1": 240, "y0": 124, "y1": 134},
+            {"text": "Right three", "x0": 320, "x1": 520, "y0": 124, "y1": 134},
+            {"text": "Left four", "x0": 50, "x1": 240, "y0": 136, "y1": 146},
+            {"text": "Right four", "x0": 320, "x1": 520, "y0": 136, "y1": 146},
+        ]
+
+        layout = papers._detect_column_layout(lines, 600)
+
+        assert layout
+        assert layout["kind"] == "two_column"
+        assert layout["first_column_y"] == 100
+
+    def test_detects_mixed_front_matter_and_two_column_layout(self):
+        lines = [
+            {"text": "Centered article title", "x0": 170, "x1": 430, "y0": 40, "y1": 52},
+            {"text": "Author names", "x0": 230, "x1": 370, "y0": 60, "y1": 72},
+            {"text": "Abstract full width sentence.", "x0": 60, "x1": 540, "y0": 90, "y1": 102},
+            {"text": "Keywords full width.", "x0": 60, "x1": 540, "y0": 112, "y1": 124},
+            {"text": "Left body one", "x0": 55, "x1": 245, "y0": 160, "y1": 172},
+            {"text": "Right body one", "x0": 330, "x1": 520, "y0": 160, "y1": 172},
+            {"text": "Left body two", "x0": 55, "x1": 245, "y0": 174, "y1": 186},
+            {"text": "Right body two", "x0": 330, "x1": 520, "y0": 174, "y1": 186},
+            {"text": "Left body three", "x0": 55, "x1": 245, "y0": 188, "y1": 200},
+            {"text": "Right body three", "x0": 330, "x1": 520, "y0": 188, "y1": 200},
+            {"text": "Left body four", "x0": 55, "x1": 245, "y0": 202, "y1": 214},
+            {"text": "Right body four", "x0": 330, "x1": 520, "y0": 202, "y1": 214},
+        ]
+
+        layout = papers._detect_column_layout(lines, 600)
+
+        assert layout
+        assert layout["kind"] == "mixed"
+        assert layout["first_column_y"] == 160
+
     def test_reads_two_columns_before_switching_to_right_column(self):
         page = FakePage(
             [
