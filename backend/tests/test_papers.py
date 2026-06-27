@@ -274,6 +274,30 @@ class TestReflowDocument:
         assert text.index("Left four") < text.index("Right one")
         assert "Left one Right one Left two" not in text
 
+    def test_keeps_single_column_front_matter_before_two_column_body(self):
+        page = FakePage(
+            [
+                {"text": "Centered article title", "x0": 170, "x1": 430, "y0": 40, "y1": 52},
+                {"text": "Author names", "x0": 230, "x1": 370, "y0": 60, "y1": 72},
+                {"text": "Abstract full width sentence.", "x0": 60, "x1": 540, "y0": 90, "y1": 102},
+                {"text": "Keywords full width.", "x0": 60, "x1": 540, "y0": 112, "y1": 124},
+                {"text": "Left body one", "x0": 55, "x1": 245, "y0": 160, "y1": 172},
+                {"text": "Right body one", "x0": 330, "x1": 520, "y0": 160, "y1": 172},
+                {"text": "Left body two", "x0": 55, "x1": 245, "y0": 174, "y1": 186},
+                {"text": "Right body two", "x0": 330, "x1": 520, "y0": 174, "y1": 186},
+                {"text": "Left body three", "x0": 55, "x1": 245, "y0": 188, "y1": 200},
+                {"text": "Right body three", "x0": 330, "x1": 520, "y0": 188, "y1": 200},
+                {"text": "Left body four", "x0": 55, "x1": 245, "y0": 202, "y1": 214},
+                {"text": "Right body four", "x0": 330, "x1": 520, "y0": 202, "y1": 214},
+            ]
+        )
+
+        text = papers._reflow_document(FakeDocument([page]))
+
+        assert text.index("Abstract full width sentence.") < text.index("Left body one")
+        assert text.index("Keywords full width.") < text.index("Left body one")
+        assert text.index("Left body four") < text.index("Right body one")
+
 
 class TestArxivId:
     def test_new_style(self):

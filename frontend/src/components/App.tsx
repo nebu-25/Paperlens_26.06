@@ -25,6 +25,8 @@ import {
   uploadPhaseText,
 } from '../constants';
 import { highlightStyle, needsPdfText, noticeStyle } from '../lib/format';
+import { DEFAULT_EXPORT_OPTIONS } from '../lib/export';
+import type { ExportOptions } from '../lib/export';
 import { useReviewStore } from '../hooks/useReviewStore';
 import { useAuthSession } from '../hooks/useAuthSession';
 import { AiDraftButton } from './AiDraftButton';
@@ -40,6 +42,17 @@ const SERVICE_ROUTE = 'service_home';
 
 type AppRoute = 'landing' | 'service';
 type PaperViewMode = 'text' | 'pdf';
+
+const EXPORT_OPTION_LABELS: { key: keyof ExportOptions; label: string }[] = [
+  { key: 'oneLineSummary', label: '한 줄 요약' },
+  { key: 'sectionSummaries', label: '섹션별 요약' },
+  { key: 'template', label: '수동 요약 템플릿' },
+  { key: 'terms', label: '용어 사전' },
+  { key: 'questions', label: '질문' },
+  { key: 'highlights', label: '하이라이트' },
+  { key: 'citationBoard', label: '인용 후보 보드' },
+  { key: 'memos', label: '섹션별 메모' },
+];
 
 function appBasePath() {
   return (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
@@ -155,6 +168,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
   const [paperViewMode, setPaperViewMode] = useState<PaperViewMode>('text');
   const [paperPdfObjectUrl, setPaperPdfObjectUrl] = useState('');
   const [paperPdfPreviewError, setPaperPdfPreviewError] = useState('');
+  const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
   const uploadPercent = uploadPhasePercent[uploadPhase] ?? 0;
   const samplePercent = samplePhasePercent[samplePhase] ?? 0;
   const sampleStatusText =
@@ -1123,17 +1137,50 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                       )}
                     </p>
                   </div>
+                  <div className="mt-4 rounded border border-line bg-white p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-ink">내보내기 포함 항목</span>
+                      <button
+                        type="button"
+                        className="rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
+                        onClick={() => setExportOptions(DEFAULT_EXPORT_OPTIONS)}
+                      >
+                        전체 포함
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {EXPORT_OPTION_LABELS.map((option) => (
+                        <label
+                          key={option.key}
+                          className="flex items-center gap-2 rounded border border-line px-2 py-1.5 text-xs text-muted"
+                        >
+                          <input
+                            type="checkbox"
+                            className="accent-action"
+                            checked={exportOptions[option.key]}
+                            onChange={(e) =>
+                              setExportOptions((current) => ({
+                                ...current,
+                                [option.key]: e.target.checked,
+                              }))
+                            }
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                   <div className="mt-4 flex gap-2">
                     <button
                       className="flex flex-1 items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                      onClick={exportMarkdown}
+                      onClick={() => exportMarkdown(exportOptions)}
                       disabled={reviewDoneCount === 0}
                     >
                       <Download size={15} /> Markdown
                     </button>
                     <button
                       className="flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm disabled:opacity-50"
-                      onClick={exportPdf}
+                      onClick={() => exportPdf(exportOptions)}
                       disabled={reviewDoneCount === 0}
                     >
                       <Printer size={15} /> PDF로 저장

@@ -622,15 +622,37 @@ def _split_page_columns(lines: list[dict[str, object]], page_width: float) -> li
     if len(left) < 4 or len(right) < 4:
         return [lines]
 
-    column_lines = set(id(line) for line in left + right)
-    full_width.extend(line for line in lines if id(line) not in column_lines and line not in full_width)
-    first_column_y = min(float(line["y0"]) for line in left + right)
-    last_column_y = max(float(line["y1"]) for line in left + right)
-    before = [line for line in full_width if float(line["y1"]) <= first_column_y]
-    after = [line for line in full_width if float(line["y0"]) >= last_column_y]
-    middle = [line for line in full_width if line not in before and line not in after]
+    heights = [float(line["y1"]) - float(line["y0"]) for line in left + right if line["y1"] > line["y0"]]
+    line_h = statistics.median(heights) if heights else 12.0
+    paired_column_y = [
+        float(line["y0"])
+        for line in left
+        if any(abs(float(line["y0"]) - float(other["y0"])) <= line_h * 1.5 for other in right)
+    ]
+    first_column_y = min(paired_column_y) if paired_column_y else min(float(line["y0"]) for line in left + right)
 
-    groups = [before, left, right, middle, after]
+    # 첫 페이지에 제목/저자/초록처럼 1단 영역이 있고 하단만 2단인 논문은 상단의 짧은 중앙
+    # 정렬 라인도 좌/우 컬럼 후보로 잡힐 수 있다. 실제 좌우 컬럼이 동시에 시작되는 y좌표
+    # 위의 모든 라인은 원래 시각 순서대로 먼저 읽는다.
+    before = [line for line in lines if float(line["y0"]) < first_column_y]
+    before_ids = {id(line) for line in before}
+    left_body = [line for line in left if id(line) not in before_ids]
+    right_body = [line for line in right if id(line) not in before_ids]
+    if len(left_body) < 4 or len(right_body) < 4:
+        return [lines]
+
+    column_lines = set(id(line) for line in left_body + right_body)
+    full_body = [
+        line
+        for line in lines
+        if id(line) not in before_ids and id(line) not in column_lines
+    ]
+    last_column_y = max(float(line["y1"]) for line in left_body + right_body)
+    after = [line for line in full_body if float(line["y0"]) >= last_column_y]
+    after_ids = {id(line) for line in after}
+    middle = [line for line in full_body if id(line) not in after_ids]
+
+    groups = [before, left_body, right_body, middle, after]
     return [
         sorted(group, key=lambda item: (round(float(item["y0"])), float(item["x0"])))
         for group in groups

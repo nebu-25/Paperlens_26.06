@@ -95,6 +95,24 @@ describe('buildMarkdown', () => {
     expect(md).toContain('### 결과 비교');
     expect(md).toContain('comparison sentence');
   });
+
+  it('can exclude selected export sections', () => {
+    const note: ReviewNote = {
+      ...baseNote,
+      highlights: [
+        { id: 'a', text: 'highlight sentence', color: 'yellow', citationUse: 'premise' },
+      ],
+      questions: [{ id: 'q', text: 'question text' }],
+    };
+    const md = buildMarkdown(paper, note, {
+      highlights: false,
+      citationBoard: false,
+      questions: false,
+    });
+    expect(md).not.toContain('## 핵심 문장 하이라이트');
+    expect(md).not.toContain('## 인용 후보 보드');
+    expect(md).not.toContain('## 읽으며 생긴 질문');
+  });
 });
 
 describe('buildPrintHtml', () => {
@@ -143,5 +161,14 @@ describe('buildPrintHtml', () => {
     expect(html).toContain('<h2>인용 후보 보드</h2>');
     expect(html).toContain('<h3>관련 연구</h3>');
     expect(html).toContain('related sentence');
+  });
+
+  it('can exclude citation board from print HTML', () => {
+    const note: ReviewNote = {
+      ...baseNote,
+      highlights: [{ id: 'h', text: 'related sentence', citationUse: 'related_work' }],
+    };
+    const html = buildPrintHtml(paper, note, { citationBoard: false });
+    expect(html).not.toContain('<h2>인용 후보 보드</h2>');
   });
 });

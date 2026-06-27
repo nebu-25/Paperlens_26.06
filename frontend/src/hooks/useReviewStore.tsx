@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { API_BASE, resolveApiUrl } from '../constants';
 import { buildMarkdown, buildPrintHtml, safeFilename } from '../lib/export';
+import type { ExportOptions } from '../lib/export';
 import { collectTags, filterPapers } from '../lib/library';
 import {
   EMPTY_NOTE,
@@ -857,9 +858,9 @@ export function useReviewStore({
     setActiveTags((cur) => (cur.includes(tag) ? cur.filter((t) => t !== tag) : [...cur, tag]));
 
   // ── 내보내기 (FR-11) ──
-  function exportMarkdown() {
+  function exportMarkdown(options?: Partial<ExportOptions>) {
     if (!paper) return;
-    const blob = new Blob([buildMarkdown(paper, note)], { type: 'text/markdown;charset=utf-8' });
+    const blob = new Blob([buildMarkdown(paper, note, options)], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -868,14 +869,14 @@ export function useReviewStore({
     URL.revokeObjectURL(url);
   }
 
-  function exportPdf() {
+  function exportPdf(options?: Partial<ExportOptions>) {
     if (!paper) return;
     const w = window.open('', '_blank');
     if (!w) {
       window.alert('팝업이 차단되었습니다. 팝업을 허용한 뒤 다시 시도해 주세요.');
       return;
     }
-    w.document.write(buildPrintHtml(paper, note));
+    w.document.write(buildPrintHtml(paper, note, options));
     w.document.close();
   }
 

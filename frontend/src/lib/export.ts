@@ -3,6 +3,28 @@
 import { CITATION_USE_OPTIONS, HIGHLIGHT_COLORS, MEMO_SECTIONS, TEMPLATE_QUESTIONS } from '../constants';
 import type { Highlight, HighlightColor, Paper, ReviewNote } from '../types';
 
+export interface ExportOptions {
+  oneLineSummary: boolean;
+  sectionSummaries: boolean;
+  template: boolean;
+  terms: boolean;
+  questions: boolean;
+  highlights: boolean;
+  citationBoard: boolean;
+  memos: boolean;
+}
+
+export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
+  oneLineSummary: true,
+  sectionSummaries: true,
+  template: true,
+  terms: true,
+  questions: true,
+  highlights: true,
+  citationBoard: true,
+  memos: true,
+};
+
 export const safeFilename = (title: string) =>
   title.replace(/[^\w가-힣 .-]/g, '_').trim().slice(0, 80) || 'review-note';
 
@@ -26,40 +48,45 @@ function groupedCitationHighlights(highlights: Highlight[]) {
   })).filter((group) => group.highlights.length > 0);
 }
 
-export function buildMarkdown(paper: Paper, note: ReviewNote): string {
+function resolveExportOptions(options?: Partial<ExportOptions>): ExportOptions {
+  return { ...DEFAULT_EXPORT_OPTIONS, ...options };
+}
+
+export function buildMarkdown(paper: Paper, note: ReviewNote, options?: Partial<ExportOptions>): string {
+  const include = resolveExportOptions(options);
   const out: string[] = [];
   out.push(`# ${paper.title || '제목 없음'}`, '');
   out.push(`- 저자: ${paper.authors || '—'}`);
   out.push(`- 링크: ${paper.link || '—'}`);
   out.push(`- 내보낸 날짜: ${new Date().toLocaleString('ko-KR')}`, '');
 
-  if (note.oneLineSummary.trim()) out.push('## 한 줄 요약', '', note.oneLineSummary.trim(), '');
+  if (include.oneLineSummary && note.oneLineSummary.trim()) out.push('## 한 줄 요약', '', note.oneLineSummary.trim(), '');
 
   const sections = note.sectionSummaries.filter((s) => s.content.trim());
-  if (sections.length) {
+  if (include.sectionSummaries && sections.length) {
     out.push('## 섹션별 요약', '');
     for (const s of sections) out.push(`### ${s.section}`, '', s.content.trim(), '');
   }
 
   const tmpl = TEMPLATE_QUESTIONS.filter((q) => note.template[q.key].trim());
-  if (tmpl.length) {
+  if (include.template && tmpl.length) {
     out.push('## 수동 요약 템플릿', '');
     for (const q of tmpl) out.push(`**${q.label}**`, '', note.template[q.key].trim(), '');
   }
 
-  if (note.terms.length) {
+  if (include.terms && note.terms.length) {
     out.push('## 핵심 용어 사전', '');
     for (const t of note.terms) out.push(`- **${t.term}**: ${t.explanation.trim() || '(설명 없음)'}`);
     out.push('');
   }
 
-  if (note.questions.length) {
+  if (include.questions && note.questions.length) {
     out.push('## 읽으며 생긴 질문', '');
     for (const q of note.questions) out.push(`- ${q.text}`);
     out.push('');
   }
 
-  if (note.highlights.length) {
+  if (include.highlights && note.highlights.length) {
     out.push('## 핵심 문장 하이라이트', '');
     for (const group of groupedHighlights(note.highlights)) {
       out.push(`### ${highlightHeading(group.label, group.meaning)}`, '');
@@ -68,7 +95,7 @@ export function buildMarkdown(paper: Paper, note: ReviewNote): string {
   }
 
   const citationGroups = groupedCitationHighlights(note.highlights);
-  if (citationGroups.length) {
+  if (include.citationBoard && citationGroups.length) {
     out.push('## 인용 후보 보드', '');
     for (const group of citationGroups) {
       out.push(`### ${group.label}`, '', `_${group.helper}_`, '');
@@ -77,7 +104,7 @@ export function buildMarkdown(paper: Paper, note: ReviewNote): string {
   }
 
   const memos = MEMO_SECTIONS.filter((s) => (note.memos[s] ?? '').trim());
-  if (memos.length) {
+  if (include.memos && memos.length) {
     out.push('## 섹션별 메모 카드', '');
     for (const s of memos) out.push(`### ${s}`, '', (note.memos[s] ?? '').trim(), '');
   }
@@ -95,7 +122,8 @@ const htmlParas = (s: string) =>
     .join('');
 
 // 인쇄용 HTML — 새 창에서 열고 사용자가 "PDF로 저장"으로 인쇄한다(추가 라이브러리 없음).
-export function buildPrintHtml(paper: Paper, note: ReviewNote): string {
+export function buildPrintHtml(paper: Paper, note: ReviewNote, options?: Partial<ExportOptions>): string {
+  const include = resolveExportOptions(options);
   const b: string[] = [];
   b.push(`<h1>${escapeHtml(paper.title || '제목 없음')}</h1>`);
   b.push(
@@ -103,34 +131,34 @@ export function buildPrintHtml(paper: Paper, note: ReviewNote): string {
       `<li>링크: ${escapeHtml(paper.link || '—')}</li>` +
       `<li>내보낸 날짜: ${escapeHtml(new Date().toLocaleString('ko-KR'))}</li></ul>`,
   );
-  if (note.oneLineSummary.trim()) b.push('<h2>한 줄 요약</h2>', htmlParas(note.oneLineSummary));
+  if (include.oneLineSummary && note.oneLineSummary.trim()) b.push('<h2>한 줄 요약</h2>', htmlParas(note.oneLineSummary));
 
   const sections = note.sectionSummaries.filter((s) => s.content.trim());
-  if (sections.length) {
+  if (include.sectionSummaries && sections.length) {
     b.push('<h2>섹션별 요약</h2>');
     for (const s of sections) b.push(`<h3>${escapeHtml(s.section)}</h3>`, htmlParas(s.content));
   }
 
   const tmpl = TEMPLATE_QUESTIONS.filter((q) => note.template[q.key].trim());
-  if (tmpl.length) {
+  if (include.template && tmpl.length) {
     b.push('<h2>수동 요약 템플릿</h2>');
     for (const q of tmpl) b.push(`<h3>${escapeHtml(q.label)}</h3>`, htmlParas(note.template[q.key]));
   }
 
-  if (note.terms.length) {
+  if (include.terms && note.terms.length) {
     b.push('<h2>핵심 용어 사전</h2><ul>');
     for (const t of note.terms)
       b.push(`<li><b>${escapeHtml(t.term)}</b>: ${escapeHtml(t.explanation || '(설명 없음)')}</li>`);
     b.push('</ul>');
   }
 
-  if (note.questions.length) {
+  if (include.questions && note.questions.length) {
     b.push('<h2>읽으며 생긴 질문</h2><ul>');
     for (const q of note.questions) b.push(`<li>${escapeHtml(q.text)}</li>`);
     b.push('</ul>');
   }
 
-  if (note.highlights.length) {
+  if (include.highlights && note.highlights.length) {
     b.push('<h2>핵심 문장 하이라이트</h2>');
     for (const group of groupedHighlights(note.highlights)) {
       b.push(`<h3>${escapeHtml(highlightHeading(group.label, group.meaning))}</h3>`);
@@ -142,7 +170,7 @@ export function buildPrintHtml(paper: Paper, note: ReviewNote): string {
   }
 
   const citationGroups = groupedCitationHighlights(note.highlights);
-  if (citationGroups.length) {
+  if (include.citationBoard && citationGroups.length) {
     b.push('<h2>인용 후보 보드</h2>');
     for (const group of citationGroups) {
       b.push(`<h3>${escapeHtml(group.label)}</h3>`, `<p><i>${escapeHtml(group.helper)}</i></p>`);
@@ -151,7 +179,7 @@ export function buildPrintHtml(paper: Paper, note: ReviewNote): string {
   }
 
   const memos = MEMO_SECTIONS.filter((s) => (note.memos[s] ?? '').trim());
-  if (memos.length) {
+  if (include.memos && memos.length) {
     b.push('<h2>섹션별 메모 카드</h2>');
     for (const s of memos) b.push(`<h3>${escapeHtml(s)}</h3>`, htmlParas(note.memos[s] ?? ''));
   }
