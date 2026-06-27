@@ -242,6 +242,22 @@ class TestExtractionQuality:
         assert int(quality["score"]) < 80
         assert quality["reasons"]
 
+    def test_penalizes_missing_front_matter_from_reference_text(self):
+        reference = (
+            "의료기기 소프트웨어 테스트 위험관리 적용 방안 연구\n"
+            "요약 의료기기 소프트웨어 위험관리 본문입니다.\n"
+            "ABSTRACT Development of application risk management.\n"
+            "키워드 Medical Device Software\n"
+            "Ⅰ. 서론 의료기기 산업은 발전하고 있다."
+        )
+        extracted = "Ⅰ. 서론 의료기기 산업은 발전하고 있다."
+        warnings = papers._extraction_quality_warnings(extracted, page_count=1, reference_text=reference)
+        quality = papers._extraction_quality(extracted, page_count=1, warnings=warnings, reference_text=reference)
+
+        assert any("초록" in warning or "키워드" in warning for warning in warnings)
+        assert int(quality["score"]) < 100
+        assert quality["status"] != "good"
+
 
 class TestPreferOcrText:
     def test_prefers_ocr_when_scanned_original_is_empty(self):
@@ -269,6 +285,17 @@ class TestChooseExtractedText:
         raw = "We propose a\nnew model\nfor paper reading."
 
         assert papers._choose_extracted_text(reflowed, raw) == reflowed
+
+    def test_uses_raw_when_reflow_misses_front_matter_markers(self):
+        reflowed = "Ⅰ. 서론 의료기기 산업은 발전하고 있다."
+        raw = (
+            "요약 의료기기 소프트웨어 위험관리 본문입니다.\n"
+            "ABSTRACT Development of application risk management.\n"
+            "키워드 Medical Device Software\n"
+            "Ⅰ. 서론 의료기기 산업은 발전하고 있다."
+        )
+
+        assert papers._choose_extracted_text(reflowed, raw) == raw
 
 
 class TestNoiseBlock:
@@ -435,6 +462,38 @@ class TestReflowDocument:
         assert text.index("1. 서론") < text.index("Left body one")
         assert text.index("Left body four") < text.index("Right column first line")
         assert "1. 서론 Right column first line" not in text
+
+    def test_keeps_front_matter_before_roman_section_two_column_body(self):
+        page = FakePage(
+            [
+                {"text": "Medical Device Software Test Risk Management", "x0": 120, "x1": 480, "y0": 40, "y1": 52},
+                {"text": "요약", "x0": 280, "x1": 320, "y0": 88, "y1": 100},
+                {"text": "의료기기 소프트웨어 테스트 위험관리 적용 방안을 연구하였다.", "x0": 82, "x1": 518, "y0": 112, "y1": 124},
+                {"text": "ABSTRACT", "x0": 260, "x1": 340, "y0": 154, "y1": 166},
+                {"text": "Development of application risk management for medical device software test.", "x0": 82, "x1": 518, "y0": 178, "y1": 190},
+                {"text": "키워드", "x0": 280, "x1": 320, "y0": 224, "y1": 236},
+                {"text": "Medical Device Software, Risk Management", "x0": 170, "x1": 430, "y0": 246, "y1": 258},
+                {"text": "Ⅰ. 서론", "x0": 55, "x1": 115, "y0": 310, "y1": 322},
+                {"text": "Right column first line", "x0": 330, "x1": 520, "y0": 310, "y1": 322},
+                {"text": "Left body one", "x0": 55, "x1": 245, "y0": 324, "y1": 336},
+                {"text": "Right body two", "x0": 330, "x1": 520, "y0": 324, "y1": 336},
+                {"text": "Left body two", "x0": 55, "x1": 245, "y0": 338, "y1": 350},
+                {"text": "Right body three", "x0": 330, "x1": 520, "y0": 338, "y1": 350},
+                {"text": "Left body three", "x0": 55, "x1": 245, "y0": 352, "y1": 364},
+                {"text": "Right body four", "x0": 330, "x1": 520, "y0": 352, "y1": 364},
+                {"text": "Left body four", "x0": 55, "x1": 245, "y0": 366, "y1": 378},
+                {"text": "Right body five", "x0": 330, "x1": 520, "y0": 366, "y1": 378},
+            ]
+        )
+
+        text = papers._reflow_document(FakeDocument([page]))
+
+        assert text.index("요약") < text.index("ABSTRACT")
+        assert text.index("ABSTRACT") < text.index("키워드")
+        assert text.index("키워드") < text.index("Ⅰ. 서론")
+        assert text.index("Ⅰ. 서론") < text.index("Left body one")
+        assert text.index("Left body four") < text.index("Right column first line")
+        assert "Ⅰ. 서론 Right column first line" not in text
 
 
 class TestArxivId:

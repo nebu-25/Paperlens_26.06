@@ -625,10 +625,15 @@ def _line_center_x(line: dict[str, object]) -> float:
 def _is_numbered_section_heading_line(text: str) -> bool:
     """컬럼 시작점 보정용 번호 섹션 헤딩.
 
-    한국어 논문은 `1. 서론`처럼 짧은 번호 헤딩이 왼쪽 컬럼 첫 줄 역할을 하며,
-    같은 높이의 오른쪽 컬럼 본문과 섞이면 읽기 순서가 크게 깨진다.
+    한국어 논문은 `1. 서론`, `Ⅰ. 서론`처럼 짧은 번호 헤딩이 왼쪽 컬럼 첫 줄 역할을
+    하며, 같은 높이의 오른쪽 컬럼 본문과 섞이면 읽기 순서가 크게 깨진다.
     """
-    return bool(re.match(r"^\d+(?:\.\d+)*\.?\s+\S.{0,40}$", text.strip()))
+    stripped = text.strip()
+    return bool(
+        re.match(r"^\d+(?:\.\d+)*\.?\s+\S.{0,40}$", stripped)
+        or re.match(r"^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+\.?\s+\S.{0,40}$", stripped)
+        or re.match(r"^[IVXLCDM]+\.?\s+[A-Z가-힣]\S?.{0,40}$", stripped)
+    )
 
 
 def _detect_column_layout(
@@ -853,6 +858,25 @@ def _raw_document_text(document) -> str:
     return "\n\n".join(pages)
 
 
+_FRONT_MATTER_MARKERS = ("요약", "초록", "abstract", "keywords", "keyword", "키워드")
+
+
+def _front_matter_markers(text: str) -> set[str]:
+    lowered = text.casefold()
+    markers: set[str] = set()
+    for marker in _FRONT_MATTER_MARKERS:
+        if marker.casefold() in lowered:
+            markers.add(marker.casefold())
+    return markers
+
+
+def _front_matter_missing_from(candidate: str, reference: str) -> set[str]:
+    reference_markers = _front_matter_markers(reference)
+    if not reference_markers:
+        return set()
+    return reference_markers - _front_matter_markers(candidate)
+
+
 def _choose_extracted_text(reflowed: str, raw: str) -> str:
     """문단 재구성 결과와 기본 추출 결과 중 더 보존적인 텍스트를 고른다."""
     if not reflowed.strip():
@@ -865,6 +889,8 @@ def _choose_extracted_text(reflowed: str, raw: str) -> str:
     reflow_total = int(reflow_stats["total"])
     raw_total = int(raw_stats["total"])
     if raw_total >= 120 and reflow_total < raw_total * 0.45:
+        return raw
+    if len(_front_matter_missing_from(reflowed, raw)) >= 2:
         return raw
     if float(raw_stats["broken_ratio"]) + 0.03 < float(reflow_stats["broken_ratio"]):
         return raw
@@ -945,7 +971,7 @@ def _text_quality_notice(text: str) -> str | None:
     )
 
 
-def _extraction_quality_warnings(text: str, page_count: int) -> list[str]:
+def _extraction_quality_warnings(text: str, page_count: int, reference_text: str = "") -> list[str]:
     """추출 품질 경고를 반환한다. 텍스트 자체는 보존하고 사용자에게만 안내한다."""
     warnings: list[str] = []
     stripped = text.strip()
@@ -976,6 +1002,11 @@ def _extraction_quality_warnings(text: str, page_count: int) -> list[str]:
         warnings.append(
             "추출 결과에 숫자·기호 비율이 높습니다. 표, 페이지 번호, 수식이 본문보다 많이 잡혔을 수 있습니다."
         )
+    missing_front_matter = _front_matter_missing_from(text, reference_text)
+    if missing_front_matter:
+        warnings.append(
+            "첫 페이지 제목·초록·키워드 영역 일부가 원문 추출 결과에서 누락된 것으로 보입니다. PDF 원본과 대조해 주세요."
+        )
     broken_notice = _text_quality_notice(text)
     if broken_notice:
         warnings.append(broken_notice)
@@ -986,6 +1017,7 @@ def _extraction_quality(
     text: str,
     page_count: int,
     warnings: list[str] | None = None,
+    reference_text: str = "",
 ) -> dict[str, object]:
     """자동 추출 결과의 품질 상태를 계산한다.
 
@@ -1033,6 +1065,8 @@ def _extraction_quality(
 
     if reasons:
         score -= min(12, len(reasons) * 4)
+    if _front_matter_missing_from(text, reference_text):
+        score -= 25
 
     score = max(0, min(100, score))
     if score >= 80 and not reasons:
@@ -1196,8 +1230,8 @@ def _extract_pdf_content(
     # 스캔(이미지) PDF 추정: 추출 텍스트가 비어 있으면 사용자가 직접 원문을 보완할 수 있게 안내한다.
     # OCR은 서버 비용·런타임 의존성이 커서 자동 실행하지 않는다. 추출 텍스트가 조금이라도 있으면 보존한다.
     scanned = len(text.strip()) == 0
-    extraction_warnings = _extraction_quality_warnings(text, page_count)
-    extraction_quality = _extraction_quality(text, page_count, extraction_warnings)
+    extraction_warnings = _extraction_quality_warnings(text, page_count, raw_text)
+    extraction_quality = _extraction_quality(text, page_count, extraction_warnings, raw_text)
 
     sections = [] if scanned else _detect_sections(text)
 
