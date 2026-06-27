@@ -163,6 +163,17 @@ class TestJoinLinesCjk:
         assert papers._join_lines(["represen-", "tation"]) == "representation"
 
 
+class TestRepairSpacedGlyphs:
+    def test_repairs_korean_glyph_spacing(self):
+        assert papers._clean_pdf_line("국 문 초 록") == "국문초록"
+
+    def test_repairs_latin_glyph_spacing(self):
+        assert papers._clean_pdf_line("A B S T R A C T") == "ABSTRACT"
+
+    def test_keeps_normal_words_unchanged(self):
+        assert papers._clean_pdf_line("We propose a new model") == "We propose a new model"
+
+
 class TestTidySpacing:
     def test_removes_space_before_punctuation(self):
         assert papers._tidy_spacing("할 수 있다 .") == "할 수 있다."
@@ -220,6 +231,20 @@ class TestPreferOcrText:
     def test_keeps_original_when_ocr_is_too_sparse(self):
         original = ("□□□ 한글 깨짐 " * 8) + "DICOM TIFF GIF JPEG"
         assert papers._prefer_ocr_text(original, "짧음", scanned=False) is False
+
+
+class TestChooseExtractedText:
+    def test_uses_raw_when_reflow_drops_most_text(self):
+        reflowed = "초록 일부"
+        raw = "초록\n" + ("의료영상 데이터 표준화와 기계학습 적용을 설명하는 본문입니다. " * 10)
+
+        assert papers._choose_extracted_text(reflowed, raw) == raw
+
+    def test_keeps_reflow_when_it_preserves_content(self):
+        reflowed = "We propose a new model for paper reading."
+        raw = "We propose a\nnew model\nfor paper reading."
+
+        assert papers._choose_extracted_text(reflowed, raw) == reflowed
 
 
 class TestNoiseBlock:

@@ -43,6 +43,42 @@ def _clean_text_line(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def _is_single_glyph_token(token: str) -> bool:
+    return len(token) == 1 and (token.isalnum() or _is_cjk(token))
+
+
+def _repair_spaced_glyphs(line: str) -> str:
+    """글자 단위로 공백이 끼어 추출된 줄을 복원한다.
+
+    일부 PDF는 텍스트 레이어의 glyph 간격을 단어 공백처럼 내보내 `국 문 초 록` 또는
+    `A B S T R A C T` 형태가 된다. 줄 대부분이 한 글자 토큰일 때만 붙여 과보정을 피한다.
+    """
+    tokens = line.split()
+    if len(tokens) < 4:
+        return line
+    single_count = sum(1 for token in tokens if _is_single_glyph_token(token))
+    if single_count / len(tokens) < 0.75:
+        return line
+
+    repaired: list[str] = []
+    buffer: list[str] = []
+    for token in tokens:
+        if _is_single_glyph_token(token):
+            buffer.append(token)
+            continue
+        if buffer:
+            repaired.append("".join(buffer))
+            buffer = []
+        repaired.append(token)
+    if buffer:
+        repaired.append("".join(buffer))
+    return " ".join(repaired)
+
+
+def _clean_pdf_line(value: str) -> str:
+    return _repair_spaced_glyphs(_clean_text_line(value))
+
+
 def _metadata_text(metadata: dict) -> str:
     return " ".join(str(value) for value in metadata.values() if value)
 
@@ -327,7 +363,7 @@ def _first_page_metadata(document) -> dict[str, object]:
             continue
         for line in block.get("lines", []):
             spans = line.get("spans", [])
-            text = _clean_text_line(" ".join(span.get("text", "") for span in spans))
+            text = _clean_pdf_line(" ".join(span.get("text", "") for span in spans))
             if len(text) < 2:  # 한글 이름은 2~3자라 너무 높이면 저자가 누락된다
                 continue
             sizes = [float(span.get("size", 0)) for span in spans if span.get("text", "").strip()]
@@ -549,7 +585,7 @@ def _page_text_lines(page) -> list[dict[str, object]]:
             continue
         for ln in block.get("lines", []):
             spans = ln.get("spans", [])
-            text = _clean_text_line(" ".join(span.get("text", "") for span in spans))
+            text = _clean_pdf_line(" ".join(span.get("text", "") for span in spans))
             if not text:
                 continue
             sizes = [float(s.get("size", 0)) for s in spans if s.get("text", "").strip()]
@@ -784,6 +820,35 @@ def _reflow_document(document) -> str:
         for group in _split_page_columns(body, page_width):
             paragraphs.extend(_reflow_lines(group))
     return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p)
+
+
+def _raw_document_text(document) -> str:
+    """좌표 기반 reflow가 실패할 때 보존용으로 쓸 PyMuPDF 기본 추출 텍스트."""
+    pages: list[str] = []
+    for page in document:
+        lines = [_clean_pdf_line(line) for line in page.get_text("text").splitlines()]
+        text = _tidy_spacing(_join_lines([line for line in lines if line and not _is_noise_block(line)]))
+        if text:
+            pages.append(text)
+    return "\n\n".join(pages)
+
+
+def _choose_extracted_text(reflowed: str, raw: str) -> str:
+    """문단 재구성 결과와 기본 추출 결과 중 더 보존적인 텍스트를 고른다."""
+    if not reflowed.strip():
+        return raw
+    if not raw.strip():
+        return reflowed
+
+    reflow_stats = _text_quality_stats(reflowed)
+    raw_stats = _text_quality_stats(raw)
+    reflow_total = int(reflow_stats["total"])
+    raw_total = int(raw_stats["total"])
+    if raw_total >= 120 and reflow_total < raw_total * 0.45:
+        return raw
+    if float(raw_stats["broken_ratio"]) + 0.03 < float(reflow_stats["broken_ratio"]):
+        return raw
+    return reflowed
 
 
 # 구두점 앞 공백 정리(스팬 분리로 생긴 "있다 ." → "있다.") 및 닫는 괄호/따옴표 앞 공백 제거.
@@ -1030,7 +1095,9 @@ def _extract_pdf_content(
 
     try:
         # 블록 단위 reflow로 시각적 줄바꿈을 문단으로 재결합해 자연스럽게 읽히게 한다.
-        text = _reflow_document(document)
+        reflowed_text = _reflow_document(document)
+        raw_text = _raw_document_text(document)
+        text = _choose_extracted_text(reflowed_text, raw_text)
         pdf_meta = document.metadata or {}
         layout_meta = _first_page_metadata(document)
     except Exception as exc:  # pragma: no cover - library-specific parse failures
