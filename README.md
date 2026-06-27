@@ -76,6 +76,8 @@ pip install -e ".[dev]"
 pytest
 ```
 
+`main` push와 PR에서는 `.github/workflows/ci.yml`이 위 백엔드(ruff + pytest, PostgreSQL 서비스 포함)와 프론트엔드(eslint + vitest + build) 검증을 자동 실행합니다.
+
 상세 테스트 범위와 smoke test 명령은 [docs/testing.md](docs/testing.md)를 참고하세요. 날짜별 실행 로그는 로컬 `testing.md`에 기록하며 버전 관리에서 제외합니다.
 
 ## Architecture
