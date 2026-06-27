@@ -992,3 +992,6 @@ export function useReviewStore({
     exportPdf,
   };
 }
+
+// 워크스페이스 패널들이 Context로 공유하는 store 타입.
+export type ReviewStore = ReturnType<typeof useReviewStore>;
