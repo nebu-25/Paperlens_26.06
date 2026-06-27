@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     sqlite_busy_timeout_ms: int = 5000
     # Phase 2 AI 보조 레이어(OpenRouter). 키가 없으면 AI API는 비활성 상태로 응답한다.
     ai_api_key: str = ""
-    ai_model: str = "openai/gpt-5.2"
+    ai_model: str = "openai/gpt-4o-mini"
     ai_site_url: str = "https://nebu-25.github.io/Paperlens_26.06/"
     ai_app_name: str = "PaperLens"
     # PyMuPDF OCR fallback. Render 기본 Python 런타임에는 Tesseract가 없을 수 있어 best-effort로만 사용한다.

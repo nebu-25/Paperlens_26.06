@@ -46,7 +46,7 @@ Backend:
 | `DATABASE_URL` | PostgreSQL 연결 문자열. 비어 있으면 SQLite 사용 |
 | `CORS_ORIGINS` | Pages 오리진 포함 |
 | `AI_API_KEY` | OpenRouter API 키. 없으면 AI 보조 비활성 |
-| `AI_MODEL` | 선택. 기본 `openai/gpt-5.2` |
+| `AI_MODEL` | 선택. 기본 `openai/gpt-4o-mini` |
 | `AI_SITE_URL` | 선택. OpenRouter 앱 표시용 |
 | `AI_APP_NAME` | 선택. OpenRouter 앱 표시용 |
 | `CROSSREF_MAILTO` | 선택. CrossRef User-Agent contact |

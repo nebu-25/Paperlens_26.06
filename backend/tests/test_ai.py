@@ -7,9 +7,9 @@ from app.routers.ai import _extract_chat_completion_text, ai_status, explain_ter
 
 def test_ai_status_disabled_without_key(monkeypatch):
     monkeypatch.setattr(settings, "ai_api_key", "")
-    monkeypatch.setattr(settings, "ai_model", "openai/gpt-5.2")
+    monkeypatch.setattr(settings, "ai_model", "openai/gpt-4o-mini")
 
-    assert ai_status() == {"enabled": False, "provider": "openrouter", "model": "openai/gpt-5.2"}
+    assert ai_status() == {"enabled": False, "provider": "openrouter", "model": "openai/gpt-4o-mini"}
 
 
 def test_term_explanation_requires_configured_key(monkeypatch):
