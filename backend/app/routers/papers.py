@@ -618,6 +618,19 @@ def _sorted_reading_lines(lines: list[dict[str, object]]) -> list[dict[str, obje
     return sorted(lines, key=lambda item: (round(float(item["y0"])), float(item["x0"])))
 
 
+def _line_center_x(line: dict[str, object]) -> float:
+    return (float(line["x0"]) + float(line["x1"])) / 2
+
+
+def _is_numbered_section_heading_line(text: str) -> bool:
+    """컬럼 시작점 보정용 번호 섹션 헤딩.
+
+    한국어 논문은 `1. 서론`처럼 짧은 번호 헤딩이 왼쪽 컬럼 첫 줄 역할을 하며,
+    같은 높이의 오른쪽 컬럼 본문과 섞이면 읽기 순서가 크게 깨진다.
+    """
+    return bool(re.match(r"^\d+(?:\.\d+)*\.?\s+\S.{0,40}$", text.strip()))
+
+
 def _detect_column_layout(
     lines: list[dict[str, object]], page_width: float
 ) -> dict[str, float | str] | None:
@@ -634,8 +647,8 @@ def _detect_column_layout(
         return None
 
     page_mid = page_width / 2
-    preliminary_left = [line for line in narrow if (float(line["x0"]) + float(line["x1"])) / 2 < page_mid]
-    preliminary_right = [line for line in narrow if (float(line["x0"]) + float(line["x1"])) / 2 >= page_mid]
+    preliminary_left = [line for line in narrow if _line_center_x(line) < page_mid]
+    preliminary_right = [line for line in narrow if _line_center_x(line) >= page_mid]
     if len(preliminary_left) < 4 or len(preliminary_right) < 4:
         return None
 
@@ -656,17 +669,24 @@ def _detect_column_layout(
     if len(paired_column_y) < 4:
         return None
 
-    first_column_y = min(paired_column_y)
-    body_narrow = [line for line in narrow if float(line["y0"]) >= first_column_y - line_h * 0.5]
+    body_pair_start_y = min(paired_column_y)
+    section_heading_y = [
+        float(line["y0"])
+        for line in preliminary_left + preliminary_right
+        if _is_numbered_section_heading_line(str(line["text"]))
+        and body_pair_start_y - line_h * 3 <= float(line["y0"]) <= body_pair_start_y + line_h * 0.75
+    ]
+    column_start_y = min([body_pair_start_y, *section_heading_y])
+    body_narrow = [line for line in narrow if float(line["y0"]) >= body_pair_start_y - line_h * 0.5]
     body_left_x0 = [
         float(line["x0"])
         for line in body_narrow
-        if (float(line["x0"]) + float(line["x1"])) / 2 < page_mid
+        if _line_center_x(line) < page_mid
     ]
     body_right_x0 = [
         float(line["x0"])
         for line in body_narrow
-        if (float(line["x0"]) + float(line["x1"])) / 2 >= page_mid
+        if _line_center_x(line) >= page_mid
     ]
     if len(body_left_x0) < 4 or len(body_right_x0) < 4:
         return None
@@ -676,11 +696,12 @@ def _detect_column_layout(
     if right_anchor - left_anchor < page_width * 0.25:
         return None
 
-    has_front_matter = any(float(line["y0"]) < first_column_y - line_h * 0.5 for line in lines)
+    has_front_matter = any(float(line["y0"]) < column_start_y - line_h * 0.5 for line in lines)
     return {
         "kind": "mixed" if has_front_matter else "two_column",
         "split_x": (left_anchor + right_anchor) / 2,
-        "first_column_y": first_column_y,
+        "first_column_y": column_start_y,
+        "body_pair_start_y": body_pair_start_y,
     }
 
 
@@ -699,7 +720,7 @@ def _split_page_columns(lines: list[dict[str, object]], page_width: float) -> li
         return [lines]
 
     split_x = float(layout["split_x"])
-    first_column_y = float(layout["first_column_y"])
+    column_start_y = float(layout["first_column_y"])
     left: list[dict[str, object]] = []
     right: list[dict[str, object]] = []
     full_width: list[dict[str, object]] = []
@@ -709,17 +730,16 @@ def _split_page_columns(lines: list[dict[str, object]], page_width: float) -> li
         width = x1 - x0
         if width > page_width * 0.55:
             full_width.append(line)
-        elif (x0 + x1) / 2 < split_x:
+        elif _line_center_x(line) < split_x:
             left.append(line)
         else:
             right.append(line)
     if len(left) < 4 or len(right) < 4:
         return [lines]
 
-    # 첫 페이지에 제목/저자/초록처럼 1단 영역이 있고 하단만 2단인 논문은 상단의 짧은 중앙
-    # 정렬 라인도 좌/우 컬럼 후보로 잡힐 수 있다. 실제 좌우 컬럼이 동시에 시작되는 y좌표
-    # 위의 모든 라인은 원래 시각 순서대로 먼저 읽는다.
-    before = [line for line in lines if float(line["y0"]) < first_column_y]
+    # 첫 페이지에 제목/저자/초록처럼 1단 영역이 있고 하단만 2단인 논문은 상단을 먼저 읽는다.
+    # `1. 서론` 같은 번호 헤딩은 왼쪽 컬럼 첫 줄이므로 before로 빼지 않고 컬럼 내부에 둔다.
+    before = [line for line in lines if float(line["y0"]) < column_start_y]
     before_ids = {id(line) for line in before}
     left_body = [line for line in left if id(line) not in before_ids]
     right_body = [line for line in right if id(line) not in before_ids]

@@ -411,6 +411,31 @@ class TestReflowDocument:
         assert text.index("Keywords full width.") < text.index("Left body one")
         assert text.index("Left body four") < text.index("Right body one")
 
+    def test_keeps_section_heading_inside_left_column_when_aligned_with_right_column(self):
+        page = FakePage(
+            [
+                {"text": "Korean article title", "x0": 160, "x1": 440, "y0": 40, "y1": 52},
+                {"text": "Abstract full width sentence.", "x0": 60, "x1": 540, "y0": 88, "y1": 100},
+                {"text": "1. 서론", "x0": 55, "x1": 105, "y0": 150, "y1": 162},
+                {"text": "Right column first line", "x0": 330, "x1": 520, "y0": 150, "y1": 162},
+                {"text": "Left body one", "x0": 55, "x1": 245, "y0": 164, "y1": 176},
+                {"text": "Right body two", "x0": 330, "x1": 520, "y0": 164, "y1": 176},
+                {"text": "Left body two", "x0": 55, "x1": 245, "y0": 178, "y1": 190},
+                {"text": "Right body three", "x0": 330, "x1": 520, "y0": 178, "y1": 190},
+                {"text": "Left body three", "x0": 55, "x1": 245, "y0": 192, "y1": 204},
+                {"text": "Right body four", "x0": 330, "x1": 520, "y0": 192, "y1": 204},
+                {"text": "Left body four", "x0": 55, "x1": 245, "y0": 206, "y1": 218},
+                {"text": "Right body five", "x0": 330, "x1": 520, "y0": 206, "y1": 218},
+            ]
+        )
+
+        text = papers._reflow_document(FakeDocument([page]))
+
+        assert text.index("Abstract full width sentence.") < text.index("1. 서론")
+        assert text.index("1. 서론") < text.index("Left body one")
+        assert text.index("Left body four") < text.index("Right column first line")
+        assert "1. 서론 Right column first line" not in text
+
 
 class TestArxivId:
     def test_new_style(self):
