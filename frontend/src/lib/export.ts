@@ -1,6 +1,6 @@
 // 리뷰 노트 내보내기 (FR-11) — 작성된 9영역을 통합. 토글과 무관하게 내용이 있는
 // 섹션별 요약/템플릿을 모두 포함해 사용자가 쓴 내용을 잃지 않는다.
-import { HIGHLIGHT_COLORS, MEMO_SECTIONS, TEMPLATE_QUESTIONS } from '../constants';
+import { CITATION_USE_OPTIONS, HIGHLIGHT_COLORS, MEMO_SECTIONS, TEMPLATE_QUESTIONS } from '../constants';
 import type { Highlight, HighlightColor, Paper, ReviewNote } from '../types';
 
 export const safeFilename = (title: string) =>
@@ -9,10 +9,20 @@ export const safeFilename = (title: string) =>
 const highlightMeta = (color?: HighlightColor) =>
   HIGHLIGHT_COLORS.find((item) => item.value === color) ?? HIGHLIGHT_COLORS[0];
 
+const highlightHeading = (label: string, meaning: string) =>
+  label === meaning ? label : `${label} (${meaning})`;
+
 function groupedHighlights(highlights: Highlight[]) {
   return HIGHLIGHT_COLORS.map((meta) => ({
     ...meta,
     highlights: highlights.filter((h) => (h.color ?? 'yellow') === meta.value),
+  })).filter((group) => group.highlights.length > 0);
+}
+
+function groupedCitationHighlights(highlights: Highlight[]) {
+  return CITATION_USE_OPTIONS.map((option) => ({
+    ...option,
+    highlights: highlights.filter((h) => h.citationUse === option.value),
   })).filter((group) => group.highlights.length > 0);
 }
 
@@ -52,7 +62,16 @@ export function buildMarkdown(paper: Paper, note: ReviewNote): string {
   if (note.highlights.length) {
     out.push('## 핵심 문장 하이라이트', '');
     for (const group of groupedHighlights(note.highlights)) {
-      out.push(`### ${group.label} (${group.meaning})`, '');
+      out.push(`### ${highlightHeading(group.label, group.meaning)}`, '');
+      for (const h of group.highlights) out.push(`> ${h.text}`, '');
+    }
+  }
+
+  const citationGroups = groupedCitationHighlights(note.highlights);
+  if (citationGroups.length) {
+    out.push('## 인용 후보 보드', '');
+    for (const group of citationGroups) {
+      out.push(`### ${group.label}`, '', `_${group.helper}_`, '');
       for (const h of group.highlights) out.push(`> ${h.text}`, '');
     }
   }
@@ -114,11 +133,20 @@ export function buildPrintHtml(paper: Paper, note: ReviewNote): string {
   if (note.highlights.length) {
     b.push('<h2>핵심 문장 하이라이트</h2>');
     for (const group of groupedHighlights(note.highlights)) {
-      b.push(`<h3>${escapeHtml(group.label)} (${escapeHtml(group.meaning)})</h3>`);
+      b.push(`<h3>${escapeHtml(highlightHeading(group.label, group.meaning))}</h3>`);
       for (const h of group.highlights) {
         const meta = highlightMeta(h.color);
         b.push(`<blockquote class="highlight-${meta.value}">${escapeHtml(h.text)}</blockquote>`);
       }
+    }
+  }
+
+  const citationGroups = groupedCitationHighlights(note.highlights);
+  if (citationGroups.length) {
+    b.push('<h2>인용 후보 보드</h2>');
+    for (const group of citationGroups) {
+      b.push(`<h3>${escapeHtml(group.label)}</h3>`, `<p><i>${escapeHtml(group.helper)}</i></p>`);
+      for (const h of group.highlights) b.push(`<blockquote>${escapeHtml(h.text)}</blockquote>`);
     }
   }
 
@@ -139,6 +167,7 @@ export function buildPrintHtml(paper: Paper, note: ReviewNote): string {
     .highlight-blue{background:#f0f9ff;border-left-color:#0ea5e9;}
     .highlight-pink{background:#fff1f2;border-left-color:#f43f5e;}
     .highlight-orange{background:#fff7ed;border-left-color:#f97316;}
+    .highlight-violet{background:#f5f3ff;border-left-color:#8b5cf6;}
     p{margin:6px 0;}
   </style></head><body>${b.join(
     '',

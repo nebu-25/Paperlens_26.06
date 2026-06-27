@@ -15,9 +15,9 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import {
+  CITATION_USE_OPTIONS,
   HIGHLIGHT_COLORS,
   RESEARCH_LINKS,
-  TEMPLATE_QUESTIONS,
   resolveApiUrl,
   samplePhasePercent,
   samplePhaseText,
@@ -34,6 +34,7 @@ import { LandingPage } from './LandingPage';
 import { QuestionsCard } from './QuestionsCard';
 import { SectionCard } from './SectionCard';
 import { TagEditor } from './TagEditor';
+import type { CitationUse } from '../types';
 
 const SERVICE_ROUTE = 'service_home';
 
@@ -158,31 +159,38 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
   const samplePercent = samplePhasePercent[samplePhase] ?? 0;
   const sampleStatusText =
     samplePhaseText[samplePhase] || (uploading ? uploadPhaseText[uploadPhase] : '샘플 PDF 준비 중');
+  const hasHighlightColor = (color: string) => note.highlights.some((h) => (h.color ?? 'yellow') === color);
+  const hasCitationUse = (use: CitationUse) => note.highlights.some((h) => h.citationUse === use);
+  const citationHighlights = note.highlights.filter((h) => h.citationUse);
   const reviewRoadmap = [
     {
       label: '문제 파악',
-      helper: '초록(Abstract)의 첫 1~3문단에서 이 논문이 해결하려는 문제를 찾으세요.',
-      done: note.template.q1.trim().length > 0,
+      helper: '주장 또는 전제 인용으로 이 논문이 다루는 문제를 표시하세요.',
+      done: hasHighlightColor('yellow') || hasCitationUse('premise'),
     },
     {
       label: '접근법 파악',
-      helper: '사용한 방법론, 데이터, 비교 기준을 확인하세요.',
-      done: note.template.q2.trim().length > 0,
+      helper: '방법론 하이라이트나 방법 참고 후보를 남기세요.',
+      done: hasHighlightColor('green') || hasCitationUse('method'),
     },
     {
       label: '결과 확인',
-      helper: '내 주장과 같은 결과인지, 반대 결과인지, 인용 근거가 되는지 표시하세요.',
-      done: note.template.q3.trim().length > 0 || note.highlights.length > 0,
+      helper: '결과 또는 결과 비교 후보를 표시하세요.',
+      done: hasHighlightColor('blue') || hasCitationUse('comparison'),
     },
     {
       label: '비판적 검토',
-      helper: '한계, 반대 해석, 방법론상 약점을 정리하세요.',
-      done: note.template.q4.trim().length > 0 || note.questions.length > 0,
+      helper: '한계, 반론, 후속 질문을 정리하세요.',
+      done:
+        hasHighlightColor('pink') ||
+        hasCitationUse('counterargument') ||
+        hasCitationUse('limitation') ||
+        note.questions.length > 0,
     },
     {
       label: '정리',
-      helper: '내가 이 논문을 인용하는 이유와 핵심 문장을 남기세요.',
-      done: note.template.q5.trim().length > 0,
+      helper: '내 논문에서 사용할 후보 문장을 인용 후보 보드로 분류하세요.',
+      done: citationHighlights.length > 0,
     },
   ];
   const visibleHighlights = note.highlights.filter(
@@ -869,27 +877,55 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   </p>
                 </SectionCard>
 
-                <SectionCard title="요약 템플릿" icon={<PencilLine size={16} />}>
-                  <div className="space-y-3">
-                    {TEMPLATE_QUESTIONS.map((q) => {
-                      const val = note.template[q.key];
-                      return (
-                        <div key={q.key}>
-                          <div className="mb-1 flex items-center justify-between gap-2">
-                            <label className="text-sm font-medium">{q.label}</label>
-                            {val.length === 0 && <AiDraftButton />}
-                          </div>
-                          <textarea
-                            className="min-h-16 w-full resize-none rounded border border-line p-2 text-sm outline-none focus:border-action"
-                            value={val}
-                            onChange={(e) =>
-                              updateNote('template', { ...note.template, [q.key]: e.target.value })
-                            }
-                          />
-                        </div>
-                      );
-                    })}
+                <SectionCard title="인용 후보 보드" icon={<PencilLine size={16} />}>
+                  <div className="mb-3 rounded border border-line bg-paper p-3 text-xs leading-relaxed text-muted">
+                    <b className="mb-1 block text-ink">이용 방법</b>
+                    하이라이트 탭의 문장마다 인용 목적을 선택하면 이 보드에 자동으로 분류됩니다.
+                    하이라이트 라벨은 논문 안에서의 의미를, 인용 목적은 내 논문에서의 사용 방식을
+                    구분합니다.
+                    <b className="mb-1 mt-3 block text-ink">데이터 기준</b>
+                    같은 문장도 논문 안에서는 근거일 수 있고, 내 논문에서는 결과 비교나 반론으로
+                    사용할 수 있습니다. 이 보드는 후자의 작업용 분류만 모읍니다.
                   </div>
+                  {citationHighlights.length === 0 ? (
+                    <p className="text-xs text-muted">
+                      아직 인용 후보로 분류한 하이라이트가 없습니다. 아래 하이라이트 목록에서
+                      인용 목적을 선택하세요.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {CITATION_USE_OPTIONS.map((option) => {
+                        const items = citationHighlights.filter((h) => h.citationUse === option.value);
+                        if (items.length === 0) return null;
+                        return (
+                          <section key={option.value} className="rounded border border-line bg-white p-3">
+                            <div className="mb-2 flex items-start justify-between gap-2">
+                              <div>
+                                <h4 className="text-sm font-semibold text-ink">{option.label}</h4>
+                                <p className="text-xs leading-relaxed text-muted">{option.helper}</p>
+                              </div>
+                              <span className="shrink-0 rounded bg-paper px-2 py-0.5 text-xs text-muted">
+                                {items.length}
+                              </span>
+                            </div>
+                            <ul className="space-y-2">
+                              {items.map((h) => {
+                                const style = highlightStyle(h.color);
+                                return (
+                                  <li key={h.id} className={`rounded p-2 text-sm ${style.listClass}`}>
+                                    <span className="mb-1 inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                                      {style.label}
+                                    </span>
+                                    <span className="block">“{h.text}”</span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </section>
+                        );
+                      })}
+                    </div>
+                  )}
                 </SectionCard>
 
                 <QuestionsCard
@@ -924,9 +960,6 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                       >
                         <span className={`size-2 rounded-full ${color.swatchClass}`} />
                         <span>{color.label}</span>
-                        <span className={highlightFilter === color.value ? 'text-white/80' : 'text-muted'}>
-                          {color.meaning}
-                        </span>
                       </button>
                     ))}
                   </div>
@@ -949,21 +982,50 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                           >
                             <span className="min-w-0">
                               <span className="mb-1 inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
-                                {style.label} · {style.meaning}
+                                {style.label}
                               </span>
                               <span className="block">“{h.text}”</span>
                             </span>
-                            <button
-                              className="shrink-0 text-muted hover:text-ink"
-                              onClick={() =>
-                                updateNote(
-                                  'highlights',
-                                  note.highlights.filter((x) => x.id !== h.id),
-                                )
-                              }
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            <div className="flex shrink-0 items-start gap-2">
+                              <select
+                                className="max-w-32 rounded border border-line bg-white px-2 py-1 text-xs text-muted outline-none focus:border-action"
+                                value={h.citationUse ?? ''}
+                                title="인용 후보 보드에서 사용할 목적"
+                                onChange={(e) =>
+                                  updateNote(
+                                    'highlights',
+                                    note.highlights.map((x) =>
+                                      x.id === h.id
+                                        ? {
+                                            ...x,
+                                            citationUse: e.target.value
+                                              ? (e.target.value as CitationUse)
+                                              : undefined,
+                                          }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                              >
+                                <option value="">인용 목적</option>
+                                {CITATION_USE_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                className="text-muted hover:text-ink"
+                                onClick={() =>
+                                  updateNote(
+                                    'highlights',
+                                    note.highlights.filter((x) => x.id !== h.id),
+                                  )
+                                }
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </li>
                         );
                       })}

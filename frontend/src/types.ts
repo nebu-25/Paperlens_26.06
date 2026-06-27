@@ -26,7 +26,14 @@ export interface Paper {
   text: string;
 }
 
-export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'orange';
+export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'orange' | 'violet';
+export type CitationUse =
+  | 'premise'
+  | 'method'
+  | 'comparison'
+  | 'counterargument'
+  | 'limitation'
+  | 'related_work';
 export type UploadPhase = 'idle' | 'uploading' | 'extracting' | 'metadata' | 'creating';
 export type SamplePhase = 'idle' | 'waking' | 'downloading' | 'extracting' | 'creating';
 export type NoticeTone = 'info' | 'warning' | 'error' | 'success';
@@ -41,6 +48,7 @@ export interface Highlight {
   id: string;
   text: string;
   color?: HighlightColor;
+  citationUse?: CitationUse;
   // 원문(paper.text) 내 문자 오프셋. 옛 데이터 호환을 위해 선택적.
   start?: number;
   end?: number;

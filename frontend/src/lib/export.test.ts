@@ -74,10 +74,26 @@ describe('buildMarkdown', () => {
       ],
     };
     const md = buildMarkdown(paper, note);
-    expect(md).toContain('### 핵심 (핵심 주장)');
-    expect(md).toContain('### 방법 (방법론)');
-    expect(md).toContain('### 결과 (결과)');
+    expect(md).toContain('### 주장');
+    expect(md).toContain('### 방법론');
+    expect(md).toContain('### 결과');
     expect(md.indexOf('core sentence')).toBeLessThan(md.indexOf('method sentence'));
+  });
+
+  it('includes citation candidate board groups', () => {
+    const note: ReviewNote = {
+      ...baseNote,
+      highlights: [
+        { id: 'a', text: 'background sentence', citationUse: 'premise' },
+        { id: 'b', text: 'comparison sentence', citationUse: 'comparison' },
+      ],
+    };
+    const md = buildMarkdown(paper, note);
+    expect(md).toContain('## 인용 후보 보드');
+    expect(md).toContain('### 전제 인용');
+    expect(md).toContain('background sentence');
+    expect(md).toContain('### 결과 비교');
+    expect(md).toContain('comparison sentence');
   });
 });
 
@@ -104,7 +120,28 @@ describe('buildPrintHtml', () => {
       highlights: [{ id: 'h', text: 'method sentence', color: 'green' }],
     };
     const html = buildPrintHtml(paper, note);
-    expect(html).toContain('<h3>방법 (방법론)</h3>');
+    expect(html).toContain('<h3>방법론</h3>');
     expect(html).toContain('class="highlight-green"');
+  });
+
+  it('prints evidence highlights with the new color class', () => {
+    const note: ReviewNote = {
+      ...baseNote,
+      highlights: [{ id: 'h', text: 'evidence sentence', color: 'violet' }],
+    };
+    const html = buildPrintHtml(paper, note);
+    expect(html).toContain('<h3>근거</h3>');
+    expect(html).toContain('class="highlight-violet"');
+  });
+
+  it('prints citation candidate board groups', () => {
+    const note: ReviewNote = {
+      ...baseNote,
+      highlights: [{ id: 'h', text: 'related sentence', citationUse: 'related_work' }],
+    };
+    const html = buildPrintHtml(paper, note);
+    expect(html).toContain('<h2>인용 후보 보드</h2>');
+    expect(html).toContain('<h3>관련 연구</h3>');
+    expect(html).toContain('related sentence');
   });
 });

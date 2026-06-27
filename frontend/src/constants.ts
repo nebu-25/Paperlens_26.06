@@ -1,5 +1,5 @@
 // 앱 전역 상수. 타입 외 다른 모듈에 의존하지 않는다(순환 의존 방지).
-import type { HighlightColor, SamplePhase, UploadPhase } from './types';
+import type { CitationUse, HighlightColor, SamplePhase, UploadPhase } from './types';
 
 // API 베이스 경로. 기본은 상대경로 '/api'(개발 시 Vite 프록시, 배포 시 동일 오리진/리버스 프록시).
 // 다른 오리진의 백엔드를 직접 가리키려면 VITE_API_BASE_URL로 오버라이드한다(예: http://127.0.0.1:8000).
@@ -41,15 +41,15 @@ export const HIGHLIGHT_COLORS: {
 }[] = [
   {
     value: 'yellow',
-    label: '핵심',
-    meaning: '핵심 주장',
+    label: '주장',
+    meaning: '주장',
     markClass: 'bg-yellow-200/70',
     listClass: 'bg-yellow-50',
     swatchClass: 'bg-yellow-300',
   },
   {
     value: 'green',
-    label: '방법',
+    label: '방법론',
     meaning: '방법론',
     markClass: 'bg-emerald-200/70',
     listClass: 'bg-emerald-50',
@@ -73,11 +73,56 @@ export const HIGHLIGHT_COLORS: {
   },
   {
     value: 'orange',
-    label: '질문',
+    label: '질문/후속 확인',
     meaning: '질문/후속 확인',
     markClass: 'bg-orange-200/70',
     listClass: 'bg-orange-50',
     swatchClass: 'bg-orange-300',
+  },
+  {
+    value: 'violet',
+    label: '근거',
+    meaning: '근거',
+    markClass: 'bg-violet-200/70',
+    listClass: 'bg-violet-50',
+    swatchClass: 'bg-violet-300',
+  },
+];
+
+export const CITATION_USE_OPTIONS: {
+  value: CitationUse;
+  label: string;
+  helper: string;
+}[] = [
+  {
+    value: 'premise',
+    label: '전제 인용',
+    helper: '서론이나 문제 제기에서 배경 근거로 사용할 문장',
+  },
+  {
+    value: 'method',
+    label: '방법 참고',
+    helper: '연구 설계, 실험, 분석 방법을 참고할 문장',
+  },
+  {
+    value: 'comparison',
+    label: '결과 비교',
+    helper: '내 결과와 비교하거나 논의할 선행 결과',
+  },
+  {
+    value: 'counterargument',
+    label: '반론',
+    helper: '내 주장과 다른 관점, 상반된 결과, 반대 근거',
+  },
+  {
+    value: 'limitation',
+    label: '한계 언급',
+    helper: '선행연구의 제한점이나 추가 연구 필요성을 보여주는 문장',
+  },
+  {
+    value: 'related_work',
+    label: '관련 연구',
+    helper: '직접 근거는 아니지만 함께 묶어 둘 관련 문헌 문장',
   },
 ];
 
