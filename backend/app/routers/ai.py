@@ -1,13 +1,43 @@
 import json
+import time
 import urllib.error
 import urllib.request
+from collections import defaultdict, deque
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.auth import current_user_id
 from app.config import settings
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+# 사용자별 최근 호출 시각(monotonic). 단일 프로세스 인메모리 슬라이딩 윈도우.
+_RATE_WINDOW_SECONDS = 60.0
+_request_log: dict[str, deque[float]] = defaultdict(deque)
+
+
+def reset_ai_rate_limits() -> None:
+    """테스트 격리용. 누적된 호출 기록을 비운다."""
+    _request_log.clear()
+
+
+def _enforce_rate_limit(user_id: str) -> None:
+    limit = settings.ai_rate_limit_per_minute
+    if limit <= 0:
+        return
+    now = time.monotonic()
+    log = _request_log[user_id]
+    while log and now - log[0] >= _RATE_WINDOW_SECONDS:
+        log.popleft()
+    if len(log) >= limit:
+        retry_after = max(1, int(_RATE_WINDOW_SECONDS - (now - log[0])) + 1)
+        raise HTTPException(
+            status_code=429,
+            detail="AI 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    log.append(now)
 
 
 class TermExplanationRequest(BaseModel):
@@ -86,9 +116,13 @@ def ai_status() -> dict[str, object]:
 
 
 @router.post("/term-explanation")
-def explain_term(body: TermExplanationRequest) -> TermExplanationResponse:
+def explain_term(
+    body: TermExplanationRequest,
+    user_id: str = Depends(current_user_id),
+) -> TermExplanationResponse:
     if not settings.ai_enabled:
         raise HTTPException(status_code=503, detail="AI 보조 기능이 아직 설정되지 않았습니다.")
+    _enforce_rate_limit(user_id)
 
     context = body.context.strip()
     if len(context) > 2400:

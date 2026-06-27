@@ -49,6 +49,7 @@ Backend:
 | `AI_MODEL` | 선택. 기본 `openai/gpt-4o-mini` |
 | `AI_SITE_URL` | 선택. OpenRouter 앱 표시용 |
 | `AI_APP_NAME` | 선택. OpenRouter 앱 표시용 |
+| `AI_RATE_LIMIT_PER_MINUTE` | 선택. AI 엔드포인트 사용자별 분당 호출 상한(기본 10, 0이면 무제한). 인메모리 카운터라 인스턴스 재시작 시 리셋·인스턴스 간 비공유 |
 | `CROSSREF_MAILTO` | 선택. CrossRef User-Agent contact |
 | `SAMPLE_PDF_URL` | 선택. 배포 서버에 샘플 PDF 파일을 두지 않고 샘플 버튼을 사용할 때의 원격 PDF URL |
 | `SUPABASE_URL` | Supabase 프로젝트 URL |
@@ -116,6 +117,8 @@ FastAPI는 Supabase access token을 다음 순서로 처리합니다.
 Fallback 사용자 조회 결과는 token hash 기준으로 최대 5분 동안, token의 `exp`를 넘지 않는 범위에서 캐시합니다. 같은 로그인 세션의 자동 저장 요청이 반복되어도 Supabase Auth endpoint를 매번 호출하지 않기 위함입니다.
 
 따라서 Render에는 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`을 모두 설정해 둡니다.
+
+AI 보조 엔드포인트(`POST /api/ai/term-explanation`)도 인증이 켜져 있으면 로그인 토큰을 요구하며, 검증된 `user_id` 기준으로 분당 호출을 제한합니다(`AI_RATE_LIMIT_PER_MINUTE`). 인증이 꺼져 있으면 단일 사용자 `local` 기준으로 합산됩니다.
 
 ## PostgreSQL
 

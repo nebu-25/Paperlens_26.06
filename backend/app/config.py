@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     ai_model: str = "openai/gpt-4o-mini"
     ai_site_url: str = "https://nebu-25.github.io/Paperlens_26.06/"
     ai_app_name: str = "PaperLens"
+    # AI 엔드포인트 사용자별 분당 호출 상한(비용·남용 방지). 0 이하면 제한 없음.
+    # 단일 프로세스 인메모리 카운터라 인스턴스 재시작 시 리셋되고 인스턴스 간 공유되지 않는다.
+    ai_rate_limit_per_minute: int = 10
     # PyMuPDF OCR fallback. Render 기본 Python 런타임에는 Tesseract가 없을 수 있어 best-effort로만 사용한다.
     ocr_languages: str = "kor+eng"
     ocr_max_pages: int = 20
