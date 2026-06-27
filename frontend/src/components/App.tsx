@@ -25,7 +25,7 @@ import {
   uploadPhasePercent,
   uploadPhaseText,
 } from '../constants';
-import { highlightStyle, needsPdfText, noticeStyle } from '../lib/format';
+import { highlightStyle, needsPdfText } from '../lib/format';
 import { DEFAULT_EXPORT_OPTIONS } from '../lib/export';
 import type { ExportOptions } from '../lib/export';
 import { useReviewStore } from '../hooks/useReviewStore';
@@ -34,6 +34,7 @@ import { AiDraftButton } from './AiDraftButton';
 import { AuthControls } from './AuthControls';
 import { EmptyState } from './EmptyState';
 import { LandingPage } from './LandingPage';
+import { NoticeBanner } from './NoticeBanner';
 import { QuestionsCard } from './QuestionsCard';
 import { SectionCard } from './SectionCard';
 import { TagEditor } from './TagEditor';
@@ -489,17 +490,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
           </div>
 
           {uploadNotice && (
-            <div
-              role={uploadNotice.tone === 'error' ? 'alert' : 'status'}
-              aria-live={uploadNotice.tone === 'error' ? 'assertive' : 'polite'}
-              className={`mt-3 flex items-start gap-2 rounded border px-3 py-2 text-xs leading-relaxed ${
-                noticeStyle(uploadNotice.tone)
-              }`}
-            >
-              <span className="flex-1">
-                <b className="block">{uploadNotice.title}</b>
-                {uploadNotice.message}
-              </span>
+            <NoticeBanner notice={uploadNotice} onClose={() => setUploadNotice(null)}>
               {sampleRetryAvailable && uploadNotice.title === '샘플 PDF 불러오기 실패' && (
                 <button
                   type="button"
@@ -509,15 +500,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   재시도
                 </button>
               )}
-              <button
-                className="shrink-0 leading-none hover:text-ink"
-                title="닫기"
-                aria-label="알림 닫기"
-                onClick={() => setUploadNotice(null)}
-              >
-                ×
-              </button>
-            </div>
+            </NoticeBanner>
           )}
         </div>
       </section>
@@ -912,27 +895,11 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   </div>
                 </div>
                 {syncNotice && (
-                  <div
-                    role={syncNotice.tone === 'error' || syncNotice.tone === 'warning' ? 'alert' : 'status'}
-                    aria-live={syncNotice.tone === 'error' || syncNotice.tone === 'warning' ? 'assertive' : 'polite'}
-                    className={`mt-3 flex items-start gap-2 rounded border px-3 py-2 text-xs leading-relaxed ${
-                      noticeStyle(syncNotice.tone)
-                    }`}
-                  >
-                    <span className="flex-1">
-                      <b className="block">{syncNotice.title}</b>
-                      {syncNotice.message}
-                    </span>
-                    <button
-                      type="button"
-                      className="shrink-0 leading-none hover:text-ink"
-                      title="닫기"
-                      aria-label="동기화 알림 닫기"
-                      onClick={() => setSyncNotice(null)}
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <NoticeBanner
+                    notice={syncNotice}
+                    onClose={() => setSyncNotice(null)}
+                    closeLabel="동기화 알림 닫기"
+                  />
                 )}
               </div>
 
