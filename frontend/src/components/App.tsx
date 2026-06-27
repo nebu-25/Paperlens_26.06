@@ -295,7 +295,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
       tone: 'info',
       title: '원문 텍스트 저장',
       message:
-        '추출 품질: 사용자 보정됨. 직접 입력한 원문이 저장 대상에 포함됩니다. 기존 하이라이트 위치는 원문 변경 후 달라질 수 있습니다.',
+        '추출 품질: 사용자 보정됨. 직접 입력한 원문이 저장 대상에 포함됩니다. 서버 동기화가 완료되면 로그아웃 후에도 유지됩니다. 저장 상태가 "저장됨"으로 바뀐 뒤 이동하거나 로그아웃하는 것이 안전합니다.',
     });
   };
 
@@ -755,7 +755,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                         />
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="text-xs leading-relaxed text-muted">
-                            저장 후 이 텍스트를 기준으로 하이라이트 위치가 계산됩니다.
+                            저장 후 이 텍스트를 기준으로 하이라이트 위치가 계산됩니다. 서버 동기화 완료 전에는 페이지 이동이나 로그아웃을 잠시 기다려 주세요.
                           </p>
                           <div className="flex gap-2">
                             <button
