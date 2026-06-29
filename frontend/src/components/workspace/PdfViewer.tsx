@@ -18,9 +18,9 @@ type PageSize = {
 };
 
 const MIN_SCALE = 0.75;
-const MAX_SCALE = 2;
-const SCALE_STEP = 0.15;
-const WHEEL_SCALE_STEP = 0.06;
+const MAX_SCALE = 5;
+const SCALE_STEP = 0.25;
+const WHEEL_SCALE_STEP = 0.1;
 
 interface PdfViewerProps {
   title: string;
@@ -95,7 +95,7 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
         if (cancelled) return;
         const pdfjs = await import('pdfjs-dist');
         pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
-        loadingTask = pdfjs.getDocument({ data });
+        loadingTask = pdfjs.getDocument({ data, useWasm: false });
         loadedDocument = await loadingTask.promise;
         if (cancelled) {
           void loadedDocument.cleanup();
@@ -140,16 +140,28 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
         const context = canvas.getContext('2d');
         if (!context) throw new Error('Canvas context is unavailable.');
 
-        canvas.width = Math.ceil(viewport.width);
-        canvas.height = Math.ceil(viewport.height);
+        const width = Math.ceil(viewport.width);
+        const height = Math.ceil(viewport.height);
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.ceil(width * outputScale);
+        canvas.height = Math.ceil(height * outputScale);
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.clearRect(0, 0, canvas.width, canvas.height);
         setPageSize({
           baseWidth: Math.ceil(baseViewport.width),
           baseHeight: Math.ceil(baseViewport.height),
-          width: Math.ceil(viewport.width),
-          height: Math.ceil(viewport.height),
+          width,
+          height,
         });
 
-        renderTask = page.render({ canvas, canvasContext: context, viewport });
+        renderTask = page.render({
+          canvas,
+          canvasContext: context,
+          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+          viewport,
+        });
         await renderTask.promise;
       } catch (error) {
         if (!cancelled && !(error instanceof Error && error.name === 'RenderingCancelledException')) {
@@ -263,7 +275,11 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
   const canGoNext = pageCount > 0 && pageNumber < pageCount;
   const scalePercent = `${Math.round(scale * 100)}%`;
   const pageStyle = pageSize
-    ? { width: `${pageSize.width}px`, height: `${pageSize.height}px` }
+    ? {
+        width: `${pageSize.width}px`,
+        height: `${pageSize.height}px`,
+        aspectRatio: `${pageSize.baseWidth} / ${pageSize.baseHeight}`,
+      }
     : undefined;
 
   return (
@@ -358,7 +374,8 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
             >
               <canvas
                 ref={canvasRef}
-                className="block h-full w-full"
+                className="block max-w-none"
+                style={pageStyle}
                 aria-label={`${title || '논문'} PDF ${pageNumber}페이지`}
               />
               <div
