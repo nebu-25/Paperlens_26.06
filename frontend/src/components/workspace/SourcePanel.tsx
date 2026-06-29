@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { resolveApiUrl } from '../../constants';
 import { needsPdfText } from '../../lib/format';
 import type { ExtractionQuality } from '../../types';
+import { PdfViewer } from './PdfViewer';
 import { useWorkspace } from './WorkspaceContext';
 
 type PaperViewMode = 'text' | 'pdf';
@@ -37,8 +38,6 @@ export function SourcePanel() {
 
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
   const [paperViewMode, setPaperViewMode] = useState<PaperViewMode>('text');
-  const [paperPdfObjectUrl, setPaperPdfObjectUrl] = useState('');
-  const [paperPdfPreviewError, setPaperPdfPreviewError] = useState('');
   const [sourceEditOpen, setSourceEditOpen] = useState(false);
   const [sourceDraft, setSourceDraft] = useState('');
   const [hiddenPaperNotices, setHiddenPaperNotices] = useState<Set<string>>(() => new Set());
@@ -87,49 +86,6 @@ export function SourcePanel() {
   useEffect(() => {
     if (!sourceEditOpen) setSourceDraft(paper?.text ?? '');
   }, [paper?.text, sourceEditOpen]);
-
-  useEffect(() => {
-    if (!paperPdfUrl) {
-      setPaperPdfObjectUrl('');
-      setPaperPdfPreviewError('');
-      return;
-    }
-    let cancelled = false;
-    let objectUrl = '';
-    setPaperPdfObjectUrl('');
-    setPaperPdfPreviewError('');
-    (async () => {
-      try {
-        const res = await fetch(paperPdfUrl, {
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-        });
-        if (!res.ok) {
-          if (!cancelled) {
-            setPaperPdfPreviewError(
-              res.status === 401
-                ? 'PDF 원본 미리보기를 열 수 없습니다. 로그인 세션을 새로고침한 뒤 다시 시도해 주세요.'
-                : 'PDF 원본 미리보기를 불러오지 못했습니다. 하이라이트 가능한 원문은 계속 사용할 수 있습니다.',
-            );
-          }
-          return;
-        }
-        const blob = await res.blob();
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
-        setPaperPdfObjectUrl(objectUrl);
-      } catch {
-        if (!cancelled) {
-          setPaperPdfPreviewError(
-            'PDF 원본 미리보기를 불러오지 못했습니다. 하이라이트 가능한 원문은 계속 사용할 수 있습니다.',
-          );
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [accessToken, paperPdfUrl]);
 
   if (!paper) return null;
 
@@ -358,39 +314,11 @@ export function SourcePanel() {
           </section>
         ) : (
           <section className="rounded border border-line bg-white p-4">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-ink">PDF 원본 보기</h3>
-                <div className="truncate text-xs text-muted">
-                  {paper.pdfFilename || '저장된 PDF'}
-                </div>
-              </div>
-              {paperPdfObjectUrl && (
-                <a
-                  className="shrink-0 rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
-                  href={paperPdfObjectUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  새 창
-                </a>
-              )}
-            </div>
-            {paperPdfObjectUrl ? (
-              <iframe
-                className="h-[calc(100vh-21rem)] min-h-[560px] w-full rounded border border-line bg-paper"
-                title={`${paper.title || '논문'} PDF 원본`}
-                src={paperPdfObjectUrl}
-              />
-            ) : paperPdfPreviewError ? (
-              <div className="rounded border border-line bg-paper p-3 text-xs leading-relaxed text-muted">
-                {paperPdfPreviewError}
-              </div>
-            ) : (
-              <div className="rounded border border-line bg-paper p-3 text-xs leading-relaxed text-muted">
-                PDF 원본 미리보기를 준비하고 있습니다.
-              </div>
-            )}
+            <PdfViewer
+              title={paper.pdfFilename || paper.title || '저장된 PDF'}
+              url={paperPdfUrl}
+              accessToken={accessToken}
+            />
           </section>
         )}
       </div>
