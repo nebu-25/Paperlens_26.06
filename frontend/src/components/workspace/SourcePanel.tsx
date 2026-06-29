@@ -254,6 +254,7 @@ export function SourcePanel() {
             {sourceEditOpen ? (
               <div className="space-y-3">
                 <textarea
+                  name="paper-source-text"
                   className="h-[calc(100vh-23rem)] min-h-[420px] w-full resize-none rounded border border-line bg-paper/40 p-4 text-sm leading-7 outline-none focus:border-action"
                   value={sourceDraft}
                   placeholder="PDF 원본에서 복사한 텍스트를 붙여 넣거나, 추출된 원문을 직접 다듬으세요."

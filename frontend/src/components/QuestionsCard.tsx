@@ -21,6 +21,7 @@ export function QuestionsCard({
     <SectionCard title="읽으며 생긴 질문" icon={<PencilLine size={16} />}>
       <div className="mb-2 flex gap-2">
         <input
+          name="review-question"
           className="w-full rounded border border-line p-2 text-sm outline-none focus:border-action"
           placeholder="읽다가 생긴 질문을 기록하세요."
           value={draft}

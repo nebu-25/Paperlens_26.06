@@ -156,16 +156,22 @@ export function AuthControls({ enabled, ready, user, variant = 'panel', onEnterS
       </div>
       <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
         <input
+          id="paperlens-auth-email"
+          name="email"
           className="min-w-0 rounded border border-line px-3 py-2 text-sm outline-none focus:border-action"
           type="email"
           placeholder="이메일"
+          autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
         <input
+          id="paperlens-auth-password"
+          name="password"
           className="min-w-0 rounded border border-line px-3 py-2 text-sm outline-none focus:border-action"
           type="password"
           placeholder="비밀번호"
+          autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && void submit()}

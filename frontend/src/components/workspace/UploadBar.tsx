@@ -54,6 +54,8 @@ export function UploadBar() {
           )}
         </div>
         <input
+          id="paperlens-pdf-upload"
+          name="pdf-upload"
           ref={fileInputRef}
           type="file"
           accept="application/pdf"
@@ -84,6 +86,7 @@ export function UploadBar() {
             {uploading ? uploadPhaseText[uploadPhase] || '처리 중' : 'PDF 업로드'}
           </button>
           <input
+            name="paper-source"
             className="min-w-0 rounded border border-line bg-white px-4 py-3 text-sm outline-none focus:border-action disabled:opacity-60"
             placeholder="DOI 또는 PDF 원문 URL"
             value={doiInput}

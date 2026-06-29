@@ -31,6 +31,8 @@ export function PaperSidebar() {
               className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted"
             />
             <input
+              name="paper-library-search"
+              type="search"
               className="w-full rounded border border-line bg-white py-1.5 pl-7 pr-2 text-sm outline-none focus:border-action"
               placeholder="제목·저자·내용·태그 검색"
               value={search}
