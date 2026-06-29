@@ -4,8 +4,10 @@ import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import type {
   PDFDocumentLoadingTask,
   PDFDocumentProxy,
+  PDFPageProxy,
   RenderTask,
 } from 'pdfjs-dist/types/src/display/api';
+import type { TextLayer } from 'pdfjs-dist/types/src/display/text_layer';
 
 type PdfViewerStatus = 'idle' | 'loading' | 'ready' | 'error';
 type PageSize = {
@@ -40,9 +42,11 @@ function clampScale(value: number) {
 export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const textLayerRef = useRef<HTMLDivElement | null>(null);
   const panStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
   const panningRef = useRef(false);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
+  const [page, setPage] = useState<PDFPageProxy | null>(null);
   const [status, setStatus] = useState<PdfViewerStatus>('idle');
   const [message, setMessage] = useState('');
   const [pageNumber, setPageNumber] = useState(1);
@@ -55,6 +59,7 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
   useEffect(() => {
     if (!url) {
       setDocument(null);
+      setPage(null);
       setPageNumber(1);
       setPageCount(0);
       setPageSize(null);
@@ -69,6 +74,7 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
     setStatus('loading');
     setMessage('백엔드에서 PDF 원본을 불러오고 있습니다.');
     setDocument(null);
+    setPage(null);
     setPageNumber(1);
     setPageCount(0);
     setPageSize(null);
@@ -128,6 +134,7 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
       try {
         const page = await document.getPage(pageNumber);
         if (cancelled) return;
+        setPage(page);
         const baseViewport = page.getViewport({ scale: 1 });
         const viewport = page.getViewport({ scale });
         const context = canvas.getContext('2d');
@@ -158,6 +165,40 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
     };
   }, [document, pageNumber, scale]);
 
+  useEffect(() => {
+    if (!page || !textLayerRef.current) return;
+
+    let cancelled = false;
+    let textLayer: TextLayer | null = null;
+    const container = textLayerRef.current;
+    container.replaceChildren();
+
+    (async () => {
+      try {
+        const pdfjs = await import('pdfjs-dist');
+        const viewport = page.getViewport({ scale });
+        const textContent = await page.getTextContent();
+        if (cancelled) return;
+        textLayer = new pdfjs.TextLayer({
+          textContentSource: textContent,
+          container,
+          viewport,
+        });
+        await textLayer.render();
+      } catch {
+        if (!cancelled) {
+          container.replaceChildren();
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      textLayer?.cancel();
+      container.replaceChildren();
+    };
+  }, [page, scale]);
+
   const zoomBy = (delta: number) => {
     setScale((value) => clampScale(value + delta));
   };
@@ -185,6 +226,7 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || event.pointerType === 'touch' || status !== 'ready') return;
+    if ((event.target as HTMLElement).closest('[data-pdf-text-layer]') && !event.altKey) return;
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
     event.preventDefault();
@@ -300,6 +342,7 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
         className={`h-[calc(100vh-21rem)] min-h-[560px] overflow-auto rounded border border-line bg-paper p-3 ${
           status === 'ready' ? (panning ? 'cursor-grabbing select-none' : 'cursor-grab') : ''
         }`}
+        title="PDF 텍스트 선택: 드래그, 화면 이동: Alt + 드래그"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={stopPanning}
@@ -319,9 +362,9 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
                 aria-label={`${title || '논문'} PDF ${pageNumber}페이지`}
               />
               <div
-                className="pointer-events-none absolute inset-0"
+                ref={textLayerRef}
+                className="pdf-text-layer absolute inset-0"
                 data-pdf-text-layer
-                aria-hidden="true"
               />
               <div
                 className="pointer-events-none absolute inset-0"

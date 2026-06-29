@@ -15,3 +15,43 @@ button:disabled {
   opacity: 0.65;
 }
 
+.pdf-text-layer {
+  color-scheme: only light;
+  overflow: clip;
+  line-height: 1;
+  text-align: initial;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  user-select: text;
+}
+
+.pdf-text-layer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: text;
+}
+
+.pdf-text-layer .markedContent {
+  display: contents;
+}
+
+.pdf-text-layer ::selection {
+  background: color-mix(in srgb, Highlight, transparent 55%);
+  color: transparent;
+}
+
+.pdf-text-layer ::-moz-selection {
+  background: color-mix(in srgb, Highlight, transparent 55%);
+  color: transparent;
+}
+
+.pdf-text-layer .endOfContent {
+  position: absolute;
+  inset: 100% 0 0;
+  cursor: default;
+  user-select: none;
+}
