@@ -115,6 +115,7 @@ describe('useReviewStore', () => {
     act(() => result.current.setHighlightColor('blue'));
     act(() =>
       result.current.addPdfHighlight({
+        color: 'blue',
         page: 2,
         text: ' selected   pdf text ',
         rects: [{ x: 10.123, y: 20.456, width: 100.789, height: 12.345 }],

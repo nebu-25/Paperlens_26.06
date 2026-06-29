@@ -819,10 +819,12 @@ export function useReviewStore({
   }
 
   function addPdfHighlight({
+    color,
     page,
     rects,
     text,
   }: {
+    color: HighlightColor;
     page: number;
     rects: { x: number; y: number; width: number; height: number }[];
     text: string;
@@ -844,7 +846,7 @@ export function useReviewStore({
         {
           id: uid(),
           text: normalizedText,
-          color: highlightColor,
+          color,
           pdf: {
             page,
             rects: normalizedRects,

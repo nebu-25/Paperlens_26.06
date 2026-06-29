@@ -35,6 +35,8 @@ export function SourcePanel() {
     onTextMouseUp,
     updatePaper,
     setSyncNotice,
+    highlightColor,
+    setHighlightColor,
     addPdfHighlight,
   } = store;
 
@@ -322,6 +324,8 @@ export function SourcePanel() {
               url={paperPdfUrl}
               accessToken={accessToken}
               highlights={note.highlights}
+              highlightColor={highlightColor}
+              onSelectHighlightColor={setHighlightColor}
               onAddHighlight={addPdfHighlight}
             />
           </section>

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import type {
@@ -8,6 +8,7 @@ import type {
   RenderTask,
 } from 'pdfjs-dist/types/src/display/api';
 import type { TextLayer } from 'pdfjs-dist/types/src/display/text_layer';
+import { HIGHLIGHT_COLORS } from '../../constants';
 import type { Highlight, HighlightColor } from '../../types';
 
 type PdfViewerStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -16,6 +17,14 @@ type PageSize = {
   baseHeight: number;
   width: number;
   height: number;
+};
+type PdfPendingHighlight = {
+  color: HighlightColor;
+  page: number;
+  rects: { x: number; y: number; width: number; height: number }[];
+  text: string;
+  x: number;
+  y: number;
 };
 
 const MIN_SCALE = 0.75;
@@ -28,7 +37,10 @@ interface PdfViewerProps {
   url: string;
   accessToken: string | null;
   highlights: Highlight[];
+  highlightColor: HighlightColor;
+  onSelectHighlightColor: (color: HighlightColor) => void;
   onAddHighlight: (highlight: {
+    color: HighlightColor;
     page: number;
     rects: { x: number; y: number; width: number; height: number }[];
     text: string;
@@ -60,6 +72,8 @@ export function PdfViewer({
   url,
   accessToken,
   highlights,
+  highlightColor,
+  onSelectHighlightColor,
   onAddHighlight,
 }: PdfViewerProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -77,6 +91,7 @@ export function PdfViewer({
   const [scale, setScale] = useState(1.15);
   const [pageSize, setPageSize] = useState<PageSize | null>(null);
   const [panning, setPanning] = useState(false);
+  const [pendingHighlight, setPendingHighlight] = useState<PdfPendingHighlight | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -86,6 +101,7 @@ export function PdfViewer({
       setPageNumber(1);
       setPageCount(0);
       setPageSize(null);
+      setPendingHighlight(null);
       setStatus('idle');
       setMessage('');
       return;
@@ -101,6 +117,7 @@ export function PdfViewer({
     setPageNumber(1);
     setPageCount(0);
     setPageSize(null);
+    setPendingHighlight(null);
 
     (async () => {
       try {
@@ -234,8 +251,18 @@ export function PdfViewer({
     };
   }, [page, scale]);
 
+  useEffect(() => {
+    setPendingHighlight(null);
+    window.getSelection()?.removeAllRanges();
+  }, [pageNumber, url]);
+
   const zoomBy = (delta: number) => {
     setScale((value) => clampScale(value + delta));
+  };
+
+  const clearPendingHighlight = () => {
+    setPendingHighlight(null);
+    window.getSelection()?.removeAllRanges();
   };
 
   useEffect(() => {
@@ -316,7 +343,31 @@ export function PdfViewer({
         height: rect.height / scale,
       }))
       .filter((rect) => rect.width >= 1 && rect.height >= 1);
-    onAddHighlight({ page: pageNumber, rects, text: selectedText });
+    if (rects.length === 0) return;
+    setPendingHighlight({
+      color: highlightColor,
+      page: pageNumber,
+      rects,
+      text: selectedText,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
+
+  const applyPendingHighlight = () => {
+    if (!pendingHighlight) return;
+    onAddHighlight({
+      color: pendingHighlight.color,
+      page: pendingHighlight.page,
+      rects: pendingHighlight.rects,
+      text: pendingHighlight.text,
+    });
+    clearPendingHighlight();
+  };
+
+  const selectPendingColor = (color: HighlightColor) => {
+    onSelectHighlightColor(color);
+    setPendingHighlight((current) => (current ? { ...current, color } : current));
   };
 
   const canGoPrevious = pageNumber > 1;
@@ -464,6 +515,59 @@ export function PdfViewer({
           </div>
         )}
       </div>
+      {pendingHighlight && (
+        <div
+          className="fixed z-50 max-w-[min(92vw,28rem)] rounded border border-line bg-white p-2 shadow-lg"
+          style={{
+            left: Math.max(8, Math.min(pendingHighlight.x, window.innerWidth - 448)),
+            top: Math.max(8, Math.min(pendingHighlight.y + 12, window.innerHeight - 128)),
+          }}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold text-ink">PDF 하이라이트</span>
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:bg-paper hover:text-ink"
+              aria-label="PDF 하이라이트 적용 취소"
+              title="PDF 하이라이트 적용 취소"
+              onClick={clearPendingHighlight}
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            {HIGHLIGHT_COLORS.map((color) => (
+              <button
+                key={color.value}
+                type="button"
+                className={`inline-flex h-7 items-center gap-1 rounded border px-2 text-[11px] font-medium ${
+                  pendingHighlight.color === color.value
+                    ? 'border-ink ring-2 ring-action/25'
+                    : 'border-line hover:border-action'
+                }`}
+                aria-label={`PDF 하이라이트 색상 ${color.label}`}
+                title={`${color.label}: ${color.meaning}`}
+                onClick={() => selectPendingColor(color.value)}
+              >
+                <span className={`size-3 rounded-full ${color.swatchClass}`} aria-hidden="true" />
+                <span>{color.label}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className="ml-1 inline-flex h-7 items-center gap-1 rounded bg-action px-2 text-[11px] font-semibold text-white"
+              onClick={applyPendingHighlight}
+            >
+              <Check size={13} />
+              적용
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
