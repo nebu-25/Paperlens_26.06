@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
-import { useEffect, useRef, useState, type MouseEvent, type WheelEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import type {
   PDFDocumentLoadingTask,
@@ -18,6 +18,7 @@ type PageSize = {
 const MIN_SCALE = 0.75;
 const MAX_SCALE = 2;
 const SCALE_STEP = 0.15;
+const WHEEL_SCALE_STEP = 0.06;
 
 interface PdfViewerProps {
   title: string;
@@ -40,6 +41,7 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const panStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
+  const panningRef = useRef(false);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [status, setStatus] = useState<PdfViewerStatus>('idle');
   const [message, setMessage] = useState('');
@@ -160,6 +162,20 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
     setScale((value) => clampScale(value + delta));
   };
 
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+
+    const handleWheel = (event: globalThis.WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      zoomBy(event.deltaY > 0 ? -WHEEL_SCALE_STEP : WHEEL_SCALE_STEP);
+    };
+
+    scrollEl.addEventListener('wheel', handleWheel, { passive: false });
+    return () => scrollEl.removeEventListener('wheel', handleWheel);
+  }, []);
+
   const fitWidth = () => {
     const scrollEl = scrollRef.current;
     if (!scrollEl || !pageSize?.baseWidth) return;
@@ -167,28 +183,24 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
     setScale(clampScale(availableWidth / pageSize.baseWidth));
   };
 
-  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
-    if (!event.ctrlKey && !event.metaKey) return;
-    event.preventDefault();
-    zoomBy(event.deltaY > 0 ? -SCALE_STEP : SCALE_STEP);
-  };
-
-  const handleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || status !== 'ready') return;
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || event.pointerType === 'touch' || status !== 'ready') return;
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
     event.preventDefault();
+    scrollEl.setPointerCapture(event.pointerId);
     panStartRef.current = {
       x: event.clientX,
       y: event.clientY,
       scrollLeft: scrollEl.scrollLeft,
       scrollTop: scrollEl.scrollTop,
     };
+    panningRef.current = true;
     setPanning(true);
   };
 
-  const handleMouseMove = (event: MouseEvent<HTMLDivElement>) => {
-    if (!panning) return;
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!panningRef.current) return;
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
     event.preventDefault();
@@ -197,7 +209,13 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
     scrollEl.scrollTop = start.scrollTop - (event.clientY - start.y);
   };
 
-  const stopPanning = () => setPanning(false);
+  const stopPanning = (event?: PointerEvent<HTMLDivElement>) => {
+    if (event && scrollRef.current?.hasPointerCapture(event.pointerId)) {
+      scrollRef.current.releasePointerCapture(event.pointerId);
+    }
+    panningRef.current = false;
+    setPanning(false);
+  };
 
   const canGoPrevious = pageNumber > 1;
   const canGoNext = pageCount > 0 && pageNumber < pageCount;
@@ -282,11 +300,10 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
         className={`h-[calc(100vh-21rem)] min-h-[560px] overflow-auto rounded border border-line bg-paper p-3 ${
           status === 'ready' ? (panning ? 'cursor-grabbing select-none' : 'cursor-grab') : ''
         }`}
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={stopPanning}
-        onMouseLeave={stopPanning}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={stopPanning}
+        onPointerCancel={stopPanning}
       >
         {status === 'ready' ? (
           <div className="flex min-h-full justify-center">
