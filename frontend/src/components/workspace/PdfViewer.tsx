@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, RotateCcw, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, RotateCcw, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import type {
@@ -26,6 +26,13 @@ type PdfPendingHighlight = {
   x: number;
   y: number;
 };
+type PdfActiveHighlight = {
+  id: string;
+  color: HighlightColor;
+  text: string;
+  x: number;
+  y: number;
+};
 
 const MIN_SCALE = 0.75;
 const MAX_SCALE = 5;
@@ -45,6 +52,7 @@ interface PdfViewerProps {
     rects: { x: number; y: number; width: number; height: number }[];
     text: string;
   }) => void;
+  onRemoveHighlight: (id: string) => void;
 }
 
 const PDF_HIGHLIGHT_COLORS: Record<HighlightColor, string> = {
@@ -75,6 +83,7 @@ export function PdfViewer({
   highlightColor,
   onSelectHighlightColor,
   onAddHighlight,
+  onRemoveHighlight,
 }: PdfViewerProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pageLayerRef = useRef<HTMLDivElement | null>(null);
@@ -92,6 +101,7 @@ export function PdfViewer({
   const [pageSize, setPageSize] = useState<PageSize | null>(null);
   const [panning, setPanning] = useState(false);
   const [pendingHighlight, setPendingHighlight] = useState<PdfPendingHighlight | null>(null);
+  const [activeHighlight, setActiveHighlight] = useState<PdfActiveHighlight | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -102,6 +112,7 @@ export function PdfViewer({
       setPageCount(0);
       setPageSize(null);
       setPendingHighlight(null);
+      setActiveHighlight(null);
       setStatus('idle');
       setMessage('');
       return;
@@ -118,6 +129,7 @@ export function PdfViewer({
     setPageCount(0);
     setPageSize(null);
     setPendingHighlight(null);
+    setActiveHighlight(null);
 
     (async () => {
       try {
@@ -253,6 +265,7 @@ export function PdfViewer({
 
   useEffect(() => {
     setPendingHighlight(null);
+    setActiveHighlight(null);
     window.getSelection()?.removeAllRanges();
   }, [pageNumber, url]);
 
@@ -263,6 +276,10 @@ export function PdfViewer({
   const clearPendingHighlight = () => {
     setPendingHighlight(null);
     window.getSelection()?.removeAllRanges();
+  };
+
+  const closeActiveHighlight = () => {
+    setActiveHighlight(null);
   };
 
   useEffect(() => {
@@ -352,6 +369,7 @@ export function PdfViewer({
       x: event.clientX,
       y: event.clientY,
     });
+    setActiveHighlight(null);
   };
 
   const applyPendingHighlight = () => {
@@ -368,6 +386,26 @@ export function PdfViewer({
   const selectPendingColor = (color: HighlightColor) => {
     onSelectHighlightColor(color);
     setPendingHighlight((current) => (current ? { ...current, color } : current));
+  };
+
+  const openAppliedHighlight = (highlight: Highlight, event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setPendingHighlight(null);
+    window.getSelection()?.removeAllRanges();
+    setActiveHighlight({
+      id: highlight.id,
+      color: highlight.color ?? 'yellow',
+      text: highlight.text,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
+
+  const removeActiveHighlight = () => {
+    if (!activeHighlight) return;
+    onRemoveHighlight(activeHighlight.id);
+    setActiveHighlight(null);
   };
 
   const canGoPrevious = pageNumber > 1;
@@ -488,13 +526,12 @@ export function PdfViewer({
               <div
                 className="pointer-events-none absolute inset-0"
                 data-pdf-highlight-layer
-                aria-hidden="true"
               >
                 {pageHighlights.map((highlight) =>
                   highlight.pdf?.rects.map((rect, index) => (
                     <div
                       key={`${highlight.id}-${index}`}
-                      className="absolute rounded-[1px]"
+                      className="pointer-events-auto absolute cursor-pointer rounded-[1px] outline-offset-1 hover:outline hover:outline-1 hover:outline-action"
                       style={{
                         left: `${rect.x * scale}px`,
                         top: `${rect.y * scale}px`,
@@ -503,6 +540,11 @@ export function PdfViewer({
                         backgroundColor:
                           PDF_HIGHLIGHT_COLORS[highlight.color ?? 'yellow'] ?? PDF_HIGHLIGHT_COLORS.yellow,
                       }}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => openAppliedHighlight(highlight, event)}
                     />
                   )),
                 )}
@@ -564,6 +606,53 @@ export function PdfViewer({
             >
               <Check size={13} />
               적용
+            </button>
+          </div>
+        </div>
+      )}
+      {activeHighlight && (
+        <div
+          className="fixed z-50 w-[min(92vw,20rem)] rounded border border-line bg-white p-2 shadow-lg"
+          style={{
+            left: Math.max(8, Math.min(activeHighlight.x, window.innerWidth - 320)),
+            top: Math.max(8, Math.min(activeHighlight.y + 12, window.innerHeight - 128)),
+          }}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold text-ink">적용된 PDF 하이라이트</span>
+            <button
+              type="button"
+              className="inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:bg-paper hover:text-ink"
+              aria-label="적용된 PDF 하이라이트 메뉴 닫기"
+              title="닫기"
+              onClick={closeActiveHighlight}
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <p className="line-clamp-2 text-xs leading-5 text-muted">{activeHighlight.text}</p>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1 rounded bg-paper px-2 py-1 text-[11px] font-medium text-muted">
+              <span
+                className={`size-3 rounded-full ${
+                  HIGHLIGHT_COLORS.find((color) => color.value === activeHighlight.color)?.swatchClass
+                  ?? 'bg-yellow-300'
+                }`}
+                aria-hidden="true"
+              />
+              {HIGHLIGHT_COLORS.find((color) => color.value === activeHighlight.color)?.label ?? '주장'}
+            </span>
+            <button
+              type="button"
+              className="inline-flex h-7 items-center gap-1 rounded border border-line px-2 text-[11px] font-semibold text-muted hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+              onClick={removeActiveHighlight}
+            >
+              <Trash2 size={13} />
+              하이라이트 해제
             </button>
           </div>
         </div>

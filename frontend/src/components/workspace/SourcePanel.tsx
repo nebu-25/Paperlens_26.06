@@ -34,6 +34,7 @@ export function SourcePanel() {
     bodyNodes,
     onTextMouseUp,
     updatePaper,
+    updateNote,
     setSyncNotice,
     highlightColor,
     setHighlightColor,
@@ -327,6 +328,12 @@ export function SourcePanel() {
               highlightColor={highlightColor}
               onSelectHighlightColor={setHighlightColor}
               onAddHighlight={addPdfHighlight}
+              onRemoveHighlight={(highlightId) =>
+                updateNote(
+                  'highlights',
+                  note.highlights.filter((highlight) => highlight.id !== highlightId),
+                )
+              }
             />
           </section>
         )}
