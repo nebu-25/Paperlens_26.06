@@ -870,6 +870,19 @@ export function useReviewStore({
     window.getSelection()?.removeAllRanges();
   }
 
+  function addTermText(text: string) {
+    const term = text.replace(/\s+/g, ' ').trim();
+    if (!term) return;
+    setNote((n) => ({
+      ...n,
+      terms: [
+        ...n.terms,
+        { id: uid(), term, explanation: '', addedByUser: true, aiExplained: false },
+      ],
+    }));
+    window.getSelection()?.removeAllRanges();
+  }
+
   const bodyNodes = usePaperBodyNodes(paper, note, highlightFilter);
 
   function contextForTerm(term: string): string {
@@ -1026,6 +1039,7 @@ export function useReviewStore({
     addHighlight,
     addPdfHighlight,
     addTerm,
+    addTermText,
     explainTerm,
     toggleTagFilter,
     exportMarkdown,

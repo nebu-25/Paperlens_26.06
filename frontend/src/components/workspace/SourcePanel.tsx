@@ -39,6 +39,7 @@ export function SourcePanel() {
     highlightColor,
     setHighlightColor,
     addPdfHighlight,
+    addTermText,
   } = store;
 
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
@@ -334,6 +335,7 @@ export function SourcePanel() {
                   note.highlights.filter((highlight) => highlight.id !== highlightId),
                 )
               }
+              onAddTerm={addTermText}
             />
           </section>
         )}

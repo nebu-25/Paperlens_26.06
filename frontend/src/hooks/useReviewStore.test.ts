@@ -146,6 +146,17 @@ describe('useReviewStore', () => {
     expect(result.current.note.terms[0].aiExplained).toBe(false);
   });
 
+  it('PDF 선택 텍스트를 사용자 용어로 추가한다', async () => {
+    const { result } = await renderStore();
+    act(() => result.current.registerPaper(paperInput(), [], 'p1'));
+    act(() => result.current.addTermText('  large   language model  '));
+
+    expect(result.current.note.terms).toHaveLength(1);
+    expect(result.current.note.terms[0].term).toBe('large language model');
+    expect(result.current.note.terms[0].addedByUser).toBe(true);
+    expect(result.current.note.terms[0].aiExplained).toBe(false);
+  });
+
   it('태그 필터를 토글한다', async () => {
     const { result } = await renderStore();
     act(() => result.current.toggleTagFilter('nlp'));

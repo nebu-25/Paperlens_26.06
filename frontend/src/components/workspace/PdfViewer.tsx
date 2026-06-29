@@ -1,4 +1,14 @@
-import { Check, ChevronLeft, ChevronRight, RotateCcw, Trash2, X, ZoomIn, ZoomOut } from 'lucide-react';
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Library,
+  RotateCcw,
+  Trash2,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import type {
@@ -53,6 +63,7 @@ interface PdfViewerProps {
     text: string;
   }) => void;
   onRemoveHighlight: (id: string) => void;
+  onAddTerm: (text: string) => void;
 }
 
 const PDF_HIGHLIGHT_COLORS: Record<HighlightColor, string> = {
@@ -84,6 +95,7 @@ export function PdfViewer({
   onSelectHighlightColor,
   onAddHighlight,
   onRemoveHighlight,
+  onAddTerm,
 }: PdfViewerProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pageLayerRef = useRef<HTMLDivElement | null>(null);
@@ -388,6 +400,12 @@ export function PdfViewer({
     setPendingHighlight((current) => (current ? { ...current, color } : current));
   };
 
+  const addPendingTerm = () => {
+    if (!pendingHighlight) return;
+    onAddTerm(pendingHighlight.text);
+    clearPendingHighlight();
+  };
+
   const openAppliedHighlight = (highlight: Highlight, event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -606,6 +624,14 @@ export function PdfViewer({
             >
               <Check size={13} />
               적용
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-7 items-center gap-1 rounded border border-line px-2 text-[11px] font-semibold text-muted hover:border-action hover:text-action"
+              onClick={addPendingTerm}
+            >
+              <Library size={13} />
+              용어 추가
             </button>
           </div>
         </div>
