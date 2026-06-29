@@ -24,6 +24,7 @@ export function SourcePanel() {
   const { store, accessToken } = useWorkspace();
   const {
     paper,
+    note,
     mobilePanel,
     uploading,
     fileInputRef,
@@ -34,6 +35,7 @@ export function SourcePanel() {
     onTextMouseUp,
     updatePaper,
     setSyncNotice,
+    addPdfHighlight,
   } = store;
 
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
@@ -319,6 +321,8 @@ export function SourcePanel() {
               title={paper.pdfFilename || paper.title || '저장된 PDF'}
               url={paperPdfUrl}
               accessToken={accessToken}
+              highlights={note.highlights}
+              onAddHighlight={addPdfHighlight}
             />
           </section>
         )}

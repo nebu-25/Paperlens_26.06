@@ -109,6 +109,30 @@ describe('useReviewStore', () => {
     expect(result.current.syncNotice?.tone).toBe('warning');
   });
 
+  it('PDF 좌표 기반 하이라이트를 추가한다', async () => {
+    const { result } = await renderStore();
+    act(() => result.current.registerPaper(paperInput(), [], 'p1'));
+    act(() => result.current.setHighlightColor('blue'));
+    act(() =>
+      result.current.addPdfHighlight({
+        page: 2,
+        text: ' selected   pdf text ',
+        rects: [{ x: 10.123, y: 20.456, width: 100.789, height: 12.345 }],
+      }),
+    );
+
+    expect(result.current.note.highlights).toHaveLength(1);
+    const highlight = result.current.note.highlights[0];
+    expect(highlight.text).toBe('selected pdf text');
+    expect(highlight.start).toBeUndefined();
+    expect(highlight.end).toBeUndefined();
+    expect(highlight.color).toBe('blue');
+    expect(highlight.pdf).toEqual({
+      page: 2,
+      rects: [{ x: 10.12, y: 20.46, width: 100.79, height: 12.35 }],
+    });
+  });
+
   it('선택 영역을 사용자 용어로 추가한다', async () => {
     const { result } = await renderStore();
     act(() => result.current.registerPaper(paperInput(), [], 'p1'));

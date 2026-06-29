@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import type {
   PDFDocumentLoadingTask,
@@ -8,6 +8,7 @@ import type {
   RenderTask,
 } from 'pdfjs-dist/types/src/display/api';
 import type { TextLayer } from 'pdfjs-dist/types/src/display/text_layer';
+import type { Highlight, HighlightColor } from '../../types';
 
 type PdfViewerStatus = 'idle' | 'loading' | 'ready' | 'error';
 type PageSize = {
@@ -26,7 +27,22 @@ interface PdfViewerProps {
   title: string;
   url: string;
   accessToken: string | null;
+  highlights: Highlight[];
+  onAddHighlight: (highlight: {
+    page: number;
+    rects: { x: number; y: number; width: number; height: number }[];
+    text: string;
+  }) => void;
 }
+
+const PDF_HIGHLIGHT_COLORS: Record<HighlightColor, string> = {
+  yellow: 'rgba(250, 204, 21, 0.36)',
+  green: 'rgba(52, 211, 153, 0.32)',
+  blue: 'rgba(56, 189, 248, 0.32)',
+  pink: 'rgba(251, 113, 133, 0.32)',
+  orange: 'rgba(251, 146, 60, 0.32)',
+  violet: 'rgba(167, 139, 250, 0.32)',
+};
 
 function errorMessage(status?: number) {
   if (status === 401) {
@@ -39,8 +55,15 @@ function clampScale(value: number) {
   return Math.max(MIN_SCALE, Math.min(MAX_SCALE, Number(value.toFixed(2))));
 }
 
-export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
+export function PdfViewer({
+  title,
+  url,
+  accessToken,
+  highlights,
+  onAddHighlight,
+}: PdfViewerProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const pageLayerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
   const panStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
@@ -271,6 +294,31 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
     setPanning(false);
   };
 
+  const handleTextMouseUp = (event: MouseEvent<HTMLDivElement>) => {
+    if (panningRef.current || status !== 'ready') return;
+    if (!(event.target as HTMLElement).closest('[data-pdf-text-layer]')) return;
+    const selection = window.getSelection();
+    const pageLayer = pageLayerRef.current;
+    if (!selection || selection.isCollapsed || !pageLayer || !textLayerRef.current) return;
+
+    const selectedText = selection.toString();
+    if (!selectedText.trim()) return;
+
+    const range = selection.getRangeAt(0);
+    if (!textLayerRef.current.contains(range.commonAncestorContainer)) return;
+
+    const pageBounds = pageLayer.getBoundingClientRect();
+    const rects = Array.from(range.getClientRects())
+      .map((rect) => ({
+        x: (rect.left - pageBounds.left) / scale,
+        y: (rect.top - pageBounds.top) / scale,
+        width: rect.width / scale,
+        height: rect.height / scale,
+      }))
+      .filter((rect) => rect.width >= 1 && rect.height >= 1);
+    onAddHighlight({ page: pageNumber, rects, text: selectedText });
+  };
+
   const canGoPrevious = pageNumber > 1;
   const canGoNext = pageCount > 0 && pageNumber < pageCount;
   const scalePercent = `${Math.round(scale * 100)}%`;
@@ -281,6 +329,7 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
         aspectRatio: `${pageSize.baseWidth} / ${pageSize.baseHeight}`,
       }
     : undefined;
+  const pageHighlights = highlights.filter((highlight) => highlight.pdf?.page === pageNumber);
 
   return (
     <div className="space-y-3">
@@ -363,10 +412,12 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
         onPointerMove={handlePointerMove}
         onPointerUp={stopPanning}
         onPointerCancel={stopPanning}
+        onMouseUp={handleTextMouseUp}
       >
         {status === 'ready' ? (
           <div className="flex min-h-full justify-center">
             <div
+              ref={pageLayerRef}
               className="relative h-fit max-w-none bg-white shadow-sm"
               style={pageStyle}
               data-pdf-page={pageNumber}
@@ -387,7 +438,24 @@ export function PdfViewer({ title, url, accessToken }: PdfViewerProps) {
                 className="pointer-events-none absolute inset-0"
                 data-pdf-highlight-layer
                 aria-hidden="true"
-              />
+              >
+                {pageHighlights.map((highlight) =>
+                  highlight.pdf?.rects.map((rect, index) => (
+                    <div
+                      key={`${highlight.id}-${index}`}
+                      className="absolute rounded-[1px]"
+                      style={{
+                        left: `${rect.x * scale}px`,
+                        top: `${rect.y * scale}px`,
+                        width: `${rect.width * scale}px`,
+                        height: `${rect.height * scale}px`,
+                        backgroundColor:
+                          PDF_HIGHLIGHT_COLORS[highlight.color ?? 'yellow'] ?? PDF_HIGHLIGHT_COLORS.yellow,
+                      }}
+                    />
+                  )),
+                )}
+              </div>
             </div>
           </div>
         ) : (

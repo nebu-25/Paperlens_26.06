@@ -818,6 +818,43 @@ export function useReviewStore({
     window.getSelection()?.removeAllRanges();
   }
 
+  function addPdfHighlight({
+    page,
+    rects,
+    text,
+  }: {
+    page: number;
+    rects: { x: number; y: number; width: number; height: number }[];
+    text: string;
+  }) {
+    const normalizedText = text.replace(/\s+/g, ' ').trim();
+    const normalizedRects = rects
+      .map((rect) => ({
+        x: Number(rect.x.toFixed(2)),
+        y: Number(rect.y.toFixed(2)),
+        width: Number(rect.width.toFixed(2)),
+        height: Number(rect.height.toFixed(2)),
+      }))
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+    if (!normalizedText || normalizedRects.length === 0) return;
+    setNote((n) => ({
+      ...n,
+      highlights: [
+        ...n.highlights,
+        {
+          id: uid(),
+          text: normalizedText,
+          color: highlightColor,
+          pdf: {
+            page,
+            rects: normalizedRects,
+          },
+        },
+      ],
+    }));
+    window.getSelection()?.removeAllRanges();
+  }
+
   function addTerm() {
     if (!selection) return;
     setNote((n) => ({
@@ -985,6 +1022,7 @@ export function useReviewStore({
     registerByDoi,
     onTextMouseUp,
     addHighlight,
+    addPdfHighlight,
     addTerm,
     explainTerm,
     toggleTagFilter,

@@ -63,6 +63,16 @@ export interface Highlight {
   // 원문(paper.text) 내 문자 오프셋. 옛 데이터 호환을 위해 선택적.
   start?: number;
   end?: number;
+  // PDF 원본 위 하이라이트. rect 좌표는 scale=1 viewport 기준 CSS 좌표.
+  pdf?: {
+    page: number;
+    rects: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }[];
+  };
 }
 
 export interface Term {
