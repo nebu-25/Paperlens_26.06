@@ -20,6 +20,7 @@ GitHub Pages 설정에서 Source는 **GitHub Actions**를 사용해야 합니다
 - 빌드 스크립트가 `dist/service_home/index.html`을 생성하므로 service URL 직접 접근은 200으로 응답합니다.
 - `dist/404.html`도 생성해 기타 SPA 경로 fallback을 유지합니다.
 - `frontend/public/favicon.svg`를 배포하고 `index.html`에서 `%BASE_URL%favicon.svg`로 참조합니다.
+- `npm run predev`/`npm run prebuild` 시 `pdfjs-dist/wasm` 파일을 `frontend/public/pdfjs-wasm/`으로 자동 복사합니다. JBIG2 이미지 디코딩에 필요한 wasm 파일이며, 생성물이므로 `.gitignore`에서 제외합니다.
 
 다른 오리진의 백엔드를 가리킬 때는 저장소 변수 `VITE_API_BASE_URL`을 설정합니다. 값에는 `/api`를 붙이지 않습니다. 프론트 코드가 자동으로 `/api`를 붙입니다.
 
