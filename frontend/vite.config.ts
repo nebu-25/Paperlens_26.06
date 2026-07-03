@@ -4,7 +4,24 @@ import type { Plugin } from 'vite';
 
 type MutableHeaders = Record<string, number | string | string[] | readonly string[] | undefined>;
 
+const DEV_CACHE_CONTROL = 'no-cache, max-age=0, must-revalidate';
+const HTML_CACHE_CONTROL = 'public, max-age=0, must-revalidate';
+const STATIC_CACHE_CONTROL = 'public, max-age=3600';
+const VERSIONED_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
 function paperlensResponseHeaders(): Plugin {
+  const cacheControlForPreview = (url = '/') => {
+    const pathname = url.split('?')[0] ?? '/';
+    if (/^\/Paperlens_26\.06\/assets\/.+-[A-Za-z0-9_-]+\.(?:css|js|mjs)$/.test(pathname)
+      || /^\/assets\/.+-[A-Za-z0-9_-]+\.(?:css|js|mjs)$/.test(pathname)) {
+      return VERSIONED_ASSET_CACHE_CONTROL;
+    }
+    if (/\.(?:css|js|mjs|svg|png|jpg|jpeg|webp|woff2?)$/.test(pathname)) {
+      return STATIC_CACHE_CONTROL;
+    }
+    return HTML_CACHE_CONTROL;
+  };
+
   const normalizeHeaderValue = (name: string, value: number | string | string[] | readonly string[] | undefined, cacheControl: string) => {
     const key = name.toLowerCase();
     if (key === 'x-content-type-options') return 'nosniff';
@@ -27,10 +44,10 @@ function paperlensResponseHeaders(): Plugin {
     if (normalizedContentType) res.setHeader('Content-Type', normalizedContentType);
   };
 
-  const patchContentType = (res: import('http').ServerResponse) => {
+  const patchContentType = (res: import('http').ServerResponse, cacheControl: string) => {
     const setHeader = res.setHeader.bind(res);
     res.setHeader = (name, value) => {
-      const normalizedValue = normalizeHeaderValue(String(name), value, 'no-store') ?? value;
+      const normalizedValue = normalizeHeaderValue(String(name), value, cacheControl) ?? value;
       return setHeader(name, Array.isArray(normalizedValue) ? [...normalizedValue] : normalizedValue);
     };
   };
@@ -49,11 +66,11 @@ function paperlensResponseHeaders(): Plugin {
     name: 'paperlens-response-headers',
     configureServer(server) {
       server.middlewares.use((_req, res, next) => {
-        patchContentType(res);
+        patchContentType(res, DEV_CACHE_CONTROL);
         const writeHead = res.writeHead.bind(res);
         res.writeHead = ((...args: Parameters<typeof res.writeHead>) => {
-          patchWriteHeadHeaders(args[args.length - 1], 'no-store');
-          applyHeaders(res, 'no-store');
+          patchWriteHeadHeaders(args[args.length - 1], DEV_CACHE_CONTROL);
+          applyHeaders(res, DEV_CACHE_CONTROL);
           return writeHead(...args);
         }) as typeof res.writeHead;
 
@@ -61,12 +78,13 @@ function paperlensResponseHeaders(): Plugin {
       });
     },
     configurePreviewServer(server) {
-      server.middlewares.use((_req, res, next) => {
-        patchContentType(res);
+      server.middlewares.use((req, res, next) => {
+        const cacheControl = cacheControlForPreview(req.url);
+        patchContentType(res, cacheControl);
         const writeHead = res.writeHead.bind(res);
         res.writeHead = ((...args: Parameters<typeof res.writeHead>) => {
-          patchWriteHeadHeaders(args[args.length - 1], 'public, max-age=300');
-          applyHeaders(res, 'public, max-age=300');
+          patchWriteHeadHeaders(args[args.length - 1], cacheControl);
+          applyHeaders(res, cacheControl);
           return writeHead(...args);
         }) as typeof res.writeHead;
         next();
@@ -80,6 +98,9 @@ export default defineConfig({
   // 정적 에셋이 이 경로 기준으로 로드되도록 한다.
   base: '/Paperlens_26.06/',
   plugins: [paperlensResponseHeaders(), react()],
+  build: {
+    cssTarget: 'chrome107',
+  },
   server: {
     port: 5173,
     proxy: {
