@@ -10,6 +10,10 @@ body {
   margin: 0;
 }
 
+html {
+  text-size-adjust: 100%;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.65;
@@ -20,8 +24,6 @@ button:disabled {
   overflow: clip;
   line-height: 1;
   text-align: initial;
-  text-size-adjust: none;
-  forced-color-adjust: none;
   transform-origin: 0 0;
   user-select: text;
 }
