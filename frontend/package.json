@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "copy-pdf-wasm": "rm -rf public/pdfjs-wasm && cp -R node_modules/pdfjs-dist/wasm public/pdfjs-wasm",
+    "predev": "npm run copy-pdf-wasm",
+    "prebuild": "npm run copy-pdf-wasm",
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build && cp dist/index.html dist/404.html && mkdir -p dist/service_home && cp dist/index.html dist/service_home/index.html",
     "lint": "eslint .",

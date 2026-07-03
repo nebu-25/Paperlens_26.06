@@ -321,7 +321,11 @@ export function PdfViewer({
         if (cancelled) return;
         const pdfjs = await import('pdfjs-dist');
         pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
-        loadingTask = pdfjs.getDocument({ data, useWasm: false });
+        loadingTask = pdfjs.getDocument({
+          data,
+          useWasm: false,
+          wasmUrl: `${import.meta.env.BASE_URL}pdfjs-wasm/`,
+        });
         loadedDocument = await loadingTask.promise;
         if (cancelled) {
           void loadedDocument.cleanup();
