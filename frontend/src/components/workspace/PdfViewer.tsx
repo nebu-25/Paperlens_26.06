@@ -123,6 +123,53 @@ function rectToPdfRect(rect: ClientRectLike, pageLayer: HTMLElement, scale: numb
   };
 }
 
+function isTextNode(node: Node | null): node is Text {
+  return node?.nodeType === Node.TEXT_NODE;
+}
+
+function isForwardSelection(selection: Selection) {
+  const { anchorNode, focusNode, anchorOffset, focusOffset } = selection;
+  if (!anchorNode || !focusNode) return true;
+  if (anchorNode === focusNode) return anchorOffset <= focusOffset;
+  const position = anchorNode.compareDocumentPosition(focusNode);
+  return Boolean(position & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+function rectForTextCharacter(node: Text, index: number) {
+  if (index < 0 || index >= node.data.length) return null;
+  const range = document.createRange();
+  range.setStart(node, index);
+  range.setEnd(node, index + 1);
+  const rect = Array.from(range.getClientRects()).find(
+    (candidate) =>
+      candidate.width >= MIN_HIGHLIGHT_RECT_SIZE
+      && candidate.height >= MIN_HIGHLIGHT_RECT_SIZE,
+  );
+  range.detach();
+  return rect ?? null;
+}
+
+function rangeWithPointerEndCorrection(selection: Selection, event: MouseEvent) {
+  const range = selection.getRangeAt(0).cloneRange();
+  if (!isForwardSelection(selection) || !isTextNode(selection.focusNode)) return range;
+
+  const focusNode = selection.focusNode;
+  const focusOffset = selection.focusOffset;
+  if (focusOffset >= focusNode.data.length) return range;
+
+  const nextRect = rectForTextCharacter(focusNode, focusOffset);
+  if (!nextRect) return range;
+
+  const yTolerance = Math.max(3, nextRect.height * 0.25);
+  const pointerOnLine = event.clientY >= nextRect.top - yTolerance
+    && event.clientY <= nextRect.bottom + yTolerance;
+  const pointerPastMidpoint = event.clientX >= nextRect.left + nextRect.width * 0.45;
+  if (pointerOnLine && pointerPastMidpoint) {
+    range.setEnd(focusNode, focusOffset + 1);
+  }
+  return range;
+}
+
 export function PdfViewer({
   title,
   url,
@@ -407,16 +454,25 @@ export function PdfViewer({
     const textLayer = textLayerRef.current;
     if (!selection || selection.isCollapsed || !pageLayer || !textLayer) return;
 
-    const selectedText = selection.toString();
-    if (!selectedText.trim()) return;
+    const range = rangeWithPointerEndCorrection(selection, event);
+    const selectedText = range.toString();
+    if (!selectedText.trim()) {
+      range.detach();
+      return;
+    }
 
-    const range = selection.getRangeAt(0);
-    if (!textLayer.contains(range.commonAncestorContainer)) return;
+    if (!textLayer.contains(range.commonAncestorContainer)) {
+      range.detach();
+      return;
+    }
 
     const rects = Array.from(range.getClientRects())
       .map((rect) => rectToPdfRect(rect, pageLayer, scale))
       .filter((rect): rect is PdfPendingHighlight['rects'][number] => Boolean(rect));
-    if (rects.length === 0) return;
+    if (rects.length === 0) {
+      range.detach();
+      return;
+    }
     setPendingHighlight({
       color: highlightColor,
       page: pageNumber,
@@ -426,6 +482,7 @@ export function PdfViewer({
       y: event.clientY,
     });
     setActiveHighlight(null);
+    range.detach();
   };
 
   const applyPendingHighlight = () => {
