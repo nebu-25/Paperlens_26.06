@@ -21,7 +21,7 @@ import type { TextLayer } from 'pdfjs-dist/types/src/display/text_layer';
 import { HIGHLIGHT_COLORS } from '../../constants';
 import { isChunkLoadError } from '../../lib/chunkLoad';
 import type { Highlight, HighlightColor } from '../../types';
-import { bandIndexOf, mergeColumnBands, type XSpan } from './pdfHighlightColumns';
+import { bandIndexOf, isHorizontalRect, mergeColumnBands, type XSpan } from './pdfHighlightColumns';
 import { AddTermButton, HighlightButton, HighlightColorSwatches } from './HighlightSelectionControls';
 
 type PdfViewerStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -188,19 +188,28 @@ function selectionWithinDraggedColumns(
   anchor: XSpan | null,
   focus: XSpan | null,
 ): { rects: DOMRect[]; text: string } {
-  const allRects = Array.from(range.getClientRects()).filter(
+  const rawRects = Array.from(range.getClientRects()).filter(
     (r) => r.width >= MIN_HIGHLIGHT_RECT_SIZE && r.height >= MIN_HIGHLIGHT_RECT_SIZE,
   );
+  const allRects = rawRects.filter(isHorizontalRect); // 회전(세로) 스탬프 제거
   const bands = mergeColumnBands(allRects);
-  // 단일 컬럼이거나 끝점 판정 불가 → 원본 유지(안전)
-  if (bands.length <= 1 || !anchor || !focus) return { rects: allRects, text: range.toString() };
+  const multiColumn = bands.length > 1 && !!anchor && !!focus;
+  const hasVertical = rawRects.length !== allRects.length;
+  // 정상(단일 컬럼 + 세로 텍스트 없음) 선택은 기존 그대로.
+  if (!multiColumn && !hasVertical) return { rects: allRects, text: range.toString() };
 
-  const a = bandIndexOf(bands, anchor);
-  const f = bandIndexOf(bands, focus);
-  if (a < 0 || f < 0) return { rects: allRects, text: range.toString() };
-  const lo = Math.min(a, f);
-  const hi = Math.max(a, f);
+  let lo = 0;
+  let hi = bands.length - 1;
+  if (multiColumn) {
+    const a = bandIndexOf(bands, anchor);
+    const f = bandIndexOf(bands, focus);
+    if (a >= 0 && f >= 0) {
+      lo = Math.min(a, f);
+      hi = Math.max(a, f);
+    }
+  }
   const inKept = (span: XSpan) => {
+    if (!multiColumn) return true;
     const idx = bandIndexOf(bands, span);
     return idx >= lo && idx <= hi;
   };
@@ -215,7 +224,9 @@ function selectionWithinDraggedColumns(
     piece.setStart(n, n === range.startContainer ? range.startOffset : 0);
     piece.setEnd(n, n === range.endContainer ? range.endOffset : (n as Text).data.length);
     const rect = piece.getBoundingClientRect();
-    const included = rect ? inKept({ left: rect.left, right: rect.right }) : false;
+    const included = rect
+      ? isHorizontalRect(rect) && inKept({ left: rect.left, right: rect.right })
+      : false;
     const pieceText = piece.toString();
     piece.detach();
     if (included) parts.push(pieceText);

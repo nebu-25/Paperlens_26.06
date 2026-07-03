@@ -29,3 +29,9 @@ export function bandIndexOf(bands: XSpan[], span: XSpan): number {
     (b) => center >= b.left - COLUMN_BAND_GAP && center <= b.right + COLUMN_BAND_GAP,
   );
 }
+
+// 가로 텍스트 줄 여부. 정상 본문 rect는 가로가 세로보다 넓고,
+// arXiv 좌측 여백의 회전(세로) 스탬프는 세로가 훨씬 길다 → 하이라이트 대상에서 제외용.
+export function isHorizontalRect(r: { width: number; height: number }): boolean {
+  return r.width >= r.height;
+}
