@@ -23,6 +23,7 @@ import type { TextLayer } from 'pdfjs-dist/types/src/display/text_layer';
 import { HIGHLIGHT_COLORS } from '../../constants';
 import { isChunkLoadError } from '../../lib/chunkLoad';
 import type { Highlight, HighlightColor } from '../../types';
+import { bandIndexOf, mergeColumnBands, type XSpan } from './pdfHighlightColumns';
 
 type PdfViewerStatus = 'idle' | 'loading' | 'ready' | 'error';
 type PageSize = {
@@ -168,6 +169,59 @@ function rangeWithPointerEndCorrection(selection: Selection, event: MouseEvent) 
     range.setEnd(focusNode, focusOffset + 1);
   }
   return range;
+}
+
+// 선택 끝점(anchor/focus) 글자의 x 위치.
+function caretSpan(node: Node | null, offset: number): XSpan | null {
+  if (!isTextNode(node)) return null;
+  const range = document.createRange();
+  const idx = Math.min(Math.max(offset, 0), node.data.length);
+  range.setStart(node, idx);
+  range.setEnd(node, idx);
+  const rect = range.getBoundingClientRect();
+  range.detach();
+  return rect ? { left: rect.left, right: rect.right } : null;
+}
+
+// 드래그가 지난 컬럼 밴드 안의 rect·텍스트만 남긴다(다단 논문의 컬럼 번짐 방지).
+function selectionWithinDraggedColumns(
+  range: Range,
+  anchor: XSpan | null,
+  focus: XSpan | null,
+): { rects: DOMRect[]; text: string } {
+  const allRects = Array.from(range.getClientRects()).filter(
+    (r) => r.width >= MIN_HIGHLIGHT_RECT_SIZE && r.height >= MIN_HIGHLIGHT_RECT_SIZE,
+  );
+  const bands = mergeColumnBands(allRects);
+  // 단일 컬럼이거나 끝점 판정 불가 → 원본 유지(안전)
+  if (bands.length <= 1 || !anchor || !focus) return { rects: allRects, text: range.toString() };
+
+  const a = bandIndexOf(bands, anchor);
+  const f = bandIndexOf(bands, focus);
+  if (a < 0 || f < 0) return { rects: allRects, text: range.toString() };
+  const lo = Math.min(a, f);
+  const hi = Math.max(a, f);
+  const inKept = (span: XSpan) => {
+    const idx = bandIndexOf(bands, span);
+    return idx >= lo && idx <= hi;
+  };
+
+  const rects = allRects.filter(inKept);
+  // 텍스트도 같은 밴드의 노드만 이어붙여 오른쪽 컬럼 단어 혼입을 막는다.
+  const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT);
+  const parts: string[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!range.intersectsNode(n)) continue;
+    const piece = range.cloneRange();
+    piece.setStart(n, n === range.startContainer ? range.startOffset : 0);
+    piece.setEnd(n, n === range.endContainer ? range.endOffset : (n as Text).data.length);
+    const rect = piece.getBoundingClientRect();
+    const included = rect ? inKept({ left: rect.left, right: rect.right }) : false;
+    const pieceText = piece.toString();
+    piece.detach();
+    if (included) parts.push(pieceText);
+  }
+  return { rects, text: parts.join('').trim() || range.toString() };
 }
 
 export function PdfViewer({
@@ -479,7 +533,12 @@ export function PdfViewer({
       return;
     }
 
-    const rects = Array.from(range.getClientRects())
+    const { rects: columnRects, text: columnText } = selectionWithinDraggedColumns(
+      range,
+      caretSpan(selection.anchorNode, selection.anchorOffset),
+      caretSpan(selection.focusNode, selection.focusOffset),
+    );
+    const rects = columnRects
       .map((rect) => rectToPdfRect(rect, pageLayer, scale))
       .filter((rect): rect is PdfPendingHighlight['rects'][number] => Boolean(rect));
     if (rects.length === 0) {
@@ -490,7 +549,7 @@ export function PdfViewer({
       color: highlightColor,
       page: pageNumber,
       rects,
-      text: selectedText,
+      text: columnText || selectedText,
       x: event.clientX,
       y: event.clientY,
     });
