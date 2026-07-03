@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { API_BASE, STORAGE_KEY } from '../constants';
+import { classifyApiException, throwApiResponseError } from '../lib/apiErrors';
 import { EMPTY_NOTE, normalizeNote } from '../lib/notes';
 import type { AppNotice, Paper, ReviewNote } from '../types';
 
@@ -25,28 +26,6 @@ type LocalSnapshot = {
   deletedIds?: string[];
 };
 
-class SyncError extends Error {
-  constructor(
-    public readonly status: number | null,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'SyncError';
-  }
-}
-
-async function detailFromResponse(res: Response, fallback: string): Promise<string> {
-  try {
-    return ((await res.json()) as { detail?: string }).detail ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-async function throwSyncError(res: Response, fallback: string): Promise<never> {
-  throw new SyncError(res.status, await detailFromResponse(res, fallback));
-}
-
 async function fetchWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit = {},
@@ -62,23 +41,8 @@ async function fetchWithTimeout(
 }
 
 function noticeForSyncError(error: unknown): AppNotice {
-  if (error instanceof SyncError) {
-    if (error.status === 401) {
-      return {
-        tone: 'warning',
-        title: '인증 확인 필요',
-        message: error.message || '로그인 정보가 만료되었습니다. 다시 로그인하면 서버 저장을 재개합니다.',
-      };
-    }
-    if (error.status === 503) {
-      return {
-        tone: 'warning',
-        title: '서버 준비 중',
-        message:
-          error.message || 'Render 백엔드 또는 인증 서버가 준비 중입니다. 변경 사항은 로컬에 보관했습니다.',
-      };
-    }
-  }
+  const info = classifyApiException(error);
+  if (info.kind !== 'unknown') return { tone: 'warning', title: info.title, message: info.message };
   return {
     tone: 'warning',
     title: '로컬 저장 중',
@@ -171,7 +135,7 @@ export function useReviewPersistence({
       method: 'DELETE',
       headers: authHeaders(),
     });
-    if (!res.ok) await throwSyncError(res, '노트 삭제를 서버에 반영하지 못했습니다.');
+    if (!res.ok) await throwApiResponseError(res, '노트 삭제를 서버에 반영하지 못했습니다.');
   }, [authHeaders]);
 
   const paperForSave = useCallback((id: string, paper: Paper): Paper => {
@@ -236,7 +200,7 @@ export function useReviewPersistence({
             note: notesRef.current[id] ?? EMPTY_NOTE,
           }),
         });
-        if (!res.ok) await throwSyncError(res, '노트 저장을 서버에 반영하지 못했습니다.');
+        if (!res.ok) await throwApiResponseError(res, '노트 저장을 서버에 반영하지 못했습니다.');
         dirtyRef.current.delete(id);
         textDirtyRef.current.delete(id);
         savedAny = true;
@@ -341,7 +305,7 @@ export function useReviewPersistence({
         await fetchWithTimeout(`${API_BASE}/health`, {}, 5000).catch(() => undefined);
         if (!restoredLocal) setSavedAt('목록 동기화 중');
         const res = await fetchWithTimeout(`${API_BASE}/notes`, { headers: authHeaders() }, 15000);
-        if (!res.ok) await throwSyncError(res, '저장된 노트를 불러오지 못했습니다.');
+        if (!res.ok) await throwApiResponseError(res, '저장된 노트를 불러오지 못했습니다.');
         const data = (await res.json()) as {
           library?: Record<string, Paper>;
           notes?: Record<string, ReviewNote>;

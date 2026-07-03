@@ -2,6 +2,7 @@
 // 논문 라이브러리·노트 상태, 서버/로컬 동기화, 업로드·등록·하이라이트·내보내기 액션을 제공한다.
 import React, { useEffect, useRef, useState } from 'react';
 import { API_BASE, resolveApiUrl } from '../constants';
+import { apiErrorFromResponse, classifyApiException, throwApiResponseError } from '../lib/apiErrors';
 import { buildMarkdown, buildPrintHtml, safeFilename } from '../lib/export';
 import type { ExportOptions } from '../lib/export';
 import { collectTags, filterPapers } from '../lib/library';
@@ -109,14 +110,6 @@ export function useReviewStore({
   const authHeaders: Record<string, string> = accessToken
     ? { Authorization: `Bearer ${accessToken}` }
     : {};
-
-  async function readErrorDetail(res: Response, fallback: string): Promise<string> {
-    try {
-      return ((await res.json()) as { detail?: string }).detail ?? fallback;
-    } catch {
-      return fallback;
-    }
-  }
 
   function filenameFromDisposition(value: string | null, fallback: string): string {
     if (!value) return fallback;
@@ -319,16 +312,11 @@ export function useReviewStore({
       });
       if (!res.ok) {
         // 입력 가드 위반(크기/암호/페이지 등): 서버 메시지를 표시하고 등록하지 않는다
-        let detail = '업로드를 처리할 수 없습니다.';
-        try {
-          detail = ((await res.json()) as { detail?: string }).detail ?? detail;
-        } catch {
-          /* ignore */
-        }
+        const apiError = await apiErrorFromResponse(res, '업로드를 처리할 수 없습니다.');
         setUploadNotice({
           tone: 'error',
-          title: res.status === 413 ? '업로드 제한 초과' : 'PDF 처리 실패',
-          message: detail,
+          title: res.status === 413 ? '업로드 제한 초과' : apiError.title,
+          message: apiError.message,
         });
         return;
       }
@@ -459,6 +447,7 @@ export function useReviewStore({
         return;
       }
       // 네트워크/백엔드 미연결: 등록 흐름은 끊기지 않게 폴백
+      const apiError = classifyApiException(error, 'PDF 텍스트 추출 서버에 연결하지 못했습니다.');
       if (!attachTargetId) {
         registerPaper({
           title: file.name.replace(/\.pdf$/i, ''),
@@ -470,10 +459,10 @@ export function useReviewStore({
       }
       setUploadNotice({
         tone: 'error',
-        title: '백엔드 연결 실패',
+        title: apiError.title,
         message: attachTargetId
-          ? 'PDF 텍스트 추출 서버에 연결하지 못했습니다. 현재 노트는 그대로 유지됩니다.'
-          : 'PDF 텍스트 추출 서버에 연결하지 못했습니다. 노트는 생성했지만 원문은 나중에 다시 연결해야 합니다.',
+          ? `${apiError.message} 현재 노트는 그대로 유지됩니다.`
+          : `${apiError.message} 노트는 생성했지만 원문은 나중에 다시 연결해야 합니다.`,
       });
     } finally {
       setUploading(false);
@@ -510,7 +499,7 @@ export function useReviewStore({
       attachTargetRef.current = null;
       try {
         const health = await fetch(`${API_BASE}/health`, { signal: controller.signal });
-        if (!health.ok) throw new Error(await readErrorDetail(health, '백엔드 상태를 확인하지 못했습니다.'));
+        if (!health.ok) await throwApiResponseError(health, '백엔드 상태를 확인하지 못했습니다.');
         if (controller.signal.aborted) return;
         setUploadNotice({
           tone: 'info',
@@ -519,16 +508,17 @@ export function useReviewStore({
         });
       } catch (error) {
         if (isAbortError(error)) throw error;
+        const apiError = classifyApiException(error, '백엔드 상태를 확인하지 못했습니다.');
         setUploadNotice({
           tone: 'warning',
-          title: '샘플 PDF 재시도 중',
-          message: '백엔드 응답이 지연되고 있습니다. 샘플 파일 요청을 한 번 더 시도합니다.',
+          title: `${apiError.title} - 샘플 PDF 재시도 중`,
+          message: `${apiError.message} 샘플 파일 요청을 한 번 더 시도합니다.`,
         });
       }
       setSamplePhase('downloading');
       const res = await fetch(`${API_BASE}/papers/sample-pdf`, { signal: controller.signal });
       if (!res.ok) {
-        throw new Error(await readErrorDetail(res, '샘플 PDF를 불러오지 못했습니다.'));
+        await throwApiResponseError(res, '샘플 PDF를 불러오지 못했습니다.');
       }
       const blob = await res.blob();
       const filename = sampleFilenameFromResponse(res);
@@ -554,13 +544,11 @@ export function useReviewStore({
         return;
       }
       setSampleRetryAvailable(true);
+      const apiError = classifyApiException(error, '샘플 PDF를 불러오지 못했습니다. 직접 PDF 업로드를 사용해 주세요.');
       setUploadNotice({
         tone: 'error',
-        title: '샘플 PDF 불러오기 실패',
-        message:
-          error instanceof Error
-            ? error.message
-            : '샘플 PDF를 불러오지 못했습니다. 직접 PDF 업로드를 사용해 주세요.',
+        title: apiError.title,
+        message: apiError.message,
       });
     } finally {
       if (sampleAbortRef.current === controller) sampleAbortRef.current = null;
@@ -606,7 +594,7 @@ export function useReviewStore({
           headers: authHeaders,
           body: form,
         });
-        if (!pdfRes.ok) throw new Error(await readErrorDetail(pdfRes, 'PDF URL을 처리하지 못했습니다.'));
+        if (!pdfRes.ok) await throwApiResponseError(pdfRes, 'PDF URL을 처리하지 못했습니다.');
         const data: {
           filename: string;
           text: string;
@@ -701,9 +689,10 @@ export function useReviewStore({
         message: 'DOI는 원문 PDF를 직접 포함하지 않습니다. 원문 패널에서 PDF 파일 또는 PDF URL을 연결하면 본문과 PDF 원본 보기를 사용할 수 있습니다.',
       });
       setDoiInput('');
-    } catch {
+    } catch (error) {
       // 비DOI 입력·미연동·조회 실패 시에도 등록 흐름이 끊기지 않게 폴백
       const doiLike = isLikelyDoi(query);
+      const apiError = classifyApiException(error);
       setUploadPhase('creating');
       registerPaper({
         title: query,
@@ -721,10 +710,10 @@ export function useReviewStore({
       });
       setUploadNotice({
         tone: 'warning',
-        title: doiLike ? 'DOI 등록 완료' : '메타정보 조회 실패',
+        title: doiLike ? 'DOI 등록 완료' : apiError.kind === 'unknown' ? '메타정보 조회 실패' : apiError.title,
         message: doiLike
-          ? 'CrossRef에서 메타정보를 찾지 못했습니다. DOI는 노트에 남겼고, 원문은 PDF 파일 또는 PDF URL로 연결할 수 있습니다.'
-          : 'DOI를 찾지 못했습니다. PDF 원문 URL 또는 PDF 파일 업로드를 사용해 주세요.',
+          ? `CrossRef에서 메타정보를 찾지 못했습니다. DOI는 노트에 남겼고, 원문은 PDF 파일 또는 PDF URL로 연결할 수 있습니다.${apiError.kind === 'unknown' ? '' : ` (${apiError.message})`}`
+          : `${apiError.kind === 'unknown' ? 'DOI를 찾지 못했습니다.' : apiError.message} PDF 원문 URL 또는 PDF 파일 업로드를 사용해 주세요.`,
       });
       setDoiInput('');
     } finally {
