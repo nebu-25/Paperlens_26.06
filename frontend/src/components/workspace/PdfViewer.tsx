@@ -19,6 +19,7 @@ import type {
 } from 'pdfjs-dist/types/src/display/api';
 import type { TextLayer } from 'pdfjs-dist/types/src/display/text_layer';
 import { HIGHLIGHT_COLORS } from '../../constants';
+import { isChunkLoadError } from '../../lib/chunkLoad';
 import type { Highlight, HighlightColor } from '../../types';
 
 type PdfViewerStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -75,7 +76,10 @@ const PDF_HIGHLIGHT_COLORS: Record<HighlightColor, string> = {
   violet: 'rgba(167, 139, 250, 0.32)',
 };
 
-function errorMessage(status?: number) {
+function errorMessage(status?: number, error?: unknown) {
+  if (isChunkLoadError(error)) {
+    return '새 배포 파일을 다시 받아야 PDF 원본 보기를 열 수 있습니다. 브라우저가 이전 파일을 캐시하고 있을 수 있으니 화면을 새로고침해 주세요.';
+  }
   if (status === 401) {
     return 'PDF 원본 미리보기를 열 수 없습니다. 로그인 세션을 새로고침한 뒤 다시 시도해 주세요.';
   }
@@ -169,10 +173,10 @@ export function PdfViewer({
         setPageCount(loadedDocument.numPages);
         setStatus('ready');
         setMessage('');
-      } catch {
+      } catch (error) {
         if (!cancelled) {
           setStatus('error');
-          setMessage(errorMessage());
+          setMessage(errorMessage(undefined, error));
         }
       }
     })();
@@ -230,7 +234,7 @@ export function PdfViewer({
       } catch (error) {
         if (!cancelled && !(error instanceof Error && error.name === 'RenderingCancelledException')) {
           setStatus('error');
-          setMessage(errorMessage());
+          setMessage(errorMessage(undefined, error));
         }
       }
     })();
@@ -261,9 +265,13 @@ export function PdfViewer({
           viewport,
         });
         await textLayer.render();
-      } catch {
+      } catch (error) {
         if (!cancelled) {
           container.replaceChildren();
+          if (isChunkLoadError(error)) {
+            setStatus('error');
+            setMessage(errorMessage(undefined, error));
+          }
         }
       }
     })();
