@@ -17,6 +17,15 @@ interface UseReviewPersistenceArgs {
   authEnabled: boolean;
 }
 
+const SAVE_DEBOUNCE_MS = 5000; // 편집 멈춘 뒤 저장까지 대기(trailing)
+const SAVE_MAX_WAIT_MS = 10000; // 연속 편집 중 강제 저장 상한(maxWait)
+
+// 첫 미저장 변경 이후 경과 시간으로 다음 저장까지 대기 시간을 계산한다.
+// 편집이 멈추면 trailing(5초), 쉬지 않고 편집하면 maxWait(10초) 내 강제 저장.
+export function nextSaveWaitMs(elapsedSinceFirstDirty: number): number {
+  return Math.min(SAVE_DEBOUNCE_MS, Math.max(0, SAVE_MAX_WAIT_MS - elapsedSinceFirstDirty));
+}
+
 type LocalSnapshot = {
   library?: Record<string, Paper>;
   notes?: Record<string, ReviewNote>;
@@ -80,6 +89,9 @@ export function useReviewPersistence({
   const retryDelayMsRef = useRef(10000);
   const nextRetryAtRef = useRef(0);
   const flushInFlightRef = useRef(false);
+  // 연속 편집 중 debounce가 계속 밀려도 저장을 보장하기 위한 maxWait 기준점.
+  // 첫 미저장 변경 시각을 담고, flush 시 null로 초기화한다.
+  const dirtySinceRef = useRef<number | null>(null);
   libraryRef.current = library;
   notesRef.current = notes;
   activeIdRef.current = activeId;
@@ -372,9 +384,13 @@ export function useReviewPersistence({
 
   useEffect(() => {
     if (!loaded) return;
+    // 첫 미저장 변경 시각을 기준으로 maxWait를 계산한다.
+    if (dirtySinceRef.current === null) dirtySinceRef.current = Date.now();
+    const wait = nextSaveWaitMs(Date.now() - dirtySinceRef.current);
     const handle = window.setTimeout(() => {
+      dirtySinceRef.current = null;
       void flush();
-    }, 5000);
+    }, wait);
     return () => window.clearTimeout(handle);
   }, [library, notes, activeId, loaded, flush]);
 
