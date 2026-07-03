@@ -63,4 +63,8 @@ def diagnostics() -> dict[str, object]:
             "enabled": settings.ai_enabled,
             "model": settings.ai_model,
         },
+        "ocr": {
+            "enabled": settings.ocr_enabled,
+            "max_pages": settings.ocr_max_pages,
+        },
     }
