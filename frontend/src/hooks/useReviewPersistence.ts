@@ -66,6 +66,9 @@ export function useReviewPersistence({
   const [online, setOnline] = useState(false);
   const [pending, setPending] = useState(0);
   const [syncNotice, setSyncNotice] = useState<AppNotice | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [retryAt, setRetryAt] = useState<number | null>(null);
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
   const libraryRef = useRef(library);
   const notesRef = useRef(notes);
@@ -76,6 +79,7 @@ export function useReviewPersistence({
   const accessTokenRef = useRef(accessToken);
   const retryDelayMsRef = useRef(10000);
   const nextRetryAtRef = useRef(0);
+  const flushInFlightRef = useRef(false);
   libraryRef.current = library;
   notesRef.current = notes;
   activeIdRef.current = activeId;
@@ -144,8 +148,21 @@ export function useReviewPersistence({
   }, []);
 
   const noteSyncFailure = useCallback((error: unknown) => {
+    const info = classifyApiException(error);
+    if (info.kind === 'auth' || info.kind === 'forbidden') {
+      nextRetryAtRef.current = 0;
+      setRetryAt(null);
+      setRetryCountdown(null);
+      retryDelayMsRef.current = 10000;
+      setOnline(false);
+      setSavedAt(`로컬 저장 ${new Date().toLocaleTimeString('ko-KR')}`);
+      setSyncNotice(noticeForSyncError(error));
+      return;
+    }
     const delay = retryDelayMsRef.current;
     nextRetryAtRef.current = Date.now() + delay;
+    setRetryAt(nextRetryAtRef.current);
+    setRetryCountdown(Math.ceil(delay / 1000));
     retryDelayMsRef.current = Math.min(delay * 2, 300000);
     setOnline(false);
     setSavedAt(`로컬 저장 ${new Date().toLocaleTimeString('ko-KR')}`);
@@ -155,6 +172,8 @@ export function useReviewPersistence({
   const noteSyncSuccess = useCallback((savedAny: boolean) => {
     retryDelayMsRef.current = 10000;
     nextRetryAtRef.current = 0;
+    setRetryAt(null);
+    setRetryCountdown(null);
     if (!savedAny) return;
     setOnline(true);
     setSavedAt(`저장됨 ${new Date().toLocaleTimeString('ko-KR')}`);
@@ -162,64 +181,79 @@ export function useReviewPersistence({
   }, []);
 
   const flush = useCallback(async () => {
+    if (flushInFlightRef.current) return;
+    if (deletedIdsRef.current.size === 0 && dirtyRef.current.size === 0) return;
+    flushInFlightRef.current = true;
+    setSyncing(true);
     try {
-      persistLocal();
-    } catch {
-      /* ignore */
-    }
-    const deleteIds = Array.from(deletedIdsRef.current);
-    const ids = Array.from(dirtyRef.current);
-    if (deleteIds.length === 0 && ids.length === 0) return;
-    let savedAny = false;
-    let failure: unknown = null;
-    for (const id of deleteIds) {
       try {
-        await deleteRemote(id);
-        deletedIdsRef.current.delete(id);
-        savedAny = true;
-      } catch (error) {
-        failure = failure ?? error;
+        persistLocal();
+      } catch {
+        /* ignore */
       }
-    }
-    for (const id of ids) {
-      if (deletedIdsRef.current.has(id)) {
-        dirtyRef.current.delete(id);
-        continue;
+      const deleteIds = Array.from(deletedIdsRef.current);
+      const ids = Array.from(dirtyRef.current);
+      let savedAny = false;
+      let failure: unknown = null;
+      for (const id of deleteIds) {
+        try {
+          await deleteRemote(id);
+          deletedIdsRef.current.delete(id);
+          savedAny = true;
+        } catch (error) {
+          failure = failure ?? error;
+        }
       }
-      const paper = libraryRef.current[id];
-      if (!paper) {
-        dirtyRef.current.delete(id);
-        continue;
+      for (const id of ids) {
+        if (deletedIdsRef.current.has(id)) {
+          dirtyRef.current.delete(id);
+          continue;
+        }
+        const paper = libraryRef.current[id];
+        if (!paper) {
+          dirtyRef.current.delete(id);
+          continue;
+        }
+        try {
+          const res = await fetch(`${API_BASE}/notes/${id}`, {
+            method: 'PUT',
+            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              paper: paperForSave(id, paper),
+              note: notesRef.current[id] ?? EMPTY_NOTE,
+            }),
+          });
+          if (!res.ok) await throwApiResponseError(res, '노트 저장을 서버에 반영하지 못했습니다.');
+          dirtyRef.current.delete(id);
+          textDirtyRef.current.delete(id);
+          savedAny = true;
+        } catch (error) {
+          failure = failure ?? error;
+        }
       }
       try {
-        const res = await fetch(`${API_BASE}/notes/${id}`, {
-          method: 'PUT',
-          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            paper: paperForSave(id, paper),
-            note: notesRef.current[id] ?? EMPTY_NOTE,
-          }),
-        });
-        if (!res.ok) await throwApiResponseError(res, '노트 저장을 서버에 반영하지 못했습니다.');
-        dirtyRef.current.delete(id);
-        textDirtyRef.current.delete(id);
-        savedAny = true;
-      } catch (error) {
-        failure = failure ?? error;
+        persistLocal();
+      } catch {
+        /* ignore */
       }
-    }
-    updatePending();
-    try {
-      persistLocal();
-    } catch {
-      /* ignore */
-    }
-    if (failure) {
-      noteSyncFailure(failure);
-    } else if (savedAny) {
-      noteSyncSuccess(savedAny);
+      updatePending();
+      if (failure) {
+        noteSyncFailure(failure);
+      } else if (savedAny) {
+        noteSyncSuccess(savedAny);
+      }
+    } finally {
+      flushInFlightRef.current = false;
+      setSyncing(false);
     }
   }, [authHeaders, deleteRemote, noteSyncFailure, noteSyncSuccess, paperForSave, persistLocal, updatePending]);
+
+  const retryNow = useCallback(() => {
+    nextRetryAtRef.current = 0;
+    setRetryAt(null);
+    setRetryCountdown(null);
+    void flush();
+  }, [flush]);
 
   const ensureText = useCallback(
     async (id: string) => {
@@ -275,6 +309,8 @@ export function useReviewPersistence({
       setActiveId(null);
       setOnline(false);
       setSavedAt('로그인 필요');
+      setRetryAt(null);
+      setRetryCountdown(null);
       setLoaded(false);
       return;
     }
@@ -315,6 +351,8 @@ export function useReviewPersistence({
         setOnline(true);
         retryDelayMsRef.current = 10000;
         nextRetryAtRef.current = 0;
+        setRetryAt(null);
+        setRetryCountdown(null);
         if (Object.keys(data.library ?? {}).length > 0) setSavedAt('서버에서 불러옴');
       } catch (error) {
         if (!cancelled) {
@@ -343,7 +381,8 @@ export function useReviewPersistence({
   useEffect(() => {
     if (!loaded) return;
     const retry = () => {
-      if (dirtyRef.current.size > 0 && Date.now() >= nextRetryAtRef.current) void flush();
+      const hasPending = dirtyRef.current.size > 0 || deletedIdsRef.current.size > 0;
+      if (hasPending && nextRetryAtRef.current > 0 && Date.now() >= nextRetryAtRef.current) void flush();
     };
     const interval = window.setInterval(retry, 10000);
     window.addEventListener('online', retry);
@@ -352,6 +391,17 @@ export function useReviewPersistence({
       window.removeEventListener('online', retry);
     };
   }, [loaded, flush]);
+
+  useEffect(() => {
+    if (!retryAt) return;
+    const updateCountdown = () => {
+      const next = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
+      setRetryCountdown(next);
+    };
+    updateCountdown();
+    const interval = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(interval);
+  }, [retryAt]);
 
   useEffect(() => {
     if (activeId && online && !library[activeId]?.text) void ensureText(activeId);
@@ -402,6 +452,9 @@ export function useReviewPersistence({
     setSavedAt,
     online,
     pending,
+    syncing,
+    retryAt,
+    retryCountdown,
     syncNotice,
     setSyncNotice,
     libraryRef,
@@ -411,5 +464,6 @@ export function useReviewPersistence({
     forgetDirty,
     queueDelete,
     flush,
+    retryNow,
   };
 }

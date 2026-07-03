@@ -85,6 +85,8 @@ export function useReviewStore({
     setSavedAt,
     online,
     pending,
+    syncing,
+    retryCountdown,
     syncNotice,
     setSyncNotice,
     libraryRef,
@@ -94,6 +96,7 @@ export function useReviewStore({
     forgetDirty,
     queueDelete,
     flush,
+    retryNow,
   } =
     useReviewPersistence({
       library,
@@ -987,6 +990,8 @@ export function useReviewStore({
     savedAt,
     online,
     pending,
+    syncing,
+    retryCountdown,
     syncNotice,
     aiEnabled,
     aiLoadingTermId,
@@ -1024,6 +1029,7 @@ export function useReviewStore({
     registerPaper,
     openPaper,
     deletePaper,
+    retryNow,
     handleFile,
     handleSamplePdf,
     cancelSamplePdf,

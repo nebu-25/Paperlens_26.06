@@ -39,8 +39,11 @@ export function ReviewNotePanel() {
     online,
     savedAt,
     pending,
+    syncing,
+    retryCountdown,
     syncNotice,
     setSyncNotice,
+    retryNow,
     setTags,
     updatePaper,
     updateNote,
@@ -103,6 +106,11 @@ export function ReviewNotePanel() {
   const nextRoadmapStep = reviewRoadmap.find((step) => !step.done);
   const currentRoadmapStep = nextRoadmapStep ?? reviewRoadmap[reviewRoadmap.length - 1];
   const reviewProgressPercent = Math.round((reviewDoneCount / reviewRoadmap.length) * 100);
+  const retryLabel = retryCountdown !== null && retryCountdown > 0
+    ? `${retryCountdown}초 후 재시도`
+    : pending > 0 && !online
+      ? '재시도 대기'
+      : '';
 
   const addManualSummary = () => {
     const text = manualSummaryDraft.trim();
@@ -127,29 +135,46 @@ export function ReviewNotePanel() {
       <div className="sticky top-0 z-10 shrink-0 border-b border-line bg-paper/95 p-5 pb-3 sm:p-6 sm:pb-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="min-w-0 text-base font-semibold">리뷰 노트</h2>
-          <span
-            role="status"
-            aria-live="polite"
-            className={`notranslate inline-flex max-w-[13rem] shrink-0 items-center gap-1 rounded px-2 py-1 text-xs leading-none ${
-              online ? 'bg-emerald-50 text-emerald-700' : 'bg-paper text-muted'
-            }`}
-            translate="no"
-            title={
-              online ? '서버에 저장됩니다' : '서버 미연결 — 로컬에만 저장됩니다(복구 시 자동 동기화)'
-            }
-          >
-            <Save size={12} className="shrink-0" />
-            <span className="min-w-0 truncate">{savedAt ?? '자동 저장 대기'}</span>
-            {pending > 0 && (
-              <span
-                className="ml-1 inline-flex min-w-5 shrink-0 justify-center rounded bg-white/80 px-1.5 py-0.5 text-[11px] font-semibold"
-                title={`미동기 ${pending}건`}
-                aria-label={`미동기 ${pending}건`}
-              >
-                {pending}
+          <div className="flex min-w-0 shrink-0 items-center gap-2">
+            <span
+              role="status"
+              aria-live="polite"
+              className={`notranslate inline-flex max-w-[13rem] items-center gap-1 rounded px-2 py-1 text-xs leading-none ${
+                online ? 'bg-emerald-50 text-emerald-700' : 'bg-paper text-muted'
+              }`}
+              translate="no"
+              title={
+                online ? '서버에 저장됩니다' : '서버 미연결 — 로컬에만 저장됩니다(복구 시 자동 동기화)'
+              }
+            >
+              <Save size={12} className="shrink-0" />
+              <span className="min-w-0 truncate">{syncing ? '저장 중' : (savedAt ?? '자동 저장 대기')}</span>
+              {pending > 0 && (
+                <span
+                  className="ml-1 inline-flex min-w-5 shrink-0 justify-center rounded bg-white/80 px-1.5 py-0.5 text-[11px] font-semibold"
+                  title={`미동기 ${pending}건`}
+                  aria-label={`미동기 ${pending}건`}
+                >
+                  {pending}
+                </span>
+              )}
+            </span>
+            {retryLabel && (
+              <span className="hidden rounded bg-amber-50 px-2 py-1 text-xs text-amber-700 sm:inline">
+                {retryLabel}
               </span>
             )}
-          </span>
+            {pending > 0 && !online && (
+              <button
+                type="button"
+                className="inline-flex items-center rounded border border-line bg-white px-2 py-1 text-xs font-semibold text-muted hover:border-action hover:text-action disabled:opacity-60"
+                disabled={syncing}
+                onClick={retryNow}
+              >
+                지금 다시 저장
+              </button>
+            )}
+          </div>
         </div>
         <div className="mt-3 rounded border border-line bg-white p-2">
           <div className="mb-1 flex items-center justify-between gap-2 text-xs">
