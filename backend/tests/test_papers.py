@@ -589,3 +589,34 @@ class TestLooksLikeAuthors:
 
     def test_rejects_english_translated_title(self):
         assert papers._looks_like_authors("A Study on Korean Machine Translation") is False
+
+
+class TestCorruptedEncodingDetection:
+    """폰트/인코딩 손상(ToUnicode CMap 깨짐)으로 본문이 호환용 자모(U+3130~U+318F)로
+    추출되는 KCI/HWP 계열 PDF를 품질검사가 감지하는지 확인한다.
+
+    재현: '논문의 형식에 따른 문자 추출 실패 개선 요청_문자추출결과_01'.
+    헤더/푸터만 정상 폰트로 추출되고 본문은 `ㄴ ㄴ ㅗ`처럼 낱자로 깨진다. 완성형
+    음절(가-힣)도, 기존 손상 문자(□/�)도 아니라 현재 품질검사가 그냥 통과시킨다.
+    """
+
+    # 헤더/푸터만 정상이고 본문은 자모로 깨진 실제 추출 형태(여러 페이지 분량)
+    CORRUPT = (
+        "2019년 춘계학술발표대회 논문집 제25권 제1호(2019. 5)\n"
+        "ㄴ ㄴ ㄴ ㄴ ㄴ ㅗ ㄴ ㅗ ㄴ ㅏ ㄹ ㅁ ㅇ ㅕ ㅇ ㅅ ㅏ ㅇ\n"
+        "ㄱ ㅖ ㅎ ㅏ ㄱ ㅅ ㅡ ㅂ ㅇ ㅡ ㄹ ㅇ ㅜ ㅣ ㅎ ㅏ ㄴ ㅇ ㅢ ㄹ ㅛ\n"
+        "- 346 -\n"
+    ) * 30
+
+    def test_isolated_jamo_counted_as_broken(self):
+        stats = papers._text_quality_stats(self.CORRUPT)
+        assert stats["broken"] > 0
+        assert stats["broken_ratio"] > 0.2
+
+    def test_quality_notice_flags_corruption(self):
+        assert papers._text_quality_notice(self.CORRUPT) is not None
+
+    def test_quality_status_not_good(self):
+        q = papers._extraction_quality(self.CORRUPT, page_count=3)
+        assert q["status"] != "good"
+        assert q["score"] < 60

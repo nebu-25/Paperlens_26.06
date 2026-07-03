@@ -910,6 +910,19 @@ def _tidy_spacing(text: str) -> str:
 
 
 _BROKEN_TEXT_CHARS = {"\u25a1", "\ufffd"}
+# Hangul Compatibility Jamo(U+3130~U+318F): \uc644\uc131\ud615 \uc74c\uc808\uc774 \uc544\ub2c8\ub77c \ub0b1\uc790. \uc815\uc0c1 \ubcf8\ubb38\uc5d0\ub294
+# \uac70\uc758 \uc5c6\uace0, PDF \uae00\uaf34\uc758 ToUnicode CMap\uc774 \uc190\uc0c1\ub418\uba74 \ubcf8\ubb38\uc774 \uc774 \ub0b1\uc790\ub4e4\ub85c \uae68\uc838 \ucd94\ucd9c\ub41c\ub2e4.
+_HANGUL_COMPAT_JAMO_START = "\u3130"
+_HANGUL_COMPAT_JAMO_END = "\u318f"
+
+
+def _is_compat_jamo(ch: str) -> bool:
+    return _HANGUL_COMPAT_JAMO_START <= ch <= _HANGUL_COMPAT_JAMO_END
+
+
+def _is_broken_char(ch: str) -> bool:
+    """\ucd94\ucd9c \uc190\uc0c1 \ubb38\uc790: \ub300\uccb4\ubb38\uc790(\u25a1/\ufffd) \ub610\ub294 \uace0\ub9bd \ud638\ud658\uc6a9 \uc790\ubaa8."""
+    return ch in _BROKEN_TEXT_CHARS or _is_compat_jamo(ch)
 
 
 def _broken_text_samples(text: str, *, limit: int = 3, context: int = 24) -> list[str]:
@@ -917,7 +930,7 @@ def _broken_text_samples(text: str, *, limit: int = 3, context: int = 24) -> lis
     samples: list[str] = []
     seen: set[str] = set()
     for index, ch in enumerate(text):
-        if ch not in _BROKEN_TEXT_CHARS:
+        if not _is_broken_char(ch):
             continue
         start = max(0, index - context)
         end = min(len(text), index + context + 1)
@@ -938,13 +951,15 @@ def _broken_text_samples(text: str, *, limit: int = 3, context: int = 24) -> lis
 def _text_quality_stats(text: str) -> dict[str, int | float]:
     visible = [ch for ch in text if not ch.isspace()]
     total = len(visible)
-    broken = sum(1 for ch in visible if ch in _BROKEN_TEXT_CHARS)
+    broken = sum(1 for ch in visible if _is_broken_char(ch))
+    jamo = sum(1 for ch in visible if _is_compat_jamo(ch))
     hangul = sum(1 for ch in visible if "가" <= ch <= "힣")
     latin = sum(1 for ch in visible if ("A" <= ch <= "Z") or ("a" <= ch <= "z"))
     digits = sum(1 for ch in visible if ch.isdigit())
     return {
         "total": total,
         "broken": broken,
+        "jamo": jamo,
         "hangul": hangul,
         "latin": latin,
         "digits": digits,
@@ -964,6 +979,14 @@ def _text_quality_notice(text: str) -> str | None:
         return None
     samples = _broken_text_samples(text)
     sample_notice = f" 깨짐 위치 예: {' / '.join(samples)}" if samples else ""
+    jamo = int(stats["jamo"])
+    if jamo >= max(3, int(broken * 0.6)) and broken_ratio >= 0.1:
+        # 폰트/인코딩(ToUnicode CMap) 손상: 본문이 낱자로 깨진 경우
+        return (
+            "PDF 글꼴 정보가 손상돼 본문이 낱자(ㄱ, ㅏ 등)로 깨져 추출됐습니다. "
+            "PDF 원본 보기로 내용을 확인한 뒤 원문 텍스트를 직접 입력하거나 붙여 넣어 주세요."
+            f"{sample_notice}"
+        )
     return (
         "PDF의 수식·특수기호 일부가 텍스트로 정확히 추출되지 않았습니다. "
         "본문 문장 하이라이트는 사용할 수 있지만, 수식은 PDF 원본 보기에서 확인해 주세요."
