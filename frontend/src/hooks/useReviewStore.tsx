@@ -51,6 +51,7 @@ export function useReviewStore({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [doiInput, setDoiInput] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [ocrRunning, setOcrRunning] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle');
   const [doiLoading, setDoiLoading] = useState(false);
   const [sampleLoading, setSampleLoading] = useState(false);
@@ -136,6 +137,7 @@ export function useReviewStore({
   function extractionQualityLabel(quality?: ExtractionQuality): string {
     if (!quality) return '';
     if (quality.source === 'user_edited') return '사용자 보정됨';
+    if (quality.source === 'ocr') return 'OCR 복구됨';
     if (quality.status === 'good') return '양호';
     if (quality.status === 'review') return '확인 필요';
     if (quality.status === 'poor') return '낮음';
@@ -204,6 +206,84 @@ export function useReviewStore({
     if (!activeId) return;
     markDirty(activeId, { includeText: typeof patch.text === 'string' });
     setLibrary((lib) => (lib[activeId] ? { ...lib, [activeId]: { ...lib[activeId], ...patch } } : lib));
+  }
+
+  // 손상/스캔 PDF: 저장된 PDF 원본을 서버에서 렌더→OCR로 재인식해 원문을 복구한다.
+  async function ocrPaper() {
+    const target = paper;
+    if (!target || ocrRunning) return;
+    if (!target.pdfUrl) {
+      setSyncNotice({
+        tone: 'warning',
+        title: 'OCR을 사용할 수 없음',
+        message: 'OCR은 저장된 PDF 원본이 필요합니다. 먼저 PDF를 연결해 주세요.',
+      });
+      return;
+    }
+    setOcrRunning(true);
+    setSyncNotice({
+      tone: 'info',
+      title: 'OCR 재인식 중',
+      message: 'PDF를 이미지로 렌더해 텍스트를 다시 읽고 있습니다. 페이지 수에 따라 시간이 걸릴 수 있습니다.',
+    });
+    try {
+      const res = await fetch(`${API_BASE}/papers/${target.id}/ocr`, {
+        method: 'POST',
+        headers: authHeaders,
+      });
+      if (!res.ok) {
+        const apiError = await apiErrorFromResponse(res, 'OCR 재인식에 실패했습니다.');
+        setSyncNotice({
+          tone: res.status === 503 ? 'info' : 'error',
+          title: res.status === 503 ? 'OCR 미지원 서버' : apiError.title,
+          message:
+            res.status === 503
+              ? 'OCR 재인식이 비활성화된 서버입니다. 대신 PDF 원본을 보며 원문 텍스트를 직접 입력할 수 있습니다.'
+              : apiError.message,
+        });
+        return;
+      }
+      const data: {
+        text?: string;
+        sections?: DetectedSection[];
+        extraction_quality?: ExtractionQualityResponse;
+      } = await res.json();
+      if (!data.text || !data.text.trim()) {
+        setSyncNotice({
+          tone: 'warning',
+          title: 'OCR 결과 없음',
+          message: 'OCR로 읽어낸 텍스트가 없습니다. PDF 원본을 보며 직접 입력해 주세요.',
+        });
+        return;
+      }
+      const extractionQuality = normalizeExtractionQuality(data.extraction_quality);
+      // OCR이 오래 걸려 그 사이 다른 논문으로 전환됐을 수 있으므로 id 기준으로 반영한다.
+      setLibrary((lib) =>
+        lib[target.id]
+          ? {
+              ...lib,
+              [target.id]: { ...lib[target.id], text: data.text!, sections: data.sections ?? [], extractionQuality },
+            }
+          : lib,
+      );
+      markDirty(target.id, { includeText: true });
+      setSyncNotice({
+        tone: 'success',
+        title: 'OCR 재인식 완료',
+        message: withExtractionQualityMessage(
+          'OCR로 복구한 원문을 반영했습니다. 인식 오류가 있을 수 있으니 PDF 원본과 대조해 필요하면 편집하세요.',
+          extractionQuality,
+        ),
+      });
+    } catch {
+      setSyncNotice({
+        tone: 'error',
+        title: 'OCR 요청 실패',
+        message: '서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+      });
+    } finally {
+      setOcrRunning(false);
+    }
   }
 
   // ── 논문 등록 (#2: 논문별로 누적, 덮어쓰지 않음) ──
@@ -1025,6 +1105,8 @@ export function useReviewStore({
     setSectionSummaries,
     setTags,
     updatePaper,
+    ocrPaper,
+    ocrRunning,
     updateNote,
     registerPaper,
     openPaper,

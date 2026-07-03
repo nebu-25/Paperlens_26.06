@@ -10,7 +10,7 @@ export interface DetectedSection {
 }
 
 export type ExtractionQualityStatus = 'good' | 'review' | 'poor' | 'failed';
-export type ExtractionQualitySource = 'auto' | 'user_edited';
+export type ExtractionQualitySource = 'auto' | 'user_edited' | 'ocr';
 
 export interface ExtractionQuality {
   score: number;

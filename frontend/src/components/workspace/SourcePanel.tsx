@@ -1,4 +1,4 @@
-import { FileText, Highlighter, PencilLine, Upload } from 'lucide-react';
+import { FileText, Highlighter, PencilLine, ScanText, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { resolveApiUrl } from '../../constants';
 import { needsPdfText } from '../../lib/format';
@@ -17,7 +17,9 @@ const EXTRACTION_QUALITY_LABEL: Record<ExtractionQuality['status'], string> = {
 
 function extractionQualityLabel(quality?: ExtractionQuality) {
   if (!quality) return '';
-  return quality.source === 'user_edited' ? '사용자 보정됨' : EXTRACTION_QUALITY_LABEL[quality.status];
+  if (quality.source === 'user_edited') return '사용자 보정됨';
+  if (quality.source === 'ocr') return 'OCR 복구됨';
+  return EXTRACTION_QUALITY_LABEL[quality.status];
 }
 
 export function SourcePanel() {
@@ -34,6 +36,8 @@ export function SourcePanel() {
     bodyNodes,
     onTextMouseUp,
     updatePaper,
+    ocrPaper,
+    ocrRunning,
     updateNote,
     setSyncNotice,
     highlightColor,
@@ -234,6 +238,19 @@ export function SourcePanel() {
                   ))}
                 </ul>
               </>
+            )}
+            {paper.pdfUrl && (
+              <button
+                type="button"
+                className="mt-3 inline-flex items-center gap-1 rounded bg-action px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                disabled={ocrRunning}
+                onClick={() => {
+                  void ocrPaper();
+                }}
+              >
+                <ScanText size={13} />
+                {ocrRunning ? 'OCR 재인식 중…' : 'OCR로 다시 시도'}
+              </button>
             )}
           </div>
         )}
