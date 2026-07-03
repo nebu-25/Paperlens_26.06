@@ -2,7 +2,9 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Hand,
   Library,
+  MousePointer2,
   RotateCcw,
   Trash2,
   X,
@@ -44,11 +46,21 @@ type PdfActiveHighlight = {
   x: number;
   y: number;
 };
+type PdfInteractionMode = 'select' | 'pan';
+type ClientRectLike = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  width: number;
+  height: number;
+};
 
 const MIN_SCALE = 0.75;
 const MAX_SCALE = 5;
 const SCALE_STEP = 0.25;
 const WHEEL_SCALE_STEP = 0.1;
+const MIN_HIGHLIGHT_RECT_SIZE = 1;
 
 interface PdfViewerProps {
   title: string;
@@ -90,6 +102,27 @@ function clampScale(value: number) {
   return Math.max(MIN_SCALE, Math.min(MAX_SCALE, Number(value.toFixed(2))));
 }
 
+function intersectRect(a: ClientRectLike, b: ClientRectLike) {
+  const left = Math.max(a.left, b.left);
+  const top = Math.max(a.top, b.top);
+  const right = Math.min(a.right, b.right);
+  const bottom = Math.min(a.bottom, b.bottom);
+  if (right <= left || bottom <= top) return null;
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
+}
+
+function rectToPdfRect(rect: ClientRectLike, pageLayer: HTMLElement, scale: number) {
+  const pageBounds = pageLayer.getBoundingClientRect();
+  const clipped = intersectRect(rect, pageBounds);
+  if (!clipped || clipped.width < MIN_HIGHLIGHT_RECT_SIZE || clipped.height < MIN_HIGHLIGHT_RECT_SIZE) return null;
+  return {
+    x: (clipped.left - pageBounds.left) / scale,
+    y: (clipped.top - pageBounds.top) / scale,
+    width: clipped.width / scale,
+    height: clipped.height / scale,
+  };
+}
+
 export function PdfViewer({
   title,
   url,
@@ -115,6 +148,7 @@ export function PdfViewer({
   const [pageCount, setPageCount] = useState(0);
   const [scale, setScale] = useState(1.15);
   const [pageSize, setPageSize] = useState<PageSize | null>(null);
+  const [interactionMode, setInteractionMode] = useState<PdfInteractionMode>('select');
   const [panning, setPanning] = useState(false);
   const [pendingHighlight, setPendingHighlight] = useState<PdfPendingHighlight | null>(null);
   const [activeHighlight, setActiveHighlight] = useState<PdfActiveHighlight | null>(null);
@@ -324,8 +358,15 @@ export function PdfViewer({
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || event.pointerType === 'touch' || status !== 'ready') return;
-    if ((event.target as HTMLElement).closest('[data-pdf-text-layer]') && !event.altKey) return;
+    if (event.pointerType === 'touch' || status !== 'ready') return;
+    const pageLayer = pageLayerRef.current;
+    const isOnPage = Boolean(pageLayer && pageLayer.contains(event.target as Node));
+    const canPan =
+      interactionMode === 'pan'
+      || event.altKey
+      || event.button === 1
+      || !isOnPage;
+    if (!canPan) return;
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
     event.preventDefault();
@@ -359,27 +400,22 @@ export function PdfViewer({
   };
 
   const handleTextMouseUp = (event: MouseEvent<HTMLDivElement>) => {
-    if (panningRef.current || status !== 'ready') return;
+    if (panningRef.current || status !== 'ready' || interactionMode !== 'select') return;
     if (!(event.target as HTMLElement).closest('[data-pdf-text-layer]')) return;
     const selection = window.getSelection();
     const pageLayer = pageLayerRef.current;
-    if (!selection || selection.isCollapsed || !pageLayer || !textLayerRef.current) return;
+    const textLayer = textLayerRef.current;
+    if (!selection || selection.isCollapsed || !pageLayer || !textLayer) return;
 
     const selectedText = selection.toString();
     if (!selectedText.trim()) return;
 
     const range = selection.getRangeAt(0);
-    if (!textLayerRef.current.contains(range.commonAncestorContainer)) return;
+    if (!textLayer.contains(range.commonAncestorContainer)) return;
 
-    const pageBounds = pageLayer.getBoundingClientRect();
     const rects = Array.from(range.getClientRects())
-      .map((rect) => ({
-        x: (rect.left - pageBounds.left) / scale,
-        y: (rect.top - pageBounds.top) / scale,
-        width: rect.width / scale,
-        height: rect.height / scale,
-      }))
-      .filter((rect) => rect.width >= 1 && rect.height >= 1);
+      .map((rect) => rectToPdfRect(rect, pageLayer, scale))
+      .filter((rect): rect is PdfPendingHighlight['rects'][number] => Boolean(rect));
     if (rects.length === 0) return;
     setPendingHighlight({
       color: highlightColor,
@@ -437,6 +473,7 @@ export function PdfViewer({
   const canGoPrevious = pageNumber > 1;
   const canGoNext = pageCount > 0 && pageNumber < pageCount;
   const scalePercent = `${Math.round(scale * 100)}%`;
+  const isPanMode = interactionMode === 'pan';
   const pageStyle = pageSize
     ? {
         width: `${pageSize.width}px`,
@@ -454,6 +491,35 @@ export function PdfViewer({
           <div className="truncate text-xs text-muted">{title || '저장된 PDF'}</div>
         </div>
         <div className="flex items-center gap-1">
+          <div className="mr-1 inline-flex rounded border border-line bg-white p-1" aria-label="PDF 조작 모드">
+            <button
+              type="button"
+              className={`inline-flex h-7 w-7 items-center justify-center rounded ${
+                interactionMode === 'select' ? 'bg-action text-white' : 'text-muted hover:bg-paper'
+              }`}
+              aria-label="텍스트 선택 모드"
+              title="텍스트 선택 모드"
+              aria-pressed={interactionMode === 'select'}
+              onClick={() => setInteractionMode('select')}
+            >
+              <MousePointer2 size={14} />
+            </button>
+            <button
+              type="button"
+              className={`inline-flex h-7 w-7 items-center justify-center rounded ${
+                interactionMode === 'pan' ? 'bg-action text-white' : 'text-muted hover:bg-paper'
+              }`}
+              aria-label="화면 이동 모드"
+              title="화면 이동 모드"
+              aria-pressed={interactionMode === 'pan'}
+              onClick={() => {
+                clearPendingHighlight();
+                setInteractionMode('pan');
+              }}
+            >
+              <Hand size={14} />
+            </button>
+          </div>
           <button
             type="button"
             className="inline-flex h-8 w-8 items-center justify-center rounded border border-line text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
@@ -520,9 +586,9 @@ export function PdfViewer({
       <div
         ref={scrollRef}
         className={`h-[calc(100vh-21rem)] min-h-[560px] overflow-auto rounded border border-line bg-paper p-3 ${
-          status === 'ready' ? (panning ? 'cursor-grabbing select-none' : 'cursor-grab') : ''
+          status === 'ready' && (isPanMode || panning) ? (panning ? 'cursor-grabbing select-none' : 'cursor-grab') : ''
         }`}
-        title="PDF 텍스트 선택: 드래그, 화면 이동: Alt + 드래그"
+        title="텍스트 선택 모드: 드래그로 선택, 이동 모드: 드래그로 화면 이동"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={stopPanning}
@@ -530,10 +596,10 @@ export function PdfViewer({
         onMouseUp={handleTextMouseUp}
       >
         {status === 'ready' ? (
-          <div className="flex min-h-full justify-center">
+          <div className="min-h-full w-max min-w-full">
             <div
               ref={pageLayerRef}
-              className="relative h-fit max-w-none bg-white shadow-sm"
+              className="relative mx-auto h-fit max-w-none bg-white shadow-sm"
               style={pageStyle}
               data-pdf-page={pageNumber}
               data-pdf-scale={scale}
@@ -546,13 +612,27 @@ export function PdfViewer({
               />
               <div
                 ref={textLayerRef}
-                className="pdf-text-layer absolute inset-0"
+                className={`pdf-text-layer absolute inset-0 ${isPanMode ? 'pdf-text-layer--pan' : ''}`}
                 data-pdf-text-layer
               />
               <div
                 className="pointer-events-none absolute inset-0"
                 data-pdf-highlight-layer
               >
+                {pendingHighlight?.rects.map((rect, index) => (
+                  <div
+                    key={`pdf-selection-preview-${index}`}
+                    className="absolute rounded-[1px] outline outline-1 outline-action/40"
+                    style={{
+                      left: `${rect.x * scale}px`,
+                      top: `${rect.y * scale}px`,
+                      width: `${rect.width * scale}px`,
+                      height: `${rect.height * scale}px`,
+                      backgroundColor:
+                        PDF_HIGHLIGHT_COLORS[pendingHighlight?.color ?? highlightColor] ?? PDF_HIGHLIGHT_COLORS.yellow,
+                    }}
+                  />
+                ))}
                 {pageHighlights.map((highlight) =>
                   highlight.pdf?.rects.map((rect, index) => (
                     <div

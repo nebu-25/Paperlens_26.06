@@ -37,6 +37,12 @@ button:disabled {
   user-select: text;
 }
 
+.pdf-text-layer--pan,
+.pdf-text-layer--pan :is(span, br) {
+  cursor: grab;
+  user-select: none;
+}
+
 .pdf-text-layer .markedContent {
   display: contents;
 }
