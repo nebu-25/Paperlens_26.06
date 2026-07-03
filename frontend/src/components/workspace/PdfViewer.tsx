@@ -1,9 +1,7 @@
 import {
-  Check,
   ChevronLeft,
   ChevronRight,
   Hand,
-  Library,
   MousePointer2,
   RotateCcw,
   Trash2,
@@ -24,6 +22,7 @@ import { HIGHLIGHT_COLORS } from '../../constants';
 import { isChunkLoadError } from '../../lib/chunkLoad';
 import type { Highlight, HighlightColor } from '../../types';
 import { bandIndexOf, mergeColumnBands, type XSpan } from './pdfHighlightColumns';
+import { AddTermButton, HighlightButton, HighlightColorSwatches } from './HighlightSelectionControls';
 
 type PdfViewerStatus = 'idle' | 'loading' | 'ready' | 'error';
 type PageSize = {
@@ -817,39 +816,9 @@ export function PdfViewer({
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-1">
-            {HIGHLIGHT_COLORS.map((color) => (
-              <button
-                key={color.value}
-                type="button"
-                className={`inline-flex h-7 items-center gap-1 rounded border px-2 text-[11px] font-medium ${
-                  pendingHighlight.color === color.value
-                    ? 'border-ink ring-2 ring-action/25'
-                    : 'border-line hover:border-action'
-                }`}
-                aria-label={`PDF 하이라이트 색상 ${color.label}`}
-                title={`${color.label}: ${color.meaning}`}
-                onClick={() => selectPendingColor(color.value)}
-              >
-                <span className={`size-3 rounded-full ${color.swatchClass}`} aria-hidden="true" />
-                <span>{color.label}</span>
-              </button>
-            ))}
-            <button
-              type="button"
-              className="ml-1 inline-flex h-7 items-center gap-1 rounded bg-action px-2 text-[11px] font-semibold text-white"
-              onClick={applyPendingHighlight}
-            >
-              <Check size={13} />
-              적용
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-7 items-center gap-1 rounded border border-line px-2 text-[11px] font-semibold text-muted hover:border-action hover:text-action"
-              onClick={addPendingTerm}
-            >
-              <Library size={13} />
-              용어 추가
-            </button>
+            <HighlightColorSwatches selected={pendingHighlight.color} onSelect={selectPendingColor} />
+            <HighlightButton onClick={applyPendingHighlight} />
+            <AddTermButton onClick={addPendingTerm} />
           </div>
         </div>
       )}
