@@ -38,6 +38,7 @@ export function SourcePanel() {
     updatePaper,
     ocrPaper,
     ocrRunning,
+    ocrAvailable,
     updateNote,
     setSyncNotice,
     highlightColor,
@@ -239,7 +240,7 @@ export function SourcePanel() {
                 </ul>
               </>
             )}
-            {paper.pdfUrl && (
+            {paper.pdfUrl && ocrAvailable && (
               <button
                 type="button"
                 className="mt-3 inline-flex items-center gap-1 rounded bg-action px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"

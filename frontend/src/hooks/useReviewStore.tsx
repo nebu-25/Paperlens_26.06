@@ -52,6 +52,7 @@ export function useReviewStore({
   const [doiInput, setDoiInput] = useState('');
   const [uploading, setUploading] = useState(false);
   const [ocrRunning, setOcrRunning] = useState(false);
+  const [ocrAvailable, setOcrAvailable] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle');
   const [doiLoading, setDoiLoading] = useState(false);
   const [sampleLoading, setSampleLoading] = useState(false);
@@ -194,6 +195,24 @@ export function useReviewStore({
         if (!cancelled) setAiEnabled(Boolean(data.enabled));
       } catch {
         if (!cancelled) setAiEnabled(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 서버가 OCR 재추출(opt-in)을 지원하는지 확인해 버튼 노출을 제어한다.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/diagnostics`);
+        if (!res.ok) throw new Error('diagnostics unavailable');
+        const data = (await res.json()) as { ocr?: { enabled?: boolean } };
+        if (!cancelled) setOcrAvailable(Boolean(data.ocr?.enabled));
+      } catch {
+        if (!cancelled) setOcrAvailable(false);
       }
     })();
     return () => {
@@ -1107,6 +1126,7 @@ export function useReviewStore({
     updatePaper,
     ocrPaper,
     ocrRunning,
+    ocrAvailable,
     updateNote,
     registerPaper,
     openPaper,
