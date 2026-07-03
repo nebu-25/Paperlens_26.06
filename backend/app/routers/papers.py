@@ -1115,42 +1115,90 @@ def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
     return int(ocr_stats["total"]) >= max(40, int(original_stats["total"]) * 0.35)
 
 
-def _ocr_document_text(
-    document,
-    *,
-    language: str,
-    dpi: int,
-    max_pages: int,
-) -> tuple[str, str | None]:
-    """PyMuPDF OCR로 전체 문서를 재추출한다. Tesseract 미설치/언어팩 누락은 안내로 반환한다."""
-    if document.page_count > max_pages:
-        return (
-            "",
-            f"OCR 재추출은 {max_pages}페이지 이하 PDF에만 자동 시도합니다"
-            f"(현재 {document.page_count}페이지).",
-        )
+# --- OCR fallback (opt-in, RapidOCR) ---------------------------------------
+_OCR_ENGINE = None  # 무거운 모델이라 프로세스당 1회만 로드하는 lazy 싱글턴
 
-    pages: list[str] = []
+
+def _ensure_ocr_model() -> tuple[str, str]:
+    """한국어 rec ONNX 모델·dict 경로를 확보한다. 설정 경로 우선, 없으면 캐시에 다운로드."""
+    rec, keys = settings.ocr_rec_model_path.strip(), settings.ocr_rec_keys_path.strip()
+    if rec and keys and Path(rec).exists() and Path(keys).exists():
+        return rec, keys
+    cache = Path(settings.ocr_model_dir.strip() or (Path(__file__).resolve().parents[2] / ".ocr_models"))
+    cache.mkdir(parents=True, exist_ok=True)
+    targets = (
+        (cache / "korean_rec.onnx", settings.ocr_rec_model_url),
+        (cache / "korean_dict.txt", settings.ocr_rec_keys_url),
+    )
+    for path, url in targets:
+        if not path.exists() or path.stat().st_size == 0:
+            req = urllib.request.Request(url, headers={"User-Agent": settings.crossref_user_agent})
+            with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310 - 신뢰된 모델 URL
+                path.write_bytes(resp.read())
+    return str(targets[0][0]), str(targets[1][0])
+
+
+def _get_ocr_engine():
+    global _OCR_ENGINE
+    if _OCR_ENGINE is None:
+        from rapidocr_onnxruntime import RapidOCR  # lazy: 선택 의존성
+
+        rec, keys = _ensure_ocr_model()
+        _OCR_ENGINE = RapidOCR(rec_model_path=rec, rec_keys_path=keys)
+    return _OCR_ENGINE
+
+
+def _ocr_lines_from_result(result) -> list[dict[str, object]]:
+    """RapidOCR 박스 결과를 reflow 파이프라인이 쓰는 line dict로 변환한다."""
+    lines: list[dict[str, object]] = []
+    for box, text, _score in result or []:
+        cleaned = _clean_pdf_line(str(text))
+        if not cleaned:
+            continue
+        xs = [float(p[0]) for p in box]
+        ys = [float(p[1]) for p in box]
+        y0, y1 = min(ys), max(ys)
+        lines.append(
+            {
+                "text": cleaned,
+                "x0": min(xs),
+                "x1": max(xs),
+                "y0": y0,
+                "y1": y1,
+                "size": max(1.0, y1 - y0),
+            }
+        )
+    lines.sort(key=lambda it: (round(float(it["y0"])), float(it["x0"])))
+    return lines
+
+
+def _ocr_document_text(document, *, dpi: int, max_pages: int) -> tuple[str, str | None]:
+    """RapidOCR로 렌더된 페이지 이미지를 재인식해 텍스트를 복구한다.
+
+    폰트/인코딩 손상·스캔 PDF처럼 텍스트 레이어가 깨진 경우의 fallback. 무겁고 느려
+    opt-in(`OCR_ENABLED`)일 때만, 페이지 상한 안에서만 실행한다. 인식 박스는 좌표 기반
+    reflow(2단 컬럼 포함)로 재구성해 기존 추출 경로와 동일한 문단 형태로 만든다.
+    """
+    if document.page_count > max_pages:
+        return "", f"OCR은 {max_pages}페이지 이하 PDF에만 지원합니다(현재 {document.page_count}페이지)."
+    try:
+        engine = _get_ocr_engine()
+    except Exception as exc:  # pragma: no cover - 선택 의존성/모델 조달 실패
+        return "", f"서버에서 OCR 구성요소(RapidOCR/모델)를 사용할 수 없습니다. 환경 메시지: {exc}"
+
+    paragraphs: list[str] = []
     try:
         for page in document:
-            textpage = page.get_textpage_ocr(
-                language=language,
-                dpi=dpi,
-                full=True,
-            )
-            page_text = page.get_text("text", textpage=textpage)
-            cleaned = _tidy_spacing(_join_lines(page_text.splitlines()))
-            if cleaned:
-                pages.append(cleaned)
-    except Exception as exc:  # pragma: no cover - depends on host Tesseract install
-        return (
-            "",
-            (
-                "OCR 재추출을 시도했지만 서버에서 OCR 엔진 또는 한국어 언어팩을 사용할 수 없습니다. "
-                f"환경 메시지: {exc}"
-            ),
-        )
-    return "\n\n".join(pages), None
+            pix = page.get_pixmap(dpi=dpi)
+            result, _ = engine(pix.tobytes("png"))  # PNG 바이트로 넘겨 cv2 채널순서 이슈 회피
+            lines = _ocr_lines_from_result(result)
+            if not lines:
+                continue
+            for group in _split_page_columns(lines, float(pix.width)):
+                paragraphs.extend(_reflow_lines(group))
+    except Exception as exc:  # pragma: no cover - 런타임 OCR 실패
+        return "", f"OCR 처리 중 오류가 발생했습니다: {exc}"
+    return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
 
 
 @router.api_route("/sample-pdf", methods=["GET", "HEAD"])
@@ -1397,6 +1445,47 @@ def get_pdf(paper_id: str, user_id: str = Depends(current_user_id)) -> Response:
             )
         },
     )
+
+
+@router.post("/{paper_id}/ocr")
+def ocr_paper(paper_id: str, user_id: str = Depends(current_user_id)) -> dict[str, object]:
+    """저장된 PDF를 렌더→OCR로 재인식해 원문 텍스트를 복구한다(손상/스캔 PDF용, opt-in)."""
+    if not settings.ocr_enabled:
+        raise HTTPException(status_code=503, detail="이 서버에서는 OCR 재추출이 비활성화되어 있습니다.")
+    stored = db.get_pdf(user_id, paper_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=404, detail="저장된 PDF가 없습니다. OCR하려면 PDF 원본을 먼저 연결해 주세요."
+        )
+    _filename, content = stored
+    try:
+        import fitz
+
+        document = fitz.open(stream=content, filetype="pdf")
+    except Exception as exc:  # pragma: no cover - library-specific parse failures
+        raise HTTPException(status_code=422, detail="저장된 PDF를 열 수 없습니다.") from exc
+    if document.needs_pass:
+        raise HTTPException(status_code=400, detail="암호로 보호된 PDF입니다.")
+
+    ocr_text, error = _ocr_document_text(
+        document, dpi=settings.ocr_dpi, max_pages=settings.ocr_max_pages
+    )
+    if not ocr_text.strip():
+        raise HTTPException(status_code=422, detail=error or "OCR로 텍스트를 추출하지 못했습니다.")
+
+    page_count = document.page_count
+    warnings = _extraction_quality_warnings(ocr_text, page_count)
+    quality = _extraction_quality(ocr_text, page_count, warnings)
+    quality["source"] = "ocr"
+    return {
+        "text": ocr_text,
+        "page_count": page_count,
+        "sections": _detect_sections(ocr_text),
+        "extraction_quality": quality,
+        "metadata_warnings": warnings,
+        "notice": " ".join(warnings) or None,
+        "ocr": True,
+    }
 
 
 @router.get("/metadata")

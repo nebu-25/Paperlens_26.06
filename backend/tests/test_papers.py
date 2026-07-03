@@ -620,3 +620,35 @@ class TestCorruptedEncodingDetection:
         q = papers._extraction_quality(self.CORRUPT, page_count=3)
         assert q["status"] != "good"
         assert q["score"] < 60
+
+
+class TestOcrReflow:
+    """RapidOCR 박스 → line dict 변환과 읽기순서 재구성(엔진 비의존)."""
+
+    def test_lines_sorted_and_cleaned(self):
+        result = [
+            [[[10, 40], [90, 40], [90, 60], [10, 60]], "둘째 줄", 0.9],
+            [[[10, 10], [80, 10], [80, 30], [10, 30]], " 첫째 줄 ", 0.9],
+        ]
+        lines = papers._ocr_lines_from_result(result)
+        assert [ln["text"] for ln in lines] == ["첫째 줄", "둘째 줄"]  # y0 오름차순
+        assert lines[0]["y1"] > lines[0]["y0"]
+
+    def test_two_column_reading_order(self):
+        # 왼쪽 컬럼(작은 x)이 오른쪽 컬럼보다 먼저 읽혀야 한다.
+        result = []
+        for i in range(6):
+            y = 10 + i * 20
+            result.append([[[10, y], [120, y], [120, y + 15], [10, y + 15]], f"왼쪽{i}", 0.9])
+            result.append([[[320, y], [430, y], [430, y + 15], [320, y + 15]], f"오른쪽{i}", 0.9])
+        lines = papers._ocr_lines_from_result(result)
+        groups = papers._split_page_columns(lines, 460.0)
+        text = "\n".join(p for g in groups for p in papers._reflow_lines(g))
+        assert text.index("왼쪽0") < text.index("오른쪽0")
+
+    def test_ocr_returns_error_over_pagecount(self):
+        class _Doc:
+            page_count = 999
+
+        out, err = papers._ocr_document_text(_Doc(), dpi=200, max_pages=20)
+        assert out == "" and err is not None

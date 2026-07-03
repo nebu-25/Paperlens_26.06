@@ -23,10 +23,21 @@ class Settings(BaseSettings):
     # AI 엔드포인트 사용자별 분당 호출 상한(비용·남용 방지). 0 이하면 제한 없음.
     # 단일 프로세스 인메모리 카운터라 인스턴스 재시작 시 리셋되고 인스턴스 간 공유되지 않는다.
     ai_rate_limit_per_minute: int = 10
-    # PyMuPDF OCR fallback. Render 기본 Python 런타임에는 Tesseract가 없을 수 있어 best-effort로만 사용한다.
-    ocr_languages: str = "kor+eng"
+    # OCR fallback (opt-in). 손상/스캔 PDF를 렌더→RapidOCR(한국어)로 재인식한다.
+    # 무겁고 느려 기본 off. 켜려면 requirements-ocr.txt 설치 필요.
+    ocr_enabled: bool = False
     ocr_max_pages: int = 20
     ocr_dpi: int = 200
+    # 한국어 rec ONNX 모델·dict. 경로가 있으면 사용, 없으면 아래 URL에서 캐시로 1회 다운로드한다.
+    ocr_rec_model_path: str = ""
+    ocr_rec_keys_path: str = ""
+    ocr_model_dir: str = ""
+    ocr_rec_model_url: str = (
+        "https://huggingface.co/cycloneboy/korean_PP-OCRv4_rec_infer/resolve/main/model.onnx"
+    )
+    ocr_rec_keys_url: str = (
+        "https://huggingface.co/cycloneboy/korean_PP-OCRv4_rec_infer/resolve/main/korean_dict.txt"
+    )
     # 샘플 PDF 파일을 배포 서버에 커밋하지 않고 제공할 때 사용하는 원격 PDF URL.
     sample_pdf_url: str = ""
     # Supabase Auth. JWT secret이 있으면 보호 API에서 Bearer token을 검증해 user_id를 추출한다.
@@ -55,6 +66,10 @@ class Settings(BaseSettings):
     @property
     def auth_enabled(self) -> bool:
         return bool(self.supabase_jwt_secret.strip())
+
+    @property
+    def ocr_ready(self) -> bool:
+        return bool(self.ocr_enabled)
 
     @property
     def supabase_expected_issuer(self) -> str:
