@@ -752,6 +752,10 @@ export function useReviewStore({
   }
 
   function onTextMouseUp(e: React.MouseEvent) {
+    if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"], [role="textbox"]')) {
+      setSelection(null);
+      return;
+    }
     const sel = window.getSelection();
     const text = sel?.toString() ?? '';
     const container = bodyRef.current;

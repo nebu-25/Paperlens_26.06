@@ -234,6 +234,8 @@ export function ReviewNotePanel() {
               <span className="w-10 shrink-0 text-xs text-muted">제목</span>
               <input
                 name="paper-title"
+                aria-label="논문 제목"
+                title="논문 제목"
                 className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
                 placeholder="논문 제목을 입력하세요"
                 value={paper.title}
@@ -244,6 +246,8 @@ export function ReviewNotePanel() {
               <span className="w-10 shrink-0 text-xs text-muted">저자</span>
               <input
                 name="paper-authors"
+                aria-label="논문 저자"
+                title="논문 저자"
                 className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
                 placeholder="저자를 입력하세요 (쉼표로 구분)"
                 value={paper.authors}
@@ -254,6 +258,8 @@ export function ReviewNotePanel() {
               <span className="w-10 shrink-0 text-xs text-muted">링크</span>
               <input
                 name="paper-link"
+                aria-label="논문 링크"
+                title="논문 링크"
                 className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
                 placeholder="DOI 또는 PDF 원문 URL"
                 value={paper.link}
@@ -281,6 +287,8 @@ export function ReviewNotePanel() {
           <div className="mb-2 flex flex-col gap-2 sm:flex-row">
             <select
               name="manual-summary-label"
+              aria-label="수동 요약 라벨"
+              title="수동 요약 라벨"
               className="rounded border border-line bg-white p-2 text-sm outline-none focus:border-action"
               value={manualSummaryColor}
               onChange={(e) => setManualSummaryColor(e.target.value as HighlightColor)}
@@ -293,6 +301,8 @@ export function ReviewNotePanel() {
             </select>
             <input
               name="manual-summary"
+              aria-label="수동 요약 내용"
+              title="수동 요약 내용"
               className="min-w-0 flex-1 rounded border border-line p-2 text-sm outline-none focus:border-action"
               placeholder="PDF를 읽고 직접 정리한 내용을 추가하세요."
               value={manualSummaryDraft}
@@ -339,6 +349,7 @@ export function ReviewNotePanel() {
                     </div>
                     <select
                       name={`manual-summary-citation-${item.id}`}
+                      aria-label="수동 요약 인용 목적"
                       className="rounded border border-line bg-white px-2 py-1 text-xs text-muted outline-none focus:border-action"
                       value={item.citationUse ?? ''}
                       title="인용 후보 보드에서 사용할 목적"
@@ -427,6 +438,7 @@ export function ReviewNotePanel() {
                     <div className="flex shrink-0 items-start gap-2">
                       <select
                         name={`highlight-citation-${h.id}`}
+                        aria-label="하이라이트 인용 목적"
                         className="max-w-32 rounded border border-line bg-white px-2 py-1 text-xs text-muted outline-none focus:border-action"
                         value={h.citationUse ?? ''}
                         title="인용 후보 보드에서 사용할 목적"
@@ -563,6 +575,8 @@ export function ReviewNotePanel() {
                   </div>
                   <textarea
                     name={`term-explanation-${t.id}`}
+                    aria-label="용어 설명"
+                    title="용어 설명"
                     className="min-h-12 w-full resize-none rounded border border-line p-2 text-sm outline-none focus:border-action"
                     placeholder="설명을 직접 작성하세요."
                     value={t.explanation}
@@ -621,6 +635,8 @@ export function ReviewNotePanel() {
                 >
                   <input
                     name={`export-${option.key}`}
+                    aria-label={`내보내기 항목 ${option.label}`}
+                    title={`내보내기 항목 ${option.label}`}
                     type="checkbox"
                     className="accent-action"
                     checked={exportOptions[option.key]}

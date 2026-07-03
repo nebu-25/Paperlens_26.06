@@ -158,6 +158,8 @@ export function AuthControls({ enabled, ready, user, variant = 'panel', onEnterS
         <input
           id="paperlens-auth-email"
           name="email"
+          aria-label="이메일"
+          title="이메일"
           className="min-w-0 rounded border border-line px-3 py-2 text-sm outline-none focus:border-action"
           type="email"
           placeholder="이메일"
@@ -168,6 +170,8 @@ export function AuthControls({ enabled, ready, user, variant = 'panel', onEnterS
         <input
           id="paperlens-auth-password"
           name="password"
+          aria-label="비밀번호"
+          title="비밀번호"
           className="min-w-0 rounded border border-line px-3 py-2 text-sm outline-none focus:border-action"
           type="password"
           placeholder="비밀번호"

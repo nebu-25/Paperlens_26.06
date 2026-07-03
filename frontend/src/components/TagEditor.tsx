@@ -30,6 +30,8 @@ export function TagEditor({ tags, onChange }: { tags: string[]; onChange: (next:
       )}
       <input
         name="review-tag"
+        aria-label="태그 추가"
+        title="태그 추가"
         className="w-full rounded border border-line px-2 py-1.5 text-sm outline-none focus:border-action"
         placeholder="태그 추가 (Enter)"
         value={draft}

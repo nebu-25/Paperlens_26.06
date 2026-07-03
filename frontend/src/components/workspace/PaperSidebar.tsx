@@ -33,6 +33,8 @@ export function PaperSidebar() {
             <input
               name="paper-library-search"
               type="search"
+              aria-label="리뷰 노트 검색"
+              title="리뷰 노트 검색"
               className="w-full rounded border border-line bg-white py-1.5 pl-7 pr-2 text-sm outline-none focus:border-action"
               placeholder="제목·저자·내용·태그 검색"
               value={search}
