@@ -125,9 +125,13 @@ docker-compose.postgres.yml
 render.yaml
 ```
 
+제품 기획서:
+
+- `paper_review_service_plan_v4.0.md`: 제품 기획서 (버전 관리 포함). AI 내용 요약 제외, 요약 이외 작업 자동화, 목적별 템플릿 방향을 정의합니다.
+
 로컬 전용 문서:
 
-- `paper_review_service_plan_v3.1.md`: 제품 기획서
+- `paper_review_service_plan_v3.1.md`: 이전 기획서 (로컬 참조용)
 - `testing.md`: 로컬 테스트·검증 로그
 - `presentation_content.md`: 발표용 내용 정리
 
