@@ -93,7 +93,7 @@ function errorMessage(status?: number, error?: unknown) {
     return '새 배포 파일을 다시 받아야 PDF 원본 보기를 열 수 있습니다. 브라우저가 이전 파일을 캐시하고 있을 수 있으니 화면을 새로고침해 주세요.';
   }
   if (status === 401) {
-    return 'PDF 원본 미리보기를 열 수 없습니다. 로그인 세션을 새로고침한 뒤 다시 시도해 주세요.';
+    return 'PDF 원본 파일 권한을 확인하지 못했습니다. 먼저 페이지를 새로고침해 로그인 세션을 갱신해 주세요. 같은 오류가 계속되면 이 노트의 PDF 원본이 현재 계정에 연결되어 있지 않을 수 있으니 PDF를 다시 연결해 주세요.';
   }
   return 'PDF 원본 미리보기를 불러오지 못했습니다. 하이라이트 가능한 원문은 계속 사용할 수 있습니다.';
 }
@@ -215,6 +215,19 @@ export function PdfViewer({
       return;
     }
 
+    if (!accessToken) {
+      setDocument(null);
+      setPage(null);
+      setPageNumber(1);
+      setPageCount(0);
+      setPageSize(null);
+      setPendingHighlight(null);
+      setActiveHighlight(null);
+      setStatus('error');
+      setMessage('로그인 세션을 확인한 뒤 PDF 원본을 불러옵니다. 잠시 후에도 열리지 않으면 페이지를 새로고침해 주세요.');
+      return;
+    }
+
     let cancelled = false;
     let loadingTask: PDFDocumentLoadingTask | null = null;
     let loadedDocument: PDFDocumentProxy | null = null;
@@ -231,7 +244,7 @@ export function PdfViewer({
     (async () => {
       try {
         const res = await fetch(url, {
-          headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+          headers: { Authorization: `Bearer ${accessToken}` },
         });
         if (!res.ok) {
           if (!cancelled) {
