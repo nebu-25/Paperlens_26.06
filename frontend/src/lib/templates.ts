@@ -41,6 +41,7 @@ export interface PurposeTemplateDef {
     questions: boolean;
     highlights: boolean;
     citationBoard: boolean;
+    figures: boolean;
   };
 }
 
@@ -73,7 +74,7 @@ const T1_GENERAL: PurposeTemplateDef = {
   })),
   completionLabel: '5문항을 모두 작성하면 정독 단계가 완료됩니다.',
   isComplete: (note) => TEMPLATE_QUESTIONS.every((q) => answered(note.template[q.key])),
-  exportDefaults: { template: true, terms: true, questions: true, highlights: true, citationBoard: true },
+  exportDefaults: { template: true, terms: true, questions: true, highlights: true, citationBoard: true, figures: true },
 };
 
 const T2_RELATED: PurposeTemplateDef = {
@@ -112,7 +113,7 @@ const T2_RELATED: PurposeTemplateDef = {
   isComplete: (note) =>
     citationItemCount(note) >= 1 && answered(note.templateAnswers?.t2_related?.q2),
   // 출력은 인용 후보 보드 중심 (§8-3a T2)
-  exportDefaults: { template: true, terms: false, questions: false, highlights: true, citationBoard: true },
+  exportDefaults: { template: true, terms: false, questions: false, highlights: true, citationBoard: true, figures: false },
 };
 
 const T3_METHOD: PurposeTemplateDef = {
@@ -151,7 +152,7 @@ const T3_METHOD: PurposeTemplateDef = {
     '방법론 하이라이트 3개 이상 + 적용 계획(③) 답변을 작성하면 정독 단계가 완료됩니다.',
   isComplete: (note) =>
     countColor(note, 'green') >= 3 && answered(note.templateAnswers?.t3_method?.q3),
-  exportDefaults: { template: true, terms: true, questions: true, highlights: true, citationBoard: false },
+  exportDefaults: { template: true, terms: true, questions: true, highlights: true, citationBoard: false, figures: true },
 };
 
 const T4_CRITICAL: PurposeTemplateDef = {
@@ -197,7 +198,7 @@ const T4_CRITICAL: PurposeTemplateDef = {
   isComplete: (note) =>
     countColor(note, 'pink') >= 2 && answered(note.templateAnswers?.t4_critical?.q3),
   // 발제·반론 구성에 필요한 질문·하이라이트·인용 후보 중심. 용어 사전은 선택.
-  exportDefaults: { template: true, terms: false, questions: true, highlights: true, citationBoard: true },
+  exportDefaults: { template: true, terms: false, questions: true, highlights: true, citationBoard: true, figures: true },
 };
 
 const T5_RESULTS: PurposeTemplateDef = {
@@ -228,7 +229,7 @@ const T5_RESULTS: PurposeTemplateDef = {
   ],
   completionLabel: '"결과 비교" 인용 후보를 1개 이상 남기면 정독 단계가 완료됩니다.',
   isComplete: (note) => hasCitationUse(note, 'comparison'),
-  exportDefaults: { template: true, terms: false, questions: false, highlights: true, citationBoard: true },
+  exportDefaults: { template: true, terms: false, questions: false, highlights: true, citationBoard: true, figures: true },
 };
 
 export const PURPOSE_TEMPLATES: PurposeTemplateDef[] = [

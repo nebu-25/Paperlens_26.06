@@ -12,8 +12,12 @@ export function scrollToTextOffset(container: HTMLElement, offset: number): bool
       const local = Math.max(0, Math.min(offset - consumed, length));
       try {
         range.setStart(node, local);
-        range.setEnd(node, local);
-        const rect = range.getBoundingClientRect();
+        // collapsed Range는 줄바꿈/노드 경계에서 rect가 0으로 나올 수 있어 한 글자를 감싼다.
+        range.setEnd(node, Math.min(local + 1, length));
+        let rect = range.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) {
+          rect = node.parentElement?.getBoundingClientRect() ?? rect;
+        }
         const containerRect = container.getBoundingClientRect();
         container.scrollTo({
           top: container.scrollTop + rect.top - containerRect.top - 16,

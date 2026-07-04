@@ -32,6 +32,7 @@ const EXPORT_OPTION_LABELS: { key: keyof ExportOptions; label: string }[] = [
   { key: 'questions', label: '질문' },
   { key: 'highlights', label: '하이라이트' },
   { key: 'citationBoard', label: '인용 후보' },
+  { key: 'figures', label: '그림/표 메모' },
 ];
 
 export function ReviewNotePanel() {

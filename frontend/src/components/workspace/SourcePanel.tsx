@@ -1,4 +1,4 @@
-import { FileText, Highlighter, ListTree, PencilLine, ScanSearch, ScanText, Upload } from 'lucide-react';
+import { FileText, Highlighter, Image, ListTree, PencilLine, ScanSearch, ScanText, Upload } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { resolveApiUrl } from '../../constants';
 import { scrollToTextOffset } from '../../lib/domText';
@@ -52,6 +52,9 @@ export function SourcePanel() {
     signalScanBlocked,
     limitationSignals,
     keywordCandidates,
+    figureCaptions,
+    figureMentionCounts,
+    jumpToTextOffset,
   } = store;
 
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
@@ -66,6 +69,15 @@ export function SourcePanel() {
   };
   const [sourceEditOpen, setSourceEditOpen] = useState(false);
   const [sourceDraft, setSourceDraft] = useState('');
+  // 그림/표 네비게이터에서 메모 입력을 펼친 캡션 id 집합 (FR-27)
+  const [openFigureMemos, setOpenFigureMemos] = useState<Set<string>>(() => new Set());
+  const toggleFigureMemo = (id: string) =>
+    setOpenFigureMemos((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const [hiddenPaperNotices, setHiddenPaperNotices] = useState<Set<string>>(() => new Set());
 
   const missingPdfNoticeKey = paper ? `missing-pdf:${paper.id}:${needsPdfText(paper)}` : '';
@@ -319,6 +331,77 @@ export function SourcePanel() {
                   </button>
                 ))}
               </nav>
+            )}
+            {!sourceEditOpen && figureCaptions.length > 0 && (
+              <section
+                aria-label="그림/표 네비게이터"
+                className="mb-3 rounded border border-line bg-paper/60 p-2"
+              >
+                <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-muted">
+                  <Image size={12} />
+                  그림/표 {figureCaptions.length}건 — 표적 읽기(2차)에서 결과·그림을 먼저 확인하세요
+                </div>
+                <ul className="space-y-1">
+                  {figureCaptions.map((caption) => {
+                    const memo = note.figureNotes?.[caption.id] ?? '';
+                    const memoOpen = openFigureMemos.has(caption.id) || memo.length > 0;
+                    const mentions = figureMentionCounts[caption.id] ?? 0;
+                    return (
+                      <li key={caption.id} className="rounded bg-white/70 px-2 py-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-action hover:underline"
+                            title={`${caption.label} 캡션 위치로 이동`}
+                            onClick={() => jumpToTextOffset(caption.start)}
+                          >
+                            {caption.label}
+                          </button>
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
+                            {caption.preview}
+                          </span>
+                          {mentions > 0 && (
+                            <span
+                              className="shrink-0 rounded bg-paper px-1.5 py-0.5 text-[10px] text-muted"
+                              title="본문에서 이 그림/표를 언급한 횟수 — 본문 속 링크를 클릭하면 캡션으로 이동합니다"
+                            >
+                              언급 {mentions}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${
+                              memoOpen
+                                ? 'border-action bg-action/10 font-semibold text-action'
+                                : 'border-line text-muted hover:border-action hover:text-action'
+                            }`}
+                            aria-expanded={memoOpen}
+                            onClick={() => toggleFigureMemo(caption.id)}
+                          >
+                            메모{memo ? ' ●' : ''}
+                          </button>
+                        </div>
+                        {memoOpen && (
+                          <textarea
+                            name={`figure-note-${caption.id}`}
+                            aria-label={`${caption.label} 메모`}
+                            title={`${caption.label} 메모 — 그림이 보여주는 것에 대한 내 해석을 직접 적으세요`}
+                            className="mt-1 min-h-12 w-full resize-y rounded border border-line p-2 text-xs outline-none focus:border-action"
+                            placeholder="이 그림/표에서 확인한 것을 직접 정리하세요. (해석은 도구가 하지 않습니다)"
+                            value={memo}
+                            onChange={(e) =>
+                              updateNote('figureNotes', {
+                                ...(note.figureNotes ?? {}),
+                                [caption.id]: e.target.value,
+                              })
+                            }
+                          />
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
             )}
             {!sourceEditOpen && paper.text && (
               <div className="mb-3 rounded border border-line bg-paper/60 p-2">

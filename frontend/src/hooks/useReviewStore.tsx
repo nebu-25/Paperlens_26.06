@@ -18,6 +18,9 @@ import {
 import { buildChecklist, countDone } from '../lib/reviewProgress';
 import { buildKeywordCandidates, scanLimitationSignals } from '../lib/signalScanner';
 import type { SignalMatch } from '../lib/signalScanner';
+import { buildFigureIndex, mentionCounts } from '../lib/figureIndex';
+import type { FigureMentionLink } from '../lib/figureIndex';
+import { scrollToTextOffset } from '../lib/domText';
 import type {
   AppNotice,
   DetectedSection,
@@ -1038,7 +1041,30 @@ export function useReviewStore({
     }));
   }
 
-  const bodyNodes = usePaperBodyNodes(paper, note, highlightFilter, limitationSignals, promoteSignal);
+  // ── 그림/표 네비게이터 (FR-27, M5: 캡션 목록·점프·본문 교차참조·캡션 메모) ──
+  const figureIndex = React.useMemo(
+    () => buildFigureIndex(paper?.text ?? ''),
+    [paper?.text],
+  );
+  const figureMentionCounts = React.useMemo(() => mentionCounts(figureIndex), [figureIndex]);
+
+  // 원문 스크롤 컨테이너에서 캡션 위치로 이동 (아웃라인 점프와 동일 방식)
+  function jumpToTextOffset(offset: number) {
+    if (bodyRef.current) scrollToTextOffset(bodyRef.current, offset);
+  }
+  function jumpToCaption(mention: FigureMentionLink) {
+    jumpToTextOffset(mention.targetStart);
+  }
+
+  const bodyNodes = usePaperBodyNodes(
+    paper,
+    note,
+    highlightFilter,
+    limitationSignals,
+    promoteSignal,
+    figureIndex.mentions,
+    jumpToCaption,
+  );
 
   function contextForTerm(term: string): string {
     if (!paper?.text) return '';
@@ -1211,6 +1237,9 @@ export function useReviewStore({
     limitationSignals,
     keywordCandidates,
     promoteSignal,
+    figureCaptions: figureIndex.captions,
+    figureMentionCounts,
+    jumpToTextOffset,
   };
 }
 
