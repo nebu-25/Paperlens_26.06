@@ -123,4 +123,9 @@ export interface ReviewNote {
     q5: string; // 내가 이해한 핵심
   };
   memos: Record<string, string>; // 섹션별 메모 카드
+  // v4.0 읽기 목적 템플릿 id (lib/templates.ts 정의, 기본 t1_general).
+  templateId?: string;
+  // T1 이외 목적 템플릿의 문항 답변: templateId -> 질문 key -> 답변.
+  // T1 답변은 하위 호환을 위해 위 template 필드를 계속 사용한다.
+  templateAnswers?: Record<string, Record<string, string>>;
 }

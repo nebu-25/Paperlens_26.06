@@ -81,6 +81,27 @@ describe('normalizeNote', () => {
     expect(note.sectionSummaries).toHaveLength(1);
     expect(note.sectionSummaries[0].section).toBe('Custom');
   });
+
+  it('migrates legacy notes to the T1 purpose template (v4.0)', () => {
+    const note = normalizeNote({ oneLineSummary: 'legacy' });
+    expect(note.templateId).toBe('t1_general');
+    expect(note.templateAnswers).toEqual({});
+  });
+
+  it('keeps a valid templateId and falls back on unknown ids', () => {
+    expect(normalizeNote({ templateId: 't4_critical' }).templateId).toBe('t4_critical');
+    expect(normalizeNote({ templateId: 't9_unknown' }).templateId).toBe('t1_general');
+  });
+
+  it('sanitizes templateAnswers to string maps only', () => {
+    const note = normalizeNote({
+      templateAnswers: {
+        t4_critical: { q3: '한계', bad: 3 },
+        broken: 'nope',
+      } as unknown as Record<string, Record<string, string>>,
+    });
+    expect(note.templateAnswers).toEqual({ t4_critical: { q3: '한계' } });
+  });
 });
 
 describe('searchableText', () => {

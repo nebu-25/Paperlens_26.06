@@ -15,7 +15,9 @@ import { CITATION_USE_OPTIONS, HIGHLIGHT_COLORS } from '../../constants';
 import { DEFAULT_EXPORT_OPTIONS } from '../../lib/export';
 import type { ExportOptions } from '../../lib/export';
 import { highlightStyle } from '../../lib/format';
-import type { CitationUse, HighlightColor, ManualSummaryItem } from '../../types';
+import { buildReadingRoadmap } from '../../lib/readingRoadmap';
+import { PURPOSE_TEMPLATES, getPurposeAnswers, resolvePurposeTemplate } from '../../lib/templates';
+import type { CitationUse, HighlightColor, ManualSummaryItem, ReviewNote } from '../../types';
 import { AiDraftButton } from '../AiDraftButton';
 import { NoticeBanner } from '../NoticeBanner';
 import { QuestionsCard } from '../QuestionsCard';
@@ -60,45 +62,28 @@ export function ReviewNotePanel() {
   const [manualSummaryColor, setManualSummaryColor] = useState<HighlightColor>('yellow');
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
 
-  const hasHighlightColor = (color: string) => note.highlights.some((h) => (h.color ?? 'yellow') === color);
-  const hasCitationUse = (use: CitationUse) =>
-    note.highlights.some((h) => h.citationUse === use)
-    || note.manualSummaries.some((item) => item.citationUse === use);
   const citationItems = [
     ...note.highlights.filter((h) => h.citationUse).map((item) => ({ ...item, source: 'highlight' as const })),
     ...note.manualSummaries.filter((item) => item.citationUse).map((item) => ({ ...item, source: 'manual' as const })),
   ];
-  const reviewRoadmap = [
-    {
-      label: '문제 파악',
-      helper: '주장 또는 전제 인용으로 이 논문이 다루는 문제를 표시하세요.',
-      done: hasHighlightColor('yellow') || hasCitationUse('premise'),
-    },
-    {
-      label: '접근법 파악',
-      helper: '방법론 하이라이트나 방법 참고 후보를 남기세요.',
-      done: hasHighlightColor('green') || hasCitationUse('method'),
-    },
-    {
-      label: '결과 확인',
-      helper: '결과 또는 결과 비교 후보를 표시하세요.',
-      done: hasHighlightColor('blue') || hasCitationUse('comparison'),
-    },
-    {
-      label: '비판적 검토',
-      helper: '한계, 반론, 후속 질문을 정리하세요.',
-      done:
-        hasHighlightColor('pink') ||
-        hasCitationUse('counterargument') ||
-        hasCitationUse('limitation') ||
-        note.questions.length > 0,
-    },
-    {
-      label: '정리',
-      helper: '내 논문에서 사용할 후보 문장을 인용 후보 보드로 분류하세요.',
-      done: citationItems.length > 0,
-    },
-  ];
+  // 읽기 목적(목적 축) × 3-pass 로드맵(깊이 축) — 기획서 v4.0 §8-3
+  const activeTemplate = resolvePurposeTemplate(note.templateId);
+  const purposeAnswers = getPurposeAnswers(note, activeTemplate.id);
+  const reviewRoadmap = buildReadingRoadmap(note, activeTemplate);
+  const setPurposeAnswer = (key: string, value: string) => {
+    if (activeTemplate.id === 't1_general') {
+      // T1 답변은 하위 호환을 위해 기존 template 필드(q1~q5)에 저장한다.
+      updateNote('template', { ...note.template, [key]: value } as ReviewNote['template']);
+    } else {
+      updateNote('templateAnswers', {
+        ...(note.templateAnswers ?? {}),
+        [activeTemplate.id]: {
+          ...(note.templateAnswers?.[activeTemplate.id] ?? {}),
+          [key]: value,
+        },
+      });
+    }
+  };
   const visibleHighlights = note.highlights.filter(
     (h) => highlightFilter === 'all' || (h.color ?? 'yellow') === highlightFilter,
   );
@@ -203,11 +188,34 @@ export function ReviewNotePanel() {
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 sm:px-6">
         <section className="rounded border border-line bg-white p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold">리뷰 진행 로드맵</h3>
+            <h3 className="text-sm font-semibold">읽기 목적과 3단계 읽기</h3>
             <span className="rounded bg-paper px-2 py-0.5 text-xs text-muted">
               {reviewDoneCount}/{reviewRoadmap.length} 단계
             </span>
           </div>
+          <div className="mb-2 flex flex-wrap gap-1" role="radiogroup" aria-label="읽기 목적 선택">
+            {PURPOSE_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={t.id === activeTemplate.id}
+                title={t.tagline}
+                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  t.id === activeTemplate.id
+                    ? 'bg-action text-white'
+                    : 'border border-line text-muted hover:border-action hover:text-action'
+                }`}
+                onClick={() => updateNote('templateId', t.id)}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+          <p className="mb-3 text-xs leading-relaxed text-muted">
+            {activeTemplate.tagline}{' '}
+            <b className="text-ink">주 발굴: {activeTemplate.focus}</b>
+          </p>
           <ol className="space-y-2">
             {reviewRoadmap.map((step, index) => (
               <li
@@ -233,6 +241,9 @@ export function ReviewNotePanel() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={step.done ? 'font-semibold text-ink' : 'font-semibold text-muted'}>
                       {step.label}
+                    </span>
+                    <span className="rounded bg-paper px-1.5 py-0.5 text-[11px] text-muted">
+                      {step.scope}
                     </span>
                     {step === nextRoadmapStep && (
                       <span className="rounded bg-action px-1.5 py-0.5 text-[11px] font-semibold text-white">
@@ -307,6 +318,51 @@ export function ReviewNotePanel() {
           questions={note.questions}
           onChange={(q) => updateNote('questions', q)}
         />
+
+        {/* 목적 질문 카드 (FR-19) — 활성 읽기 목적 템플릿의 문항. 답은 사용자가 직접 작성한다. */}
+        <SectionCard title={`${activeTemplate.name} 질문`} icon={<PencilLine size={16} />}>
+          <p className="mb-3 text-xs leading-relaxed text-muted">
+            {activeTemplate.tagline} 질문마다 관련 하이라이트 라벨이 표시됩니다.
+          </p>
+          <ul className="space-y-3">
+            {activeTemplate.questions.map((q, index) => {
+              const relatedLabels = (q.relatedColors ?? [])
+                .map((color) => HIGHLIGHT_COLORS.find((c) => c.value === color))
+                .filter((c) => c !== undefined);
+              return (
+                <li key={q.key} className="rounded border border-line p-3">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-ink">
+                      {index + 1}. {q.label}
+                    </span>
+                    {relatedLabels.map((c) => (
+                      <span
+                        key={c.value}
+                        className="inline-flex items-center gap-1 rounded-full border border-line px-1.5 py-0.5 text-[11px] text-muted"
+                        title={`관련 라벨: ${c.meaning}`}
+                      >
+                        <span className={`size-2 rounded-full ${c.swatchClass}`} />
+                        {c.meaning}
+                      </span>
+                    ))}
+                  </div>
+                  {q.helper && (
+                    <p className="mb-2 text-xs leading-relaxed text-muted">{q.helper}</p>
+                  )}
+                  <textarea
+                    name={`purpose-${activeTemplate.id}-${q.key}`}
+                    aria-label={q.label}
+                    title={q.label}
+                    className="min-h-16 w-full resize-y rounded border border-line p-2 text-sm outline-none focus:border-action"
+                    placeholder="직접 작성하세요."
+                    value={purposeAnswers[q.key] ?? ''}
+                    onChange={(e) => setPurposeAnswer(q.key, e.target.value)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
 
         <SectionCard title="수동 요약 템플릿" icon={<PencilLine size={16} />}>
           <div className="mb-2 flex flex-col gap-2 sm:flex-row">

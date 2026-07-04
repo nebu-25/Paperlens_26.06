@@ -1,5 +1,6 @@
 // 리뷰 노트 내보내기 (FR-11) — 사용자가 현재 작성할 수 있는 리뷰 영역을 통합한다.
 import { CITATION_USE_OPTIONS, HIGHLIGHT_COLORS, TEMPLATE_QUESTIONS } from '../constants';
+import { getPurposeAnswers, resolvePurposeTemplate } from './templates';
 import type { Highlight, HighlightColor, ManualSummaryItem, Paper, ReviewNote } from '../types';
 
 export interface ExportOptions {
@@ -64,6 +65,18 @@ function resolveExportOptions(options?: Partial<ExportOptions>): ExportOptions {
   return { ...DEFAULT_EXPORT_OPTIONS, ...options };
 }
 
+// T1 이외 목적 템플릿의 답변된 문항 목록. T1(q1~q5)은 기존 수동 요약 경로로 나간다.
+function purposeQuestionItems(note: ReviewNote): { name: string; items: { label: string; text: string }[] } | null {
+  const def = resolvePurposeTemplate(note.templateId);
+  if (def.id === 't1_general') return null;
+  const answers = getPurposeAnswers(note, def.id);
+  const items = def.questions.flatMap((q) => {
+    const text = (answers[q.key] ?? '').trim();
+    return text ? [{ label: q.label, text }] : [];
+  });
+  return items.length ? { name: def.name, items } : null;
+}
+
 export function buildMarkdown(paper: Paper, note: ReviewNote, options?: Partial<ExportOptions>): string {
   const include = resolveExportOptions(options);
   const out: string[] = [];
@@ -76,6 +89,12 @@ export function buildMarkdown(paper: Paper, note: ReviewNote, options?: Partial<
   if (include.template && tmpl.length) {
     out.push('## 수동 요약 템플릿', '');
     for (const item of tmpl) out.push(`### ${manualSummaryLabel(item.color)}`, '', item.text.trim(), '');
+  }
+
+  const purpose = purposeQuestionItems(note);
+  if (include.template && purpose) {
+    out.push(`## 읽기 목적 템플릿 — ${purpose.name}`, '');
+    for (const item of purpose.items) out.push(`### ${item.label}`, '', item.text, '');
   }
 
   if (include.terms && note.terms.length) {
@@ -133,6 +152,12 @@ export function buildPrintHtml(paper: Paper, note: ReviewNote, options?: Partial
   if (include.template && tmpl.length) {
     b.push('<h2>수동 요약 템플릿</h2>');
     for (const item of tmpl) b.push(`<h3>${escapeHtml(manualSummaryLabel(item.color))}</h3>`, htmlParas(item.text));
+  }
+
+  const purpose = purposeQuestionItems(note);
+  if (include.template && purpose) {
+    b.push(`<h2>읽기 목적 템플릿 — ${escapeHtml(purpose.name)}</h2>`);
+    for (const item of purpose.items) b.push(`<h3>${escapeHtml(item.label)}</h3>`, htmlParas(item.text));
   }
 
   if (include.terms && note.terms.length) {
