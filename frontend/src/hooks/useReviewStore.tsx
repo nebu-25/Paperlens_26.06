@@ -16,6 +16,8 @@ import {
   uid,
 } from '../lib/notes';
 import { buildChecklist, countDone } from '../lib/reviewProgress';
+import { buildKeywordCandidates, scanLimitationSignals } from '../lib/signalScanner';
+import type { SignalMatch } from '../lib/signalScanner';
 import type {
   AppNotice,
   DetectedSection,
@@ -982,7 +984,61 @@ export function useReviewStore({
     window.getSelection()?.removeAllRanges();
   }
 
-  const bodyNodes = usePaperBodyNodes(paper, note, highlightFilter);
+  // ── 시그널 스캐너 (FR-24, M4: 한계 시그널 + 키워드 후보) ──
+  // 결과는 저장하지 않는 휘발성 안내. T4(비판적 검토)에서 기본 켜지고 그 외에는 수동.
+  const [signalScanEnabled, setSignalScanEnabled] = useState(false);
+  useEffect(() => {
+    setSignalScanEnabled(note.templateId === 't4_critical');
+  }, [paper?.id, note.templateId]);
+
+  // 추출 품질이 낮으면 문장 경계·오프셋을 신뢰할 수 없어 스캐너를 막는다 (FS-07 예외).
+  const signalScanBlocked =
+    paper?.extractionQuality?.status === 'poor' || paper?.extractionQuality?.status === 'failed';
+
+  const limitationSignals = React.useMemo(
+    () =>
+      signalScanEnabled && !signalScanBlocked && paper?.text
+        ? scanLimitationSignals(paper.text, paper.sections ?? [])
+        : [],
+    [signalScanEnabled, signalScanBlocked, paper?.text, paper?.sections],
+  );
+
+  const noteTerms = note.terms;
+  const keywordCandidates = React.useMemo(
+    () =>
+      signalScanEnabled && !signalScanBlocked && paper?.text
+        ? buildKeywordCandidates(
+            paper.text,
+            paper.sections ?? [],
+            noteTerms.map((t) => t.term),
+          )
+        : [],
+    [signalScanEnabled, signalScanBlocked, paper?.text, paper?.sections, noteTerms],
+  );
+
+  // 시그널 문장을 '한계/비판' 하이라이트로 승격 (§8-5: 승격분만 저장)
+  function promoteSignal(signal: SignalMatch) {
+    const text = paper?.text;
+    if (!text) return;
+    const sliced = text.slice(signal.start, signal.end);
+    if (!sliced.trim()) return;
+    setNote((n) => ({
+      ...n,
+      highlights: [
+        ...n.highlights,
+        {
+          id: uid(),
+          text: sliced,
+          color: 'pink' as HighlightColor,
+          start: signal.start,
+          end: signal.end,
+          ...citationSuggestionFields('pink'),
+        },
+      ],
+    }));
+  }
+
+  const bodyNodes = usePaperBodyNodes(paper, note, highlightFilter, limitationSignals, promoteSignal);
 
   function contextForTerm(term: string): string {
     if (!paper?.text) return '';
@@ -1149,6 +1205,12 @@ export function useReviewStore({
     toggleTagFilter,
     exportMarkdown,
     exportPdf,
+    signalScanEnabled,
+    setSignalScanEnabled,
+    signalScanBlocked,
+    limitationSignals,
+    keywordCandidates,
+    promoteSignal,
   };
 }
 
