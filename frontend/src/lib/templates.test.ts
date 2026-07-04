@@ -25,9 +25,10 @@ describe('resolvePurposeTemplate', () => {
 
 describe('isPurposeTemplateId', () => {
   it('accepts only shipped template ids', () => {
-    expect(isPurposeTemplateId('t1_general')).toBe(true);
-    expect(isPurposeTemplateId('t4_critical')).toBe(true);
-    expect(isPurposeTemplateId('t2_related')).toBe(false);
+    for (const id of ['t1_general', 't2_related', 't3_method', 't4_critical', 't5_results']) {
+      expect(isPurposeTemplateId(id)).toBe(true);
+    }
+    expect(isPurposeTemplateId('t9_future')).toBe(false);
     expect(isPurposeTemplateId(undefined)).toBe(false);
   });
 });
@@ -52,6 +53,55 @@ describe('completion (pass 3 완료 기준)', () => {
     expect(t1.isComplete(partial)).toBe(false);
     const full = makeNote({ template: { q1: 'a', q2: 'b', q3: 'c', q4: 'd', q5: 'e' } });
     expect(t1.isComplete(full)).toBe(true);
+  });
+
+  it('T2 requires 1+ citation candidate AND the "한 문장 소개" answer', () => {
+    const t2 = resolvePurposeTemplate('t2_related');
+    const answerOnly = makeNote({ templateAnswers: { t2_related: { q2: '이 논문은 …를 보였다.' } } });
+    expect(t2.isComplete(answerOnly)).toBe(false);
+
+    const withCitation = makeNote({
+      highlights: [{ id: 'h', text: 'x', color: 'yellow', citationUse: 'premise' }],
+      templateAnswers: { t2_related: { q2: '이 논문은 …를 보였다.' } },
+    });
+    expect(t2.isComplete(withCitation)).toBe(true);
+
+    // 수동 요약의 인용 후보도 보드 기준과 동일하게 집계된다.
+    const withManualCitation = makeNote({
+      manualSummaries: [{ id: 'm', text: 'x', color: 'yellow', citationUse: 'related_work' }],
+      templateAnswers: { t2_related: { q2: '소개 문장' } },
+    });
+    expect(t2.isComplete(withManualCitation)).toBe(true);
+  });
+
+  it('T3 requires 3+ 방법론 highlights AND the 적용 계획 answer', () => {
+    const t3 = resolvePurposeTemplate('t3_method');
+    const green = (id: string) => ({ id, text: `g-${id}`, color: 'green' as const });
+    const two = makeNote({
+      highlights: [green('1'), green('2')],
+      templateAnswers: { t3_method: { q3: '표본 기준을 우리 데이터로 교체' } },
+    });
+    expect(t3.isComplete(two)).toBe(false);
+    const three = makeNote({
+      highlights: [green('1'), green('2'), green('3')],
+      templateAnswers: { t3_method: { q3: '표본 기준을 우리 데이터로 교체' } },
+    });
+    expect(t3.isComplete(three)).toBe(true);
+  });
+
+  it('T5 requires a 결과 비교 citation candidate', () => {
+    const t5 = resolvePurposeTemplate('t5_results');
+    expect(t5.isComplete(makeNote())).toBe(false);
+    expect(
+      t5.isComplete(
+        makeNote({ highlights: [{ id: 'h', text: 'x', color: 'blue', citationUse: 'comparison' }] }),
+      ),
+    ).toBe(true);
+    expect(
+      t5.isComplete(
+        makeNote({ manualSummaries: [{ id: 'm', text: 'x', color: 'blue', citationUse: 'comparison' }] }),
+      ),
+    ).toBe(true);
   });
 
   it('T4 requires 2+ 한계/비판 highlights AND the "말하지 않은 한계" answer', () => {

@@ -62,6 +62,15 @@ export function ReviewNotePanel() {
   const [manualSummaryDraft, setManualSummaryDraft] = useState('');
   const [manualSummaryColor, setManualSummaryColor] = useState<HighlightColor>('yellow');
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
+  // FR-22: 질문 카드에서 관련 라벨 하이라이트를 펼쳐 본 질문 key 집합 (templateId.key)
+  const [openRelatedKeys, setOpenRelatedKeys] = useState<Set<string>>(() => new Set());
+  const toggleRelated = (key: string) =>
+    setOpenRelatedKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
   // 읽기 목적이 바뀌면 내보내기 포함 항목을 목적 기본 구성으로 재설정한다 (FR-21).
   useEffect(() => {
@@ -334,9 +343,16 @@ export function ReviewNotePanel() {
           </p>
           <ul className="space-y-3">
             {activeTemplate.questions.map((q, index) => {
-              const relatedLabels = (q.relatedColors ?? [])
+              const relatedColors = q.relatedColors ?? [];
+              const relatedLabels = relatedColors
                 .map((color) => HIGHLIGHT_COLORS.find((c) => c.value === color))
                 .filter((c) => c !== undefined);
+              // FR-22: 이 질문과 관련된 라벨의 하이라이트만 모아 본다.
+              const relatedHighlights = note.highlights.filter((h) =>
+                relatedColors.includes(h.color ?? 'yellow'),
+              );
+              const relatedKey = `${activeTemplate.id}.${q.key}`;
+              const relatedOpen = openRelatedKeys.has(relatedKey);
               return (
                 <li key={q.key} className="rounded border border-line p-3">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -353,9 +369,44 @@ export function ReviewNotePanel() {
                         {c.meaning}
                       </span>
                     ))}
+                    {relatedColors.length > 0 && (
+                      <button
+                        type="button"
+                        className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                          relatedOpen
+                            ? 'border-action bg-action/10 font-semibold text-action'
+                            : 'border-line text-muted hover:border-action hover:text-action'
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
+                        disabled={relatedHighlights.length === 0}
+                        aria-expanded={relatedOpen}
+                        title={
+                          relatedHighlights.length === 0
+                            ? '관련 라벨의 하이라이트가 아직 없습니다. 원문에서 드래그해 추가하세요.'
+                            : '이 질문과 관련된 라벨의 하이라이트만 모아 봅니다'
+                        }
+                        onClick={() => toggleRelated(relatedKey)}
+                      >
+                        관련 하이라이트 {relatedHighlights.length}
+                      </button>
+                    )}
                   </div>
                   {q.helper && (
                     <p className="mb-2 text-xs leading-relaxed text-muted">{q.helper}</p>
+                  )}
+                  {relatedOpen && relatedHighlights.length > 0 && (
+                    <ul className="mb-2 space-y-1">
+                      {relatedHighlights.map((h) => {
+                        const style = highlightStyle(h.color);
+                        return (
+                          <li key={h.id} className={`rounded p-2 text-xs leading-relaxed ${style.listClass}`}>
+                            <span className="mr-1 inline-flex rounded bg-white/70 px-1 py-0.5 text-[10px] font-semibold text-muted">
+                              {style.label}
+                            </span>
+                            “{h.text}”
+                          </li>
+                        );
+                      })}
+                    </ul>
                   )}
                   <textarea
                     name={`purpose-${activeTemplate.id}-${q.key}`}
