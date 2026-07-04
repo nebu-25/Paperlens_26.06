@@ -1,7 +1,9 @@
-import { ExternalLink, FileText } from 'lucide-react';
+import { ExternalLink, FileText, Layers } from 'lucide-react';
+import { useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { RESEARCH_LINKS } from '../../constants';
 import { AuthControls } from '../AuthControls';
+import { LibraryDigest } from './LibraryDigest';
 import { useWorkspace } from './WorkspaceContext';
 
 interface WorkspaceHeaderProps {
@@ -12,6 +14,8 @@ interface WorkspaceHeaderProps {
 
 export function WorkspaceHeader({ authEnabled, authReady, user }: WorkspaceHeaderProps) {
   const { paper, aiEnabled } = useWorkspace().store;
+  // 라이브러리 취합 + 연구 질문 빌더 오버레이 (FR-25/28)
+  const [digestOpen, setDigestOpen] = useState(false);
   return (
     <header className={`shrink-0 border-b border-line bg-panel px-4 sm:px-6 ${paper ? 'py-2' : 'py-4'}`}>
       <div className="flex items-center gap-3">
@@ -43,11 +47,21 @@ export function WorkspaceHeader({ authEnabled, authReady, user }: WorkspaceHeade
             </a>
           ))}
         </nav>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded border border-line bg-white px-2.5 py-1.5 text-xs font-semibold text-muted hover:border-action hover:text-action"
+          title="전체 논문의 라벨·인용 목적별 취합과 연구 질문 빌더를 엽니다"
+          onClick={() => setDigestOpen(true)}
+        >
+          <Layers size={13} />
+          취합·연구 질문
+        </button>
         <span className="hidden rounded bg-paper px-3 py-1 text-xs text-muted sm:inline-flex">
           코어 MVP · {aiEnabled ? 'AI 용어 설명 활성' : 'AI 보조 준비 중'}
         </span>
         <AuthControls enabled={authEnabled} ready={authReady} user={user} variant="compact" />
       </div>
+      {digestOpen && <LibraryDigest onClose={() => setDigestOpen(false)} />}
     </header>
   );
 }
