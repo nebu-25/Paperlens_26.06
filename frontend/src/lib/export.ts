@@ -83,6 +83,7 @@ export function buildMarkdown(paper: Paper, note: ReviewNote, options?: Partial<
   out.push(`# ${paper.title || '제목 없음'}`, '');
   out.push(`- 저자: ${paper.authors || '—'}`);
   out.push(`- 링크: ${paper.link || '—'}`);
+  out.push(`- 읽기 목적: ${resolvePurposeTemplate(note.templateId).name}`);
   out.push(`- 내보낸 날짜: ${new Date().toLocaleString('ko-KR')}`, '');
 
   const tmpl = manualSummaryItems(note);
@@ -146,6 +147,7 @@ export function buildPrintHtml(paper: Paper, note: ReviewNote, options?: Partial
   b.push(
     `<ul class="meta"><li>저자: ${escapeHtml(paper.authors || '—')}</li>` +
       `<li>링크: ${escapeHtml(paper.link || '—')}</li>` +
+      `<li>읽기 목적: ${escapeHtml(resolvePurposeTemplate(note.templateId).name)}</li>` +
       `<li>내보낸 날짜: ${escapeHtml(new Date().toLocaleString('ko-KR'))}</li></ul>`,
   );
   const tmpl = manualSummaryItems(note);

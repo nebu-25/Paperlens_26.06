@@ -29,6 +29,15 @@ export interface PurposeTemplateDef {
   // 3-pass 로드맵의 정독(pass 3) 완료 기준 설명과 판정
   completionLabel: string;
   isComplete: (note: ReviewNote) => boolean;
+  // 내보내기 기본 포함 항목 (FR-21). lib/export.ts의 ExportOptions와 구조 동일
+  // (export.ts가 이 모듈을 import하므로 순환 의존을 피해 여기서 중복 선언).
+  exportDefaults: {
+    template: boolean;
+    terms: boolean;
+    questions: boolean;
+    highlights: boolean;
+    citationBoard: boolean;
+  };
 }
 
 const answered = (value?: string) => (value ?? '').trim().length > 0;
@@ -46,6 +55,7 @@ const T1_GENERAL: PurposeTemplateDef = {
   questions: TEMPLATE_QUESTIONS.map((q) => ({ key: q.key, label: q.label })),
   completionLabel: '5문항을 모두 작성하면 정독 단계가 완료됩니다.',
   isComplete: (note) => TEMPLATE_QUESTIONS.every((q) => answered(note.template[q.key])),
+  exportDefaults: { template: true, terms: true, questions: true, highlights: true, citationBoard: true },
 };
 
 const T4_CRITICAL: PurposeTemplateDef = {
@@ -90,6 +100,8 @@ const T4_CRITICAL: PurposeTemplateDef = {
     '한계/비판 하이라이트 2개 이상 + "말하지 않은 한계" 답변을 작성하면 정독 단계가 완료됩니다.',
   isComplete: (note) =>
     countColor(note, 'pink') >= 2 && answered(note.templateAnswers?.t4_critical?.q3),
+  // 발제·반론 구성에 필요한 질문·하이라이트·인용 후보 중심. 용어 사전은 선택.
+  exportDefaults: { template: true, terms: false, questions: true, highlights: true, citationBoard: true },
 };
 
 export const PURPOSE_TEMPLATES: PurposeTemplateDef[] = [T1_GENERAL, T4_CRITICAL];

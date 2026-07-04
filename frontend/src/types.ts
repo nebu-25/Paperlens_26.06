@@ -60,6 +60,8 @@ export interface Highlight {
   text: string;
   color?: HighlightColor;
   citationUse?: CitationUse;
+  // true면 citationUse가 라벨 기반 자동 제안(§8-4). 사용자가 직접 고르면 false/삭제.
+  citationSuggested?: boolean;
   // 원문(paper.text) 내 문자 오프셋. 옛 데이터 호환을 위해 선택적.
   start?: number;
   end?: number;
@@ -93,6 +95,8 @@ export interface ManualSummaryItem {
   text: string;
   color: HighlightColor;
   citationUse?: CitationUse;
+  // true면 citationUse가 라벨 기반 자동 제안(§8-4). 사용자가 직접 고르면 false/삭제.
+  citationSuggested?: boolean;
 }
 
 export interface SectionSummary {

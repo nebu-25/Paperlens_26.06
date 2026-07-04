@@ -10,8 +10,9 @@ import {
   Save,
   Trash2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CITATION_USE_OPTIONS, HIGHLIGHT_COLORS } from '../../constants';
+import { citationSuggestionFields } from '../../lib/citationDefaults';
 import { DEFAULT_EXPORT_OPTIONS } from '../../lib/export';
 import type { ExportOptions } from '../../lib/export';
 import { highlightStyle } from '../../lib/format';
@@ -62,6 +63,11 @@ export function ReviewNotePanel() {
   const [manualSummaryColor, setManualSummaryColor] = useState<HighlightColor>('yellow');
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
 
+  // 읽기 목적이 바뀌면 내보내기 포함 항목을 목적 기본 구성으로 재설정한다 (FR-21).
+  useEffect(() => {
+    setExportOptions(resolvePurposeTemplate(note.templateId).exportDefaults);
+  }, [note.templateId]);
+
   const citationItems = [
     ...note.highlights.filter((h) => h.citationUse).map((item) => ({ ...item, source: 'highlight' as const })),
     ...note.manualSummaries.filter((item) => item.citationUse).map((item) => ({ ...item, source: 'manual' as const })),
@@ -104,6 +110,8 @@ export function ReviewNotePanel() {
       id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 9),
       text,
       color: manualSummaryColor,
+      // 라벨 기반 인용 목적 기본값 제안 (§8-4)
+      ...citationSuggestionFields(manualSummaryColor),
     };
     updateNote('manualSummaries', [...note.manualSummaries, next]);
     setManualSummaryDraft('');
@@ -444,6 +452,8 @@ export function ReviewNotePanel() {
                                   citationUse: e.target.value
                                     ? (e.target.value as CitationUse)
                                     : undefined,
+                                  // 사용자가 직접 골랐으므로 제안 상태 해제 (§8-4)
+                                  citationSuggested: false,
                                 }
                               : x,
                           ),
@@ -533,6 +543,8 @@ export function ReviewNotePanel() {
                                     citationUse: e.target.value
                                       ? (e.target.value as CitationUse)
                                       : undefined,
+                                    // 사용자가 직접 골랐으므로 제안 상태 해제 (§8-4)
+                                    citationSuggested: false,
                                   }
                                 : x,
                             ),
@@ -601,8 +613,18 @@ export function ReviewNotePanel() {
                         const style = highlightStyle(h.color);
                         return (
                           <li key={`${h.source}-${h.id}`} className={`rounded p-2 text-sm ${style.listClass}`}>
-                            <span className="mb-1 inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
-                              {h.source === 'manual' ? '수동 요약' : style.label}
+                            <span className="mb-1 inline-flex items-center gap-1">
+                              <span className="inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                                {h.source === 'manual' ? '수동 요약' : style.label}
+                              </span>
+                              {h.citationSuggested && (
+                                <span
+                                  className="inline-flex rounded border border-dashed border-action/60 bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-action"
+                                  title="하이라이트 라벨을 근거로 자동 제안된 인용 목적입니다. 목록에서 직접 바꾸면 확정됩니다."
+                                >
+                                  제안
+                                </span>
+                              )}
                             </span>
                             <span className="block">“{h.text}”</span>
                           </li>
@@ -700,13 +722,23 @@ export function ReviewNotePanel() {
           <div className="mt-4 rounded border border-line bg-white p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-xs font-semibold text-ink">내보내기 포함 항목</span>
-              <button
-                type="button"
-                className="rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
-                onClick={() => setExportOptions(DEFAULT_EXPORT_OPTIONS)}
-              >
-                전체 포함
-              </button>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  className="rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
+                  title={`${activeTemplate.name}의 기본 포함 항목으로 되돌립니다`}
+                  onClick={() => setExportOptions(activeTemplate.exportDefaults)}
+                >
+                  목적 기본값
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
+                  onClick={() => setExportOptions(DEFAULT_EXPORT_OPTIONS)}
+                >
+                  전체 포함
+                </button>
+              </div>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {EXPORT_OPTION_LABELS.map((option) => (
