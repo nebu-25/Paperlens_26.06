@@ -8,7 +8,10 @@ export interface ChecklistItem {
 export function buildChecklist(note: ReviewNote): ChecklistItem[] {
   const templateDone =
     (note.manualSummaries ?? []).some((item) => item.text.trim().length > 0)
-    || Object.values(note.template).some((v) => v.trim().length > 0);
+    || Object.values(note.template).some((v) => v.trim().length > 0)
+    || Object.values(note.templateAnswers ?? {}).some((answers) =>
+      Object.values(answers).some((v) => v.trim().length > 0),
+    );
 
   return [
     { label: '수동 요약 템플릿', done: templateDone },

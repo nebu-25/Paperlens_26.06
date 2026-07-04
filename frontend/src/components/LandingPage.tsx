@@ -74,6 +74,21 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
               user={user}
               onEnterService={onEnterService}
             />
+            {import.meta.env.DEV && !authEnabled && (
+              <div className="mt-4 rounded border border-dashed border-line bg-white p-3">
+                <p className="text-xs leading-5 text-muted">
+                  <b className="text-ink">개발 모드</b> — Supabase 로그인 설정 없이 로컬 사용자로
+                  워크스페이스를 열 수 있습니다. 노트는 로컬 백엔드/브라우저에 저장됩니다.
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 w-full rounded border border-line px-3 py-2 text-xs font-semibold text-muted hover:border-action hover:text-action"
+                  onClick={onEnterService}
+                >
+                  개발 모드로 시작
+                </button>
+              </div>
+            )}
           </aside>
         </div>
 

@@ -1,7 +1,9 @@
-import { FileText, Highlighter, PencilLine, ScanText, Upload } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { FileText, Highlighter, ListTree, PencilLine, ScanText, Upload } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { resolveApiUrl } from '../../constants';
+import { scrollToTextOffset } from '../../lib/domText';
 import { needsPdfText } from '../../lib/format';
+import { buildOutline } from '../../lib/outline';
 import type { ExtractionQuality } from '../../types';
 import { PdfViewer } from './PdfViewer';
 import { useWorkspace } from './WorkspaceContext';
@@ -49,6 +51,14 @@ export function SourcePanel() {
 
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
   const [paperViewMode, setPaperViewMode] = useState<PaperViewMode>('text');
+  // 섹션 아웃라인 (FR-26, pass 1 훑기) — 감지된 섹션이 2개 이상일 때만 표시
+  const outline = useMemo(
+    () => buildOutline(paper?.sections, paper?.text?.length ?? 0),
+    [paper?.sections, paper?.text],
+  );
+  const jumpToSection = (start: number) => {
+    if (bodyRef.current) scrollToTextOffset(bodyRef.current, start);
+  };
   const [sourceEditOpen, setSourceEditOpen] = useState(false);
   const [sourceDraft, setSourceDraft] = useState('');
   const [hiddenPaperNotices, setHiddenPaperNotices] = useState<Set<string>>(() => new Set());
@@ -275,6 +285,36 @@ export function SourcePanel() {
                 </button>
               </div>
             </div>
+            {!sourceEditOpen && outline.length > 0 && (
+              <nav
+                aria-label="섹션 아웃라인"
+                className="mb-3 flex flex-wrap items-center gap-1 rounded border border-line bg-paper/60 p-2"
+              >
+                <span className="mr-1 inline-flex items-center gap-1 text-[11px] font-semibold text-muted">
+                  <ListTree size={12} />
+                  섹션
+                </span>
+                {outline.map((entry) => (
+                  <button
+                    key={`${entry.start}-${entry.title}`}
+                    type="button"
+                    className={`max-w-44 truncate rounded-full border px-2 py-0.5 text-[11px] ${
+                      entry.skimTarget
+                        ? 'border-action/50 bg-action/5 font-semibold text-action hover:bg-action/10'
+                        : 'border-line text-muted hover:border-action hover:text-action'
+                    }`}
+                    title={
+                      entry.skimTarget
+                        ? `${entry.title} — 1차 훑기에서 먼저 읽는 섹션`
+                        : entry.title
+                    }
+                    onClick={() => jumpToSection(entry.start)}
+                  >
+                    {entry.title}
+                  </button>
+                ))}
+              </nav>
+            )}
             {sourceEditOpen ? (
               <div className="space-y-3">
                 <textarea

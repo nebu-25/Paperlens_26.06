@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { API_BASE, resolveApiUrl } from '../constants';
 import { apiErrorFromResponse, classifyApiException, throwApiResponseError } from '../lib/apiErrors';
+import { citationSuggestionFields } from '../lib/citationDefaults';
 import { buildMarkdown, buildPrintHtml, safeFilename } from '../lib/export';
 import type { ExportOptions } from '../lib/export';
 import { collectTags, filterPapers } from '../lib/library';
@@ -906,6 +907,8 @@ export function useReviewStore({
           color: highlightColor,
           start: resolved.start,
           end: resolved.end,
+          // 라벨 기반 인용 목적 기본값 제안 (§8-4). 사용자가 select에서 바꾸면 확정으로 전환.
+          ...citationSuggestionFields(highlightColor),
         },
       ],
     }));
@@ -942,6 +945,7 @@ export function useReviewStore({
           id: uid(),
           text: normalizedText,
           color,
+          ...citationSuggestionFields(color),
           pdf: {
             page,
             rects: normalizedRects,

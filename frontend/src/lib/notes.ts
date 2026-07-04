@@ -1,5 +1,6 @@
 // 노트/논문 데이터 유틸. 순수 함수만 모은다(React·DOM 비의존).
 import { SUMMARY_SECTIONS } from '../constants';
+import { DEFAULT_TEMPLATE_ID, isPurposeTemplateId } from './templates';
 import type { DetectedSection, Paper, ReviewNote, SectionSummary, Source } from '../types';
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
@@ -50,7 +51,24 @@ export const EMPTY_NOTE: ReviewNote = {
   questions: [],
   template: { q1: '', q2: '', q3: '', q4: '', q5: '' },
   memos: {},
+  templateId: DEFAULT_TEMPLATE_ID,
+  templateAnswers: {},
 };
+
+// 저장된 templateAnswers를 문자열 맵으로 보정 — 손상/이형 데이터는 버린다.
+function normalizeTemplateAnswers(raw: unknown): Record<string, Record<string, string>> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const result: Record<string, Record<string, string>> = {};
+  for (const [templateId, answers] of Object.entries(raw as Record<string, unknown>)) {
+    if (!answers || typeof answers !== 'object' || Array.isArray(answers)) continue;
+    const entry: Record<string, string> = {};
+    for (const [key, value] of Object.entries(answers as Record<string, unknown>)) {
+      if (typeof value === 'string') entry[key] = value;
+    }
+    result[templateId] = entry;
+  }
+  return result;
+}
 
 // 저장된(옛 스키마 포함) 노트를 현재 스키마로 보정 — sectionSummaries 누락 시 기본 섹션 채움
 export function normalizeNote(raw: Partial<ReviewNote>): ReviewNote {
@@ -66,6 +84,9 @@ export function normalizeNote(raw: Partial<ReviewNote>): ReviewNote {
       Array.isArray(raw.sectionSummaries) && raw.sectionSummaries.length > 0
         ? raw.sectionSummaries
         : defaultSectionSummaries(),
+    // 기존 노트(templateId 없음)와 미래/손상 id는 T1으로 무손실 폴백 (FS-06).
+    templateId: isPurposeTemplateId(raw.templateId) ? raw.templateId : DEFAULT_TEMPLATE_ID,
+    templateAnswers: normalizeTemplateAnswers(raw.templateAnswers),
   };
 }
 
@@ -83,6 +104,9 @@ export function searchableText(paper: Paper, note: ReviewNote): string {
   for (const s of note.sectionSummaries ?? []) parts.push(s.section, s.content);
   for (const item of note.manualSummaries ?? []) parts.push(item.text);
   parts.push(...Object.values(note.template ?? {}));
+  for (const answers of Object.values(note.templateAnswers ?? {})) {
+    parts.push(...Object.values(answers));
+  }
   for (const t of note.terms ?? []) parts.push(t.term, t.explanation);
   for (const q of note.questions ?? []) parts.push(q.text);
   for (const h of note.highlights ?? []) parts.push(h.text);
