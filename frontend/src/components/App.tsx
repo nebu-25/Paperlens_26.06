@@ -129,12 +129,16 @@ function App() {
   const initialAuthResolvedRef = useRef(false);
   const previousAccessTokenRef = useRef<string | null>(null);
 
+  // 개발용 우회: Vite dev 서버 + Supabase 미설정일 때만 로그인 없이 워크스페이스 진입을 허용한다.
+  // 백엔드도 동일 조건에서 'local' 단일 사용자로 동작하며, 프로덕션 빌드(DEV=false)에는 영향이 없다.
+  const devLocalMode = import.meta.env.DEV && !authEnabled;
+
   useEffect(() => {
     if (!authReady) return;
-    if (route === 'service' && !accessToken) {
+    if (route === 'service' && !accessToken && !devLocalMode) {
       navigate('landing', 'replace');
     }
-  }, [accessToken, authReady, navigate, route]);
+  }, [accessToken, authReady, devLocalMode, navigate, route]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -150,7 +154,7 @@ function App() {
     }
   }, [accessToken, authReady, navigate, route]);
 
-  if (route === 'landing' || !accessToken) {
+  if (route === 'landing' || (!accessToken && !devLocalMode)) {
     return (
       <LandingPage
         authEnabled={authEnabled}
@@ -166,7 +170,7 @@ function App() {
       authEnabled={authEnabled}
       authReady={authReady}
       user={user}
-      accessToken={accessToken}
+      accessToken={accessToken ?? ''}
     />
   );
 }
