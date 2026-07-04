@@ -1,4 +1,4 @@
-import { FileText, Highlighter, ListTree, PencilLine, ScanText, Upload } from 'lucide-react';
+import { FileText, Highlighter, ListTree, PencilLine, ScanSearch, ScanText, Upload } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { resolveApiUrl } from '../../constants';
 import { scrollToTextOffset } from '../../lib/domText';
@@ -47,6 +47,11 @@ export function SourcePanel() {
     setHighlightColor,
     addPdfHighlight,
     addTermText,
+    signalScanEnabled,
+    setSignalScanEnabled,
+    signalScanBlocked,
+    limitationSignals,
+    keywordCandidates,
   } = store;
 
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
@@ -314,6 +319,55 @@ export function SourcePanel() {
                   </button>
                 ))}
               </nav>
+            )}
+            {!sourceEditOpen && paper.text && (
+              <div className="mb-3 rounded border border-line bg-paper/60 p-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-semibold text-muted">
+                    <input
+                      name="signal-scan-toggle"
+                      aria-label="시그널 스캐너 켜기"
+                      type="checkbox"
+                      className="accent-action"
+                      checked={signalScanEnabled}
+                      disabled={signalScanBlocked}
+                      onChange={(e) => setSignalScanEnabled(e.target.checked)}
+                    />
+                    <ScanSearch size={12} />
+                    시그널 스캐너
+                  </label>
+                  {signalScanBlocked ? (
+                    <span className="text-[11px] text-muted">
+                      추출 품질이 낮아 사용할 수 없습니다. 텍스트 편집으로 원문을 보정한 뒤 다시 켜세요.
+                    </span>
+                  ) : signalScanEnabled ? (
+                    <span className="rounded bg-white px-1.5 py-0.5 text-[11px] text-muted">
+                      한계 시그널 <b className="text-rose-600">{limitationSignals.length}</b>건 —
+                      점선 문장을 클릭하면 한계/비판 하이라이트로 추가됩니다
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-muted">
+                      규칙 기반 안내(저장 안 함). T4 비판적 검토에서는 기본으로 켜집니다.
+                    </span>
+                  )}
+                </div>
+                {signalScanEnabled && !signalScanBlocked && keywordCandidates.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
+                    <span className="text-[11px] font-semibold text-muted">키워드 후보</span>
+                    {keywordCandidates.map((candidate) => (
+                      <button
+                        key={candidate.term}
+                        type="button"
+                        className="rounded-full border border-line bg-white px-2 py-0.5 text-[11px] text-muted hover:border-action hover:text-action"
+                        title={`${candidate.reasons.join(' · ')} — 클릭하면 용어 사전에 추가됩니다`}
+                        onClick={() => addTermText(candidate.term)}
+                      >
+                        + {candidate.term}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
             {sourceEditOpen ? (
               <div className="space-y-3">

@@ -16,7 +16,13 @@ VITE_SUPABASE_URL=https://testref.supabase.co VITE_SUPABASE_ANON_KEY=sb_publisha
 - dev base path는 `http://127.0.0.1:5173/Paperlens_26.06/` (vite base 설정). 루트가 아님.
 - 워크스페이스는 `/Paperlens_26.06/service_home/`. **accessToken 없으면 랜딩으로 리다이렉트**됨.
 
-## 로그인 없이 워크스페이스 진입 (백엔드 불필요)
+## 가장 쉬운 진입: 개발 모드 우회 (권장)
+
+Supabase env **없이** `npm run dev`를 띄우면 랜딩에 **"개발 모드로 시작"** 버튼이 노출된다.
+랜딩에서 `paperlens:v1` 시드를 localStorage에 넣고 이 버튼을 클릭하면 로그인·세션 주입 없이
+워크스페이스로 진입한다. (프로덕션 빌드에는 이 우회가 존재하지 않음)
+
+## 대안: 저장된 세션 주입 (인증 켠 상태를 검증할 때)
 
 랜딩(`/Paperlens_26.06/`)에서 localStorage 주입 후 `service_home/` 이동:
 

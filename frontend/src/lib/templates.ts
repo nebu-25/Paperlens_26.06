@@ -4,8 +4,12 @@
 import { TEMPLATE_QUESTIONS } from '../constants';
 import type { HighlightColor, ReviewNote } from '../types';
 
-// M1은 T1/T4만 출시한다. T2(선행연구)/T3(방법론)/T5(수치 비교)는 M3에서 추가.
-export type PurposeTemplateId = 't1_general' | 't4_critical';
+export type PurposeTemplateId =
+  | 't1_general'
+  | 't2_related'
+  | 't3_method'
+  | 't4_critical'
+  | 't5_results';
 
 export const DEFAULT_TEMPLATE_ID: PurposeTemplateId = 't1_general';
 
@@ -45,6 +49,15 @@ const answered = (value?: string) => (value ?? '').trim().length > 0;
 const countColor = (note: ReviewNote, color: HighlightColor) =>
   note.highlights.filter((h) => (h.color ?? 'yellow') === color).length;
 
+// 인용 후보 보드에 분류된 항목 수 (하이라이트 + 수동 요약, 제안 포함 — 보드 기준과 동일)
+const citationItemCount = (note: ReviewNote) =>
+  note.highlights.filter((h) => h.citationUse).length
+  + note.manualSummaries.filter((m) => m.citationUse).length;
+
+const hasCitationUse = (note: ReviewNote, use: string) =>
+  note.highlights.some((h) => h.citationUse === use)
+  || note.manualSummaries.some((m) => m.citationUse === use);
+
 const T1_GENERAL: PurposeTemplateDef = {
   id: 't1_general',
   name: 'T1 일반 리뷰',
@@ -52,10 +65,93 @@ const T1_GENERAL: PurposeTemplateDef = {
   focus: '키워드',
   recommendedColors: ['yellow', 'blue'],
   // 기존 5문항(q1~q5)을 그대로 승계 — 답변은 하위 호환을 위해 note.template에 저장한다.
-  questions: TEMPLATE_QUESTIONS.map((q) => ({ key: q.key, label: q.label })),
+  // 관련 라벨(FR-22): 무엇을 해결→주장, 방법→방법론, 결과→결과, 한계→한계/비판.
+  questions: TEMPLATE_QUESTIONS.map((q, index) => ({
+    key: q.key,
+    label: q.label,
+    relatedColors: ([['yellow'], ['green'], ['blue'], ['pink'], []] as HighlightColor[][])[index],
+  })),
   completionLabel: '5문항을 모두 작성하면 정독 단계가 완료됩니다.',
   isComplete: (note) => TEMPLATE_QUESTIONS.every((q) => answered(note.template[q.key])),
   exportDefaults: { template: true, terms: true, questions: true, highlights: true, citationBoard: true },
+};
+
+const T2_RELATED: PurposeTemplateDef = {
+  id: 't2_related',
+  name: 'T2 선행연구 정리',
+  tagline: '내 논문의 서론·선행연구 절에 인용할 재료 수집. Related Work 집필 준비.',
+  focus: '키워드 · 관점',
+  recommendedColors: ['yellow', 'violet'],
+  questions: [
+    {
+      key: 'q1',
+      label: '이 논문이 내 연구와 어떻게 연결되나?',
+      helper: '주제·이론·방법 어느 축에서 내 연구와 만나는지.',
+      relatedColors: ['yellow'],
+    },
+    {
+      key: 'q2',
+      label: '내 논문에서 이 논문을 한 문장으로 소개한다면?',
+      helper: '서론에 그대로 옮길 수 있는 한 문장을 미리 써 두세요.',
+    },
+    {
+      key: 'q3',
+      label: '내 연구와의 차별점은?',
+      helper: '이 논문이 하지 않은 것, 내 연구가 새로 하는 것.',
+      relatedColors: ['yellow', 'violet'],
+    },
+    {
+      key: 'q4',
+      label: '어떤 맥락(전제·비교·반론)에서 인용할 것인가?',
+      helper: '하이라이트에 인용 목적을 붙이면 인용 후보 보드에 분류됩니다.',
+      relatedColors: ['violet'],
+    },
+  ],
+  completionLabel:
+    '인용 후보 1개 이상 + "한 문장 소개" 답변을 작성하면 정독 단계가 완료됩니다.',
+  isComplete: (note) =>
+    citationItemCount(note) >= 1 && answered(note.templateAnswers?.t2_related?.q2),
+  // 출력은 인용 후보 보드 중심 (§8-3a T2)
+  exportDefaults: { template: true, terms: false, questions: false, highlights: true, citationBoard: true },
+};
+
+const T3_METHOD: PurposeTemplateDef = {
+  id: 't3_method',
+  name: 'T3 방법론 벤치마킹',
+  tagline: '연구 설계·실험·분석 방법을 내 연구에 이식하거나 비교하는 읽기.',
+  focus: '방법 · 한계(방법의 취약점)',
+  recommendedColors: ['green'],
+  questions: [
+    {
+      key: 'q1',
+      label: '연구 설계는? (대상·표본·조건)',
+      helper: '누구/무엇을 대상으로, 어떤 조건에서 수행했는지.',
+      relatedColors: ['green'],
+    },
+    {
+      key: 'q2',
+      label: '핵심 절차·도구·지표는?',
+      helper: '재현에 필요한 구체 절차와 측정 지표.',
+      relatedColors: ['green'],
+    },
+    {
+      key: 'q3',
+      label: '내 상황에 적용 시 바꿔야 할 것은?',
+      helper: '내 데이터·환경 기준으로 그대로 쓸 수 없는 부분.',
+      relatedColors: ['green'],
+    },
+    {
+      key: 'q4',
+      label: '이 방법의 전제 조건과 취약점은?',
+      helper: '이 방법이 성립하기 위한 가정과 깨지기 쉬운 지점.',
+      relatedColors: ['green', 'pink'],
+    },
+  ],
+  completionLabel:
+    '방법론 하이라이트 3개 이상 + 적용 계획(③) 답변을 작성하면 정독 단계가 완료됩니다.',
+  isComplete: (note) =>
+    countColor(note, 'green') >= 3 && answered(note.templateAnswers?.t3_method?.q3),
+  exportDefaults: { template: true, terms: true, questions: true, highlights: true, citationBoard: false },
 };
 
 const T4_CRITICAL: PurposeTemplateDef = {
@@ -104,7 +200,44 @@ const T4_CRITICAL: PurposeTemplateDef = {
   exportDefaults: { template: true, terms: false, questions: true, highlights: true, citationBoard: true },
 };
 
-export const PURPOSE_TEMPLATES: PurposeTemplateDef[] = [T1_GENERAL, T4_CRITICAL];
+const T5_RESULTS: PurposeTemplateDef = {
+  id: 't5_results',
+  name: 'T5 결과 비교·수치 수집',
+  tagline: '성능표·효과크기 등 내 결과와 비교할 수치를 수집하는 읽기.',
+  focus: '결과',
+  recommendedColors: ['blue'],
+  questions: [
+    {
+      key: 'q1',
+      label: '비교 대상 지표와 값은?',
+      helper: '표·그림에서 내 결과와 비교할 수치를 그대로 옮겨 적으세요.',
+      relatedColors: ['blue'],
+    },
+    {
+      key: 'q2',
+      label: '실험 조건이 내 것과 같은가, 다른가?',
+      helper: '데이터셋·표본·환경 차이를 기록하세요.',
+      relatedColors: ['green', 'blue'],
+    },
+    {
+      key: 'q3',
+      label: '직접 비교 가능한가, 보정이 필요한가?',
+      helper: '조건 차이 때문에 수치를 그대로 비교할 수 없다면 보정 방법을 적으세요.',
+      relatedColors: ['blue'],
+    },
+  ],
+  completionLabel: '"결과 비교" 인용 후보를 1개 이상 남기면 정독 단계가 완료됩니다.',
+  isComplete: (note) => hasCitationUse(note, 'comparison'),
+  exportDefaults: { template: true, terms: false, questions: false, highlights: true, citationBoard: true },
+};
+
+export const PURPOSE_TEMPLATES: PurposeTemplateDef[] = [
+  T1_GENERAL,
+  T2_RELATED,
+  T3_METHOD,
+  T4_CRITICAL,
+  T5_RESULTS,
+];
 
 export function isPurposeTemplateId(id?: string): id is PurposeTemplateId {
   return PURPOSE_TEMPLATES.some((t) => t.id === id);
