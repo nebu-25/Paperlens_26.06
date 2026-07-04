@@ -132,4 +132,6 @@ export interface ReviewNote {
   // T1 이외 목적 템플릿의 문항 답변: templateId -> 질문 key -> 답변.
   // T1 답변은 하위 호환을 위해 위 template 필드를 계속 사용한다.
   templateAnswers?: Record<string, Record<string, string>>;
+  // 그림/표 메모 (FR-27): 캡션 정규화 키(lib/figureIndex.ts) -> 사용자가 쓴 메모.
+  figureNotes?: Record<string, string>;
 }

@@ -53,7 +53,18 @@ export const EMPTY_NOTE: ReviewNote = {
   memos: {},
   templateId: DEFAULT_TEMPLATE_ID,
   templateAnswers: {},
+  figureNotes: {},
 };
+
+// 문자열 값만 남기는 얕은 맵 보정 (figureNotes 등)
+function normalizeStringMap(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string') result[key] = value;
+  }
+  return result;
+}
 
 // 저장된 templateAnswers를 문자열 맵으로 보정 — 손상/이형 데이터는 버린다.
 function normalizeTemplateAnswers(raw: unknown): Record<string, Record<string, string>> {
@@ -87,6 +98,7 @@ export function normalizeNote(raw: Partial<ReviewNote>): ReviewNote {
     // 기존 노트(templateId 없음)와 미래/손상 id는 T1으로 무손실 폴백 (FS-06).
     templateId: isPurposeTemplateId(raw.templateId) ? raw.templateId : DEFAULT_TEMPLATE_ID,
     templateAnswers: normalizeTemplateAnswers(raw.templateAnswers),
+    figureNotes: normalizeStringMap(raw.figureNotes),
   };
 }
 
@@ -107,6 +119,7 @@ export function searchableText(paper: Paper, note: ReviewNote): string {
   for (const answers of Object.values(note.templateAnswers ?? {})) {
     parts.push(...Object.values(answers));
   }
+  parts.push(...Object.values(note.figureNotes ?? {}));
   for (const t of note.terms ?? []) parts.push(t.term, t.explanation);
   for (const q of note.questions ?? []) parts.push(q.text);
   for (const h of note.highlights ?? []) parts.push(h.text);

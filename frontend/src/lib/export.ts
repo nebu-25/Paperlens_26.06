@@ -1,5 +1,6 @@
 // 리뷰 노트 내보내기 (FR-11) — 사용자가 현재 작성할 수 있는 리뷰 영역을 통합한다.
 import { CITATION_USE_OPTIONS, HIGHLIGHT_COLORS, TEMPLATE_QUESTIONS } from '../constants';
+import { buildFigureIndex } from './figureIndex';
 import { getPurposeAnswers, resolvePurposeTemplate } from './templates';
 import type { Highlight, HighlightColor, ManualSummaryItem, Paper, ReviewNote } from '../types';
 
@@ -9,6 +10,7 @@ export interface ExportOptions {
   questions: boolean;
   highlights: boolean;
   citationBoard: boolean;
+  figures: boolean;
 }
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
@@ -17,6 +19,7 @@ export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
   questions: true,
   highlights: true,
   citationBoard: true,
+  figures: true,
 };
 
 export const safeFilename = (title: string) =>
@@ -65,6 +68,16 @@ function resolveExportOptions(options?: Partial<ExportOptions>): ExportOptions {
   return { ...DEFAULT_EXPORT_OPTIONS, ...options };
 }
 
+// 그림/표 메모 (FR-27): 캡션 id → 라벨을 원문에서 복원해 메모와 함께 내보낸다.
+function figureNoteItems(paper: Paper, note: ReviewNote): { label: string; text: string }[] {
+  const entries = Object.entries(note.figureNotes ?? {}).filter(([, memo]) => memo.trim());
+  if (!entries.length) return [];
+  const labelById = new Map(
+    buildFigureIndex(paper.text ?? '').captions.map((c) => [c.id, c.label]),
+  );
+  return entries.map(([id, memo]) => ({ label: labelById.get(id) ?? id, text: memo.trim() }));
+}
+
 // T1 이외 목적 템플릿의 답변된 문항 목록. T1(q1~q5)은 기존 수동 요약 경로로 나간다.
 function purposeQuestionItems(note: ReviewNote): { name: string; items: { label: string; text: string }[] } | null {
   const def = resolvePurposeTemplate(note.templateId);
@@ -107,6 +120,13 @@ export function buildMarkdown(paper: Paper, note: ReviewNote, options?: Partial<
   if (include.questions && note.questions.length) {
     out.push('## 읽으며 생긴 질문', '');
     for (const q of note.questions) out.push(`- ${q.text}`);
+    out.push('');
+  }
+
+  const figureItems = figureNoteItems(paper, note);
+  if (include.figures && figureItems.length) {
+    out.push('## 그림/표 메모', '');
+    for (const item of figureItems) out.push(`- **${item.label}**: ${item.text}`);
     out.push('');
   }
 
@@ -172,6 +192,14 @@ export function buildPrintHtml(paper: Paper, note: ReviewNote, options?: Partial
   if (include.questions && note.questions.length) {
     b.push('<h2>읽으며 생긴 질문</h2><ul>');
     for (const q of note.questions) b.push(`<li>${escapeHtml(q.text)}</li>`);
+    b.push('</ul>');
+  }
+
+  const figureItems = figureNoteItems(paper, note);
+  if (include.figures && figureItems.length) {
+    b.push('<h2>그림/표 메모</h2><ul>');
+    for (const item of figureItems)
+      b.push(`<li><b>${escapeHtml(item.label)}</b>: ${escapeHtml(item.text)}</li>`);
     b.push('</ul>');
   }
 
