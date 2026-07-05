@@ -1,8 +1,15 @@
 import React, { useMemo, useRef } from 'react';
 import type { FigureMentionLink } from '../lib/figureIndex';
 import { highlightStyle, renderHints } from '../lib/format';
-import type { SignalMatch } from '../lib/signalScanner';
+import type { SignalMatch, SignalType } from '../lib/signalScanner';
 import type { HighlightColor, Paper, ReviewNote } from '../types';
+
+// 시그널 타입별 점선 밑줄 색·승격 라벨. Tailwind JIT가 잡도록 클래스 문자열은 리터럴로 둔다.
+const SIGNAL_STYLE: Record<SignalType, { className: string; promoteLabel: string }> = {
+  limitation: { className: 'border-rose-400/80 hover:bg-rose-50', promoteLabel: '한계/비판' },
+  critique: { className: 'border-amber-400/80 hover:bg-amber-50', promoteLabel: '한계/비판' },
+  perspective: { className: 'border-indigo-400/80 hover:bg-indigo-50', promoteLabel: '주장' },
+};
 
 // 하이라이트가 없는 구간에 얹는 인라인 마커: 시그널 문장(승격) 또는 그림/표 교차참조(점프)
 type InlineMarker =
@@ -74,13 +81,14 @@ export function usePaperBodyNodes(
         if (s > cursor) parts.push(...renderHints(text.slice(cursor, s), cursor));
         if (marker.kind === 'signal') {
           const { signal } = marker;
+          const style = SIGNAL_STYLE[signal.type];
           parts.push(
             <span
               key={`sig-${s}-${e}`}
               role="button"
               tabIndex={0}
-              className="cursor-pointer border-b-2 border-dashed border-rose-400/80 hover:bg-rose-50"
-              title={`${signal.reason} — 클릭하면 '한계/비판' 하이라이트로 추가됩니다`}
+              className={`cursor-pointer border-b-2 border-dashed ${style.className}`}
+              title={`${signal.reason} — 클릭하면 '${style.promoteLabel}' 하이라이트로 추가됩니다`}
               onClick={(event) => {
                 event.stopPropagation();
                 promoteRef.current?.(signal);

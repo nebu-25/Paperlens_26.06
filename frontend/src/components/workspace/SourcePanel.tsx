@@ -36,7 +36,8 @@ export function SourcePanel() {
     signalScanEnabled,
     setSignalScanEnabled,
     signalScanBlocked,
-    limitationSignals,
+    signalMatches,
+    signalCounts,
     keywordCandidates,
     figureCaptions,
     figureMentionCounts,
@@ -55,9 +56,19 @@ export function SourcePanel() {
   };
   // PDF 그림 이미지 인덱스 (M5b): 페이지별로 묶어 PDF 탭 점프 칩으로 보여준다.
   const [requestedPdfPage, setRequestedPdfPage] = useState<number | null>(null);
+  // 캡션↔이미지 매칭(백엔드): 캡션 id -> 그 이미지가 있는 PDF 페이지. 캡션 행의 "PDF p.N" 버튼에 사용.
+  const captionImagePage = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const image of paper?.figureImages ?? []) {
+      if (image.captionId && !map.has(image.captionId)) map.set(image.captionId, image.page);
+    }
+    return map;
+  }, [paper?.figureImages]);
+  // 칩 목록은 캡션과 매칭되지 않은 이미지만 보여준다(매칭된 이미지는 캡션 행에서 안내).
   const figurePages = useMemo(() => {
     const counts = new Map<number, number>();
     for (const image of paper?.figureImages ?? []) {
+      if (image.captionId) continue;
       counts.set(image.page, (counts.get(image.page) ?? 0) + 1);
     }
     return [...counts.entries()]
@@ -382,6 +393,21 @@ export function SourcePanel() {
                           >
                             {caption.label}
                           </button>
+                          {captionImagePage.has(caption.id) && (
+                            <button
+                              type="button"
+                              className="shrink-0 rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={!paperPdfUrl}
+                              title={
+                                paperPdfUrl
+                                  ? `PDF ${captionImagePage.get(caption.id)}페이지에서 이 그림을 봅니다`
+                                  : 'PDF 원본이 연결되면 사용할 수 있습니다'
+                              }
+                              onClick={() => openPdfAtPage(captionImagePage.get(caption.id) as number)}
+                            >
+                              PDF p.{captionImagePage.get(caption.id)}
+                            </button>
+                          )}
                           <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
                             {caption.preview}
                           </span>
@@ -450,8 +476,11 @@ export function SourcePanel() {
                     </span>
                   ) : signalScanEnabled ? (
                     <span className="rounded bg-white px-1.5 py-0.5 text-[11px] text-muted">
-                      한계 시그널 <b className="text-rose-600">{limitationSignals.length}</b>건 —
-                      점선 문장을 클릭하면 한계/비판 하이라이트로 추가됩니다
+                      시그널 <b>{signalMatches.length}</b>건 (관점{' '}
+                      <b className="text-indigo-600">{signalCounts.perspective}</b> · 한계{' '}
+                      <b className="text-rose-600">{signalCounts.limitation}</b> · 비판{' '}
+                      <b className="text-amber-600">{signalCounts.critique}</b>) — 점선 문장을 클릭하면
+                      해당 라벨 하이라이트로 추가됩니다
                     </span>
                   ) : (
                     <span className="text-[11px] text-muted">
