@@ -9,6 +9,8 @@ export interface AggregatedItem {
   paperTitle: string;
   paperAuthors: string;
   source: 'highlight' | 'manual';
+  // 원본 노트 항목 id (하이라이트 또는 수동 요약) — 역링크용
+  itemId: string;
   text: string;
   color: HighlightColor;
   citationUse?: CitationUse;
@@ -39,6 +41,7 @@ export function aggregateLibrary(
         paperTitle,
         paperAuthors,
         source: 'highlight',
+        itemId: h.id,
         text: h.text,
         color: h.color ?? 'yellow',
         citationUse: h.citationUse,
@@ -51,6 +54,7 @@ export function aggregateLibrary(
         paperTitle,
         paperAuthors,
         source: 'manual',
+        itemId: m.id,
         text: m.text,
         color: m.color,
         citationUse: m.citationUse,

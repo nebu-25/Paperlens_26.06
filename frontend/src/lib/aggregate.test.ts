@@ -43,6 +43,14 @@ describe('aggregateLibrary (FR-25)', () => {
     expect(manual?.paperTitle).toBe('논문 A');
   });
 
+  it('carries the original note item id for back-links (역링크)', () => {
+    const items = aggregateLibrary(library, notes);
+    const highlight = items.find((i) => i.text === '한계 문장');
+    expect(highlight?.itemId).toBe('h1');
+    const manual = items.find((i) => i.source === 'manual');
+    expect(manual?.itemId).toBe('m1');
+  });
+
   it('filters by label and citation use', () => {
     const items = aggregateLibrary(library, notes);
     expect(filterAggregated(items, { color: 'pink', use: 'all' })).toHaveLength(2);

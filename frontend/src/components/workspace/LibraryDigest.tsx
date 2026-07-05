@@ -59,7 +59,12 @@ const SYNC_LABEL: Record<SyncState, string> = {
 
 export function LibraryDigest({ onClose }: { onClose: () => void }) {
   const { store, accessToken } = useWorkspace();
-  const { library, notes } = store;
+  const { library, notes, openAggregatedItem } = store;
+  // 역링크: 오버레이를 닫고 해당 논문/하이라이트로 이동
+  const jumpToItem = (paperId: string, itemId: string) => {
+    openAggregatedItem(paperId, itemId);
+    onClose();
+  };
   const [tab, setTab] = useState<DigestTab>('aggregate');
   const [filter, setFilter] = useState<AggregateFilter>(AGGREGATE_ALL);
   const [doc, setDoc] = useState<ResearchQuestionDoc>(() => loadResearchDoc());
@@ -288,6 +293,18 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                                   {item.citationSuggested ? ' (제안)' : ''}
                                 </span>
                               )}
+                              <button
+                                type="button"
+                                className="ml-auto inline-flex shrink-0 rounded border border-line bg-white/80 px-1.5 py-0.5 text-[11px] text-muted hover:border-action hover:text-action"
+                                title={
+                                  item.source === 'highlight'
+                                    ? '해당 논문을 열고 원문의 하이라이트 위치로 이동합니다'
+                                    : '해당 논문의 리뷰 노트를 엽니다 (수동 요약 항목)'
+                                }
+                                onClick={() => jumpToItem(item.paperId, item.itemId)}
+                              >
+                                노트에서 보기 →
+                              </button>
                             </span>
                             “{item.text}”
                           </li>
@@ -325,7 +342,15 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                       <ul className="mt-1 space-y-1 pl-3">
                         {list.slice(0, 20).map((item, index) => (
                           <li key={`${label}-${index}`}>
-                            “{item.text}” <span className="text-muted">— {item.paperTitle}</span>
+                            “{item.text}”{' '}
+                            <button
+                              type="button"
+                              className="text-muted underline decoration-dotted underline-offset-2 hover:text-action"
+                              title="출처 논문의 해당 위치로 이동합니다 (공백 추적 역링크)"
+                              onClick={() => jumpToItem(item.paperId, item.itemId)}
+                            >
+                              — {item.paperTitle}
+                            </button>
                           </li>
                         ))}
                       </ul>
