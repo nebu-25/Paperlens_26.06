@@ -166,6 +166,28 @@ python3 backend/scripts/smoke_deployment.py
 - Supabase SQL 편집기에서 mock 계정을 확인 완료 상태로 조정한 뒤, 같은 계정으로 `backend/scripts/smoke_deployment.py`를 실행해 운영 인증 smoke가 통과했다: `Production deployment smoke passed ... (with authenticated notes check)`.
 - GitHub repository secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `PAPERLENS_SMOKE_EMAIL`, `PAPERLENS_SMOKE_PASSWORD`를 등록한 뒤 `Production smoke` workflow를 브랜치 기준으로 수동 실행했다. Run `28748255495`가 통과했고 로그에서 `with authenticated notes check`를 확인했다.
 
+## Demo Account Reset
+
+예비 사용자를 위한 공용 데모 계정은 세션 단위로 지우지 않고, 매일 04:00 KST에 기본 샘플 노트 상태로 되돌립니다. 리셋은 데모 계정의 모든 노트를 삭제한 뒤 `demo-paperlens-quickstart` 샘플 노트 1개를 다시 저장하고, 하이라이트 오프셋이 원문 텍스트와 일치하는지 검증합니다.
+
+필요한 GitHub repository secrets:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `PAPERLENS_DEMO_EMAIL`
+- `PAPERLENS_DEMO_PASSWORD`
+
+로컬 수동 실행:
+
+```bash
+SUPABASE_URL=... SUPABASE_ANON_KEY=... \
+PAPERLENS_DEMO_EMAIL=paperlens.demo.user@gmail.com \
+PAPERLENS_DEMO_PASSWORD='...' \
+python3 backend/scripts/reset_demo_account.py
+```
+
+GitHub Actions `Reset demo account` workflow는 수동 실행과 cron 실행을 모두 지원합니다.
+
 ### 2026-06-26 운영 실행 기록
 
 실행 환경: Codex workspace, 네트워크 권한 허용 후 실행.
