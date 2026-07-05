@@ -473,6 +473,39 @@ def _canonical_section(name: str) -> str:
     return ""
 
 
+# 그림/표 이미지 인덱스 (FR-27 / M5b): 페이지별 유의미한 이미지 위치를 수집한다.
+# 페이지 면적 대비 3% 미만(로고·아이콘·장식)과 85% 초과(스캔 전면 이미지)는 제외한다.
+_FIGURE_IMAGE_MIN_AREA_RATIO = 0.03
+_FIGURE_IMAGE_MAX_AREA_RATIO = 0.85
+_FIGURE_IMAGE_LIMIT = 60
+
+
+def _detect_figure_images(document) -> list[dict[str, object]]:
+    figures: list[dict[str, object]] = []
+    for page_index in range(document.page_count):
+        page = document[page_index]
+        page_area = float(page.rect.width * page.rect.height) or 1.0
+        try:
+            infos = page.get_image_info()
+        except Exception:  # pragma: no cover - 렌더 불가 페이지는 건너뛴다
+            continue
+        for info in infos:
+            bbox = info.get("bbox")
+            if not bbox or len(bbox) != 4:
+                continue
+            width = float(bbox[2]) - float(bbox[0])
+            height = float(bbox[3]) - float(bbox[1])
+            ratio = (width * height) / page_area
+            if ratio < _FIGURE_IMAGE_MIN_AREA_RATIO or ratio > _FIGURE_IMAGE_MAX_AREA_RATIO:
+                continue
+            figures.append(
+                {"page": page_index + 1, "bbox": [round(float(v), 2) for v in bbox]}
+            )
+            if len(figures) >= _FIGURE_IMAGE_LIMIT:
+                return figures
+    return figures
+
+
 def _detect_sections(text: str) -> list[dict[str, object]]:
     """원문 텍스트에서 섹션 헤딩을 추정해 등장 순서대로 반환한다(#6, FS-01).
 
@@ -1305,6 +1338,7 @@ def _extract_pdf_content(
     extraction_quality = _extraction_quality(text, page_count, extraction_warnings, raw_text)
 
     sections = [] if scanned else _detect_sections(text)
+    figure_images = _detect_figure_images(document)
 
     # 메타정보 추출: ① DOI(CrossRef) → ② arXiv API → ③ 첫 페이지 레이아웃 → ④ PDF 내장 → ⑤ 파일명
     cross: dict[str, object] | None = None
@@ -1363,6 +1397,7 @@ def _extract_pdf_content(
         "link": primary.get("link") or "",
         "doi": (cross or {}).get("doi") or detected_doi,
         "sections": sections,
+        "figure_images": figure_images,
         "suggested_tags": suggested_tags,
         "metadata_source": metadata_source,
         "metadata_confidence": metadata_confidence,
@@ -1481,6 +1516,7 @@ def ocr_paper(paper_id: str, user_id: str = Depends(current_user_id)) -> dict[st
         "text": ocr_text,
         "page_count": page_count,
         "sections": _detect_sections(ocr_text),
+        "figure_images": _detect_figure_images(document),
         "extraction_quality": quality,
         "metadata_warnings": warnings,
         "notice": " ".join(warnings) or None,

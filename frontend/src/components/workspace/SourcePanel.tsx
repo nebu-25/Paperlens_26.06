@@ -67,6 +67,21 @@ export function SourcePanel() {
   const jumpToSection = (start: number) => {
     if (bodyRef.current) scrollToTextOffset(bodyRef.current, start);
   };
+  // PDF 그림 이미지 인덱스 (M5b): 페이지별로 묶어 PDF 탭 점프 칩으로 보여준다.
+  const [requestedPdfPage, setRequestedPdfPage] = useState<number | null>(null);
+  const figurePages = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const image of paper?.figureImages ?? []) {
+      counts.set(image.page, (counts.get(image.page) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([pageNo, count]) => ({ page: pageNo, count }));
+  }, [paper?.figureImages]);
+  const openPdfAtPage = (pageNo: number) => {
+    setPaperViewMode('pdf');
+    setRequestedPdfPage(pageNo);
+  };
   const [sourceEditOpen, setSourceEditOpen] = useState(false);
   const [sourceDraft, setSourceDraft] = useState('');
   // 그림/표 네비게이터에서 메모 입력을 펼친 캡션 id 집합 (FR-27)
@@ -332,15 +347,39 @@ export function SourcePanel() {
                 ))}
               </nav>
             )}
-            {!sourceEditOpen && figureCaptions.length > 0 && (
+            {!sourceEditOpen && (figureCaptions.length > 0 || figurePages.length > 0) && (
               <section
                 aria-label="그림/표 네비게이터"
                 className="mb-3 rounded border border-line bg-paper/60 p-2"
               >
                 <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-muted">
                   <Image size={12} />
-                  그림/표 {figureCaptions.length}건 — 표적 읽기(2차)에서 결과·그림을 먼저 확인하세요
+                  {figureCaptions.length > 0
+                    ? `그림/표 ${figureCaptions.length}건 — 표적 읽기(2차)에서 결과·그림을 먼저 확인하세요`
+                    : 'PDF에서 그림 이미지를 찾았습니다 — 표적 읽기(2차)에서 먼저 확인하세요'}
                 </div>
+                {figurePages.length > 0 && (
+                  <div className="mb-1 flex flex-wrap items-center gap-1">
+                    <span className="text-[11px] font-semibold text-muted">PDF 그림</span>
+                    {figurePages.map((entry) => (
+                      <button
+                        key={entry.page}
+                        type="button"
+                        className="rounded-full border border-line bg-white px-2 py-0.5 text-[11px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!paperPdfUrl}
+                        title={
+                          paperPdfUrl
+                            ? `PDF 탭에서 ${entry.page}페이지를 엽니다 (이미지 ${entry.count}개)`
+                            : 'PDF 원본이 연결되면 사용할 수 있습니다'
+                        }
+                        onClick={() => openPdfAtPage(entry.page)}
+                      >
+                        p.{entry.page}
+                        {entry.count > 1 ? ` ×${entry.count}` : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <ul className="space-y-1">
                   {figureCaptions.map((caption) => {
                     const memo = note.figureNotes?.[caption.id] ?? '';
@@ -533,6 +572,8 @@ export function SourcePanel() {
                 )
               }
               onAddTerm={addTermText}
+              requestedPage={requestedPdfPage}
+              onRequestedPageHandled={() => setRequestedPdfPage(null)}
             />
           </section>
         )}

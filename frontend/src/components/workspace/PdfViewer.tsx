@@ -77,6 +77,9 @@ interface PdfViewerProps {
   }) => void;
   onRemoveHighlight: (id: string) => void;
   onAddTerm: (text: string) => void;
+  // 외부(그림 네비게이터 등)에서 요청한 페이지로 이동 (M5b). 처리 후 콜백으로 소거한다.
+  requestedPage?: number | null;
+  onRequestedPageHandled?: () => void;
 }
 
 const PDF_HIGHLIGHT_COLORS: Record<HighlightColor, string> = {
@@ -244,6 +247,8 @@ export function PdfViewer({
   onAddHighlight,
   onRemoveHighlight,
   onAddTerm,
+  requestedPage = null,
+  onRequestedPageHandled,
 }: PdfViewerProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pageLayerRef = useRef<HTMLDivElement | null>(null);
@@ -264,6 +269,14 @@ export function PdfViewer({
   const [pendingHighlight, setPendingHighlight] = useState<PdfPendingHighlight | null>(null);
   const [activeHighlight, setActiveHighlight] = useState<PdfActiveHighlight | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // 그림 네비게이터의 페이지 점프 요청 (M5b) — 문서 로드 완료 후 반영한다.
+  useEffect(() => {
+    if (!requestedPage || status !== 'ready' || pageCount === 0) return;
+    setPageNumber(Math.min(Math.max(1, requestedPage), pageCount));
+    onRequestedPageHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedPage, status, pageCount]);
 
   useEffect(() => {
     if (!url) {

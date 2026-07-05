@@ -9,6 +9,12 @@ export interface DetectedSection {
   start?: number;
 }
 
+// PDF 페이지 내 그림/표 이미지 위치 (M5b, FR-27). bbox는 PDF 포인트 좌표 [x0,y0,x1,y1].
+export interface FigureImageRef {
+  page: number;
+  bbox?: number[];
+}
+
 export type ExtractionQualityStatus = 'good' | 'review' | 'poor' | 'failed';
 export type ExtractionQualitySource = 'auto' | 'user_edited' | 'ocr';
 
@@ -34,6 +40,7 @@ export interface Paper {
   pdfUrl?: string;
   pdfFilename?: string;
   sections?: DetectedSection[];
+  figureImages?: FigureImageRef[];
   text: string;
 }
 
