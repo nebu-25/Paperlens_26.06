@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildKeywordCandidates,
   scanLimitationSignals,
+  scanSignals,
   splitSentences,
 } from './signalScanner';
 import type { DetectedSection } from '../types';
@@ -67,6 +68,41 @@ describe('scanLimitationSignals (FR-24 한계 시그널)', () => {
     expect(matches.some((m) => text.slice(m.start, m.end).includes('결정적 한계'))).toBe(true);
     const starts = matches.map((m) => m.start);
     expect([...starts].sort((a, b) => a - b)).toEqual(starts);
+  });
+});
+
+describe('scanSignals (§8-5 관점·한계·비판 시그널)', () => {
+  it('classifies perspective, limitation, and critique sentences by type', () => {
+    const text =
+      'We argue that attention is all you need for this task. ' +
+      '이 접근은 표본이 작다는 한계가 있다. ' +
+      'The model assumes the data is independent and identically distributed.';
+    const matches = scanSignals(text);
+    const byType = Object.fromEntries(matches.map((m) => [m.type, text.slice(m.start, m.end)]));
+    expect(byType.perspective).toContain('We argue');
+    expect(byType.limitation).toContain('한계가 있다');
+    expect(byType.critique).toContain('assumes');
+  });
+
+  it('detects Korean perspective and critique patterns', () => {
+    const text =
+      '우리는 이 문제를 새롭게 규명하고자 한다. ' +
+      '본 연구는 표본 수가 적다는 점을 가정한다.';
+    const matches = scanSignals(text);
+    expect(matches.find((m) => m.type === 'perspective')).toBeTruthy();
+    expect(matches.find((m) => m.type === 'critique')).toBeTruthy();
+  });
+
+  it('assigns one signal per sentence with limitation taking precedence over critique', () => {
+    // "however"(한계) + "assume"(비판)이 한 문장에 있으면 한계로만 표시(마커 겹침 방지).
+    const text = 'However, we assume the sample size is adequate for this analysis.';
+    const matches = scanSignals(text);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].type).toBe('limitation');
+  });
+
+  it('returns nothing for neutral text', () => {
+    expect(scanSignals('결과는 안정적이었고 재현되었다. 그림도 명확하다.')).toEqual([]);
   });
 });
 

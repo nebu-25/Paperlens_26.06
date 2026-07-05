@@ -16,8 +16,8 @@ import {
   uid,
 } from '../lib/notes';
 import { buildChecklist, countDone } from '../lib/reviewProgress';
-import { buildKeywordCandidates, scanLimitationSignals } from '../lib/signalScanner';
-import type { SignalMatch } from '../lib/signalScanner';
+import { buildKeywordCandidates, scanSignals } from '../lib/signalScanner';
+import type { SignalMatch, SignalType } from '../lib/signalScanner';
 import { buildFigureIndex, mentionCounts } from '../lib/figureIndex';
 import type { FigureMentionLink } from '../lib/figureIndex';
 import { scrollToTextOffset } from '../lib/domText';
@@ -41,6 +41,13 @@ type ExtractionQualityResponse = {
   status?: ExtractionQuality['status'];
   reasons?: string[];
   source?: ExtractionQuality['source'];
+};
+
+// 시그널 승격 시 붙는 의미 라벨 색: 관점→주장(yellow), 한계·비판→한계/비판(pink).
+const SIGNAL_PROMOTE_COLOR: Record<SignalType, HighlightColor> = {
+  limitation: 'pink',
+  critique: 'pink',
+  perspective: 'yellow',
 };
 
 export function useReviewStore({
@@ -1077,13 +1084,19 @@ export function useReviewStore({
   const signalScanBlocked =
     paper?.extractionQuality?.status === 'poor' || paper?.extractionQuality?.status === 'failed';
 
-  const limitationSignals = React.useMemo(
+  const signalMatches = React.useMemo(
     () =>
       signalScanEnabled && !signalScanBlocked && paper?.text
-        ? scanLimitationSignals(paper.text, paper.sections ?? [])
+        ? scanSignals(paper.text, paper.sections ?? [])
         : [],
     [signalScanEnabled, signalScanBlocked, paper?.text, paper?.sections],
   );
+  // 시그널 타입별 건수 (스캐너 안내 뱃지용).
+  const signalCounts = React.useMemo(() => {
+    const counts = { limitation: 0, perspective: 0, critique: 0 };
+    for (const match of signalMatches) counts[match.type] += 1;
+    return counts;
+  }, [signalMatches]);
 
   const noteTerms = note.terms;
   const keywordCandidates = React.useMemo(
@@ -1098,12 +1111,14 @@ export function useReviewStore({
     [signalScanEnabled, signalScanBlocked, paper?.text, paper?.sections, noteTerms],
   );
 
-  // 시그널 문장을 '한계/비판' 하이라이트로 승격 (§8-5: 승격분만 저장)
+  // 시그널 문장을 의미 라벨 하이라이트로 승격 (§8-5: 승격분만 저장).
+  // 관점→주장(yellow), 한계·비판→한계/비판(pink).
   function promoteSignal(signal: SignalMatch) {
     const text = paper?.text;
     if (!text) return;
     const sliced = text.slice(signal.start, signal.end);
     if (!sliced.trim()) return;
+    const color: HighlightColor = SIGNAL_PROMOTE_COLOR[signal.type];
     setNote((n) => ({
       ...n,
       highlights: [
@@ -1111,10 +1126,10 @@ export function useReviewStore({
         {
           id: uid(),
           text: sliced,
-          color: 'pink' as HighlightColor,
+          color,
           start: signal.start,
           end: signal.end,
-          ...citationSuggestionFields('pink'),
+          ...citationSuggestionFields(color),
         },
       ],
     }));
@@ -1139,7 +1154,7 @@ export function useReviewStore({
     paper,
     note,
     highlightFilter,
-    limitationSignals,
+    signalMatches,
     promoteSignal,
     figureIndex.mentions,
     jumpToCaption,
@@ -1315,7 +1330,8 @@ export function useReviewStore({
     signalScanEnabled,
     setSignalScanEnabled,
     signalScanBlocked,
-    limitationSignals,
+    signalMatches,
+    signalCounts,
     keywordCandidates,
     promoteSignal,
     figureCaptions: figureIndex.captions,
