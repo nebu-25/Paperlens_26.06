@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS paper_files (
   updated_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS research_docs (
+  user_id    UUID PRIMARY KEY,
+  doc        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS paper_metadata_user_updated_idx
   ON paper_metadata(user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS review_notes_user_idx ON review_notes(user_id);
@@ -306,6 +312,35 @@ class PostgreSQLNotesRepository:
                     (note_id, user_id),
                 )
             conn.execute("DELETE FROM paper_metadata WHERE id = %s AND user_id = %s", (note_id, user_id))
+
+    def get_research_doc(self, user_id: str) -> dict[str, object] | None:
+        """연구 질문 빌더 프로젝트 문서 조회 (FR-28). 없으면 None."""
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT doc, updated_at FROM research_docs WHERE user_id = %s", (user_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        updated = row["updated_at"]
+        return {
+            "doc": row.get("doc") or {},
+            "updatedAt": updated.isoformat() if hasattr(updated, "isoformat") else str(updated),
+        }
+
+    def put_research_doc(self, user_id: str, doc: dict[str, object]) -> dict[str, object]:
+        """연구 질문 빌더 프로젝트 문서 upsert. last-write-wins."""
+        from psycopg.types.json import Jsonb
+
+        now = _now()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO research_docs(user_id, doc, updated_at) VALUES(%s, %s, %s)
+                ON CONFLICT(user_id) DO UPDATE SET doc=excluded.doc, updated_at=excluded.updated_at
+                """,
+                (user_id, Jsonb(doc), now),
+            )
+        return {"doc": doc, "updatedAt": now}
 
     def _paper_params(self, user_id: str, note_id: str, paper: dict[str, object], now: str, jsonb) -> dict[str, object]:
         return {

@@ -46,3 +46,11 @@ def get_pdf(user_id: str, note_id: str) -> tuple[str, bytes] | None:
 
 def delete_note(user_id: str, note_id: str) -> None:
     _repository.delete_note(user_id, note_id)
+
+
+def get_research_doc(user_id: str) -> dict[str, object] | None:
+    return _repository.get_research_doc(user_id)
+
+
+def put_research_doc(user_id: str, doc: dict[str, object]) -> dict[str, object]:
+    return _repository.put_research_doc(user_id, doc)

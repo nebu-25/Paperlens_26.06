@@ -62,6 +62,8 @@ GitHub Pages 배포의 경로 구성은 아래와 같습니다.
 | `POST /api/papers/extract-url` | PDF 원문 URL 다운로드, 텍스트/메타데이터 추출 |
 | `GET /api/papers/{id}/pdf` | 저장된 PDF 원본 조회 |
 | `GET /api/papers/metadata` | DOI 기반 CrossRef 메타데이터 조회 |
+| `GET /api/research-doc` | 연구 질문 빌더 프로젝트 문서 조회(사용자당 1건) |
+| `PUT /api/research-doc` | 연구 질문 문서 저장(last-write-wins) |
 | `GET /api/notes` | 노트 목록 조회(본문 제외) |
 | `GET /api/notes/{id}` | 단일 노트 조회 |
 | `PUT /api/notes/{id}` | 노트 저장 |

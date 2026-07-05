@@ -2,8 +2,8 @@
 // 취합은 사용자가 분류해 둔 것의 집계이고, 빌더는 그 재료로 공백→질문을 잡는
 // 프로젝트 레벨 도구다. 둘 다 AI 미사용(코어).
 import { Download, Layers, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { CITATION_USE_OPTIONS, HIGHLIGHT_COLORS } from '../../constants';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { API_BASE, CITATION_USE_OPTIONS, HIGHLIGHT_COLORS } from '../../constants';
 import {
   AGGREGATE_ALL,
   aggregateLibrary,
@@ -19,6 +19,7 @@ import {
   RESEARCH_FRAMES,
   buildResearchMarkdown,
   normalizeResearchDoc,
+  pickNewerDoc,
   resolveFrame,
 } from '../../lib/researchFrames';
 import type { ResearchQuestionDoc } from '../../lib/researchFrames';
@@ -47,21 +48,90 @@ function downloadMarkdown(filename: string, content: string) {
 }
 
 type DigestTab = 'aggregate' | 'builder';
+type SyncState = 'idle' | 'saving' | 'synced' | 'local';
+
+const SYNC_LABEL: Record<SyncState, string> = {
+  idle: '',
+  saving: '서버 저장 중…',
+  synced: '서버에 저장됨',
+  local: '로컬에만 저장됨 (서버 미연결)',
+};
 
 export function LibraryDigest({ onClose }: { onClose: () => void }) {
-  const { library, notes } = useWorkspace().store;
+  const { store, accessToken } = useWorkspace();
+  const { library, notes } = store;
   const [tab, setTab] = useState<DigestTab>('aggregate');
   const [filter, setFilter] = useState<AggregateFilter>(AGGREGATE_ALL);
   const [doc, setDoc] = useState<ResearchQuestionDoc>(() => loadResearchDoc());
   const [expansionOpen, setExpansionOpen] = useState(false);
+  const [syncState, setSyncState] = useState<SyncState>('idle');
+  // 사용자가 수정한 뒤에만 서버 PUT을 보낸다 (초기 로드/서버 복원은 dirty 아님)
+  const dirtyRef = useRef(false);
+  const authHeaders = useMemo<Record<string, string>>(() => {
+    const headers: Record<string, string> = {};
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    return headers;
+  }, [accessToken]);
 
-  // 프로젝트 문서는 변경 즉시 localStorage에 저장한다 (경량 문서라 debounce 불필요).
+  // 사용자 수정 진입점: updatedAt 갱신 + dirty 표시 (last-write-wins 재료)
+  const updateDoc = (mutate: (current: ResearchQuestionDoc) => ResearchQuestionDoc) => {
+    dirtyRef.current = true;
+    setDoc((current) => ({ ...mutate(current), updatedAt: new Date().toISOString() }));
+  };
+
+  // 열 때 서버 문서를 불러와 로컬과 비교 — 최근 수정본이 이긴다 (§13 last-write-wins).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/research-doc`, { headers: authHeaders });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { doc?: unknown; updatedAt?: string | null };
+        if (!data.doc) return;
+        const server = normalizeResearchDoc({
+          ...(data.doc as Record<string, unknown>),
+          updatedAt: data.updatedAt ?? undefined,
+        });
+        setDoc((current) => (dirtyRef.current ? current : pickNewerDoc(current, server)));
+        setSyncState('synced');
+      } catch {
+        /* 서버 미연결 — 로컬 문서 유지 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 변경 시 localStorage 즉시 저장(오프라인 캐시) + 서버 PUT은 debounce.
   useEffect(() => {
     try {
       window.localStorage.setItem(RESEARCH_DOC_STORAGE_KEY, JSON.stringify(doc));
     } catch {
       /* 저장 실패는 조용히 무시 — 다음 변경에서 재시도 */
     }
+    if (!dirtyRef.current) return;
+    setSyncState('saving');
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/research-doc`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
+          body: JSON.stringify({ doc }),
+        });
+        if (res.ok) {
+          dirtyRef.current = false;
+          setSyncState('synced');
+        } else {
+          setSyncState('local');
+        }
+      } catch {
+        setSyncState('local');
+      }
+    }, 1200);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc]);
 
   const allItems = useMemo(() => aggregateLibrary(library, notes), [library, notes]);
@@ -80,7 +150,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
   const frame = resolveFrame(doc.frameId);
   const frameAnswers = doc.slots[frame.id] ?? {};
   const setSlotAnswer = (key: string, value: string) =>
-    setDoc((current) => ({
+    updateDoc((current) => ({
       ...current,
       slots: { ...current.slots, [frame.id]: { ...(current.slots[frame.id] ?? {}), [key]: value } },
     }));
@@ -280,7 +350,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                   className="min-h-16 w-full resize-y rounded border border-line p-2 text-sm outline-none focus:border-action"
                   placeholder="반복되는 관점, 미해결 한계에서 발견한 공백을 적으세요."
                   value={doc.gapNote}
-                  onChange={(e) => setDoc((c) => ({ ...c, gapNote: e.target.value }))}
+                  onChange={(e) => updateDoc((c) => ({ ...c, gapNote: e.target.value }))}
                 />
               </label>
               <div className="flex flex-wrap items-center gap-1" role="radiogroup" aria-label="질문 프레임 선택">
@@ -296,7 +366,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                         ? 'bg-action text-white'
                         : 'border border-line text-muted hover:border-action hover:text-action'
                     }`}
-                    onClick={() => setDoc((c) => ({ ...c, frameId: f.id }))}
+                    onClick={() => updateDoc((c) => ({ ...c, frameId: f.id }))}
                   >
                     {f.name}
                   </button>
@@ -344,7 +414,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                           placeholder="직접 작성하세요."
                           value={doc.expansion[q.key] ?? ''}
                           onChange={(e) =>
-                            setDoc((c) => ({ ...c, expansion: { ...c.expansion, [q.key]: e.target.value } }))
+                            updateDoc((c) => ({ ...c, expansion: { ...c.expansion, [q.key]: e.target.value } }))
                           }
                         />
                       </li>
@@ -352,7 +422,15 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                   </ul>
                 )}
               </section>
-              <div className="flex justify-end">
+              <div className="flex items-center justify-end gap-2">
+                {syncState !== 'idle' && (
+                  <span
+                    role="status"
+                    className={`text-[11px] ${syncState === 'local' ? 'text-amber-700' : 'text-muted'}`}
+                  >
+                    {SYNC_LABEL[syncState]}
+                  </span>
+                )}
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 rounded bg-action px-3 py-1.5 text-xs font-semibold text-white"
