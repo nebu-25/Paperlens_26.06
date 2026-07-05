@@ -1,10 +1,13 @@
 import json
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app import db
 from app.auth import current_user_id
 from app.config import settings
 from app.services.ai_rate_limit import enforce_ai_rate_limit
@@ -28,6 +31,64 @@ class TermExplanationResponse(BaseModel):
     source: str = "ai_draft"
 
 
+@dataclass(frozen=True)
+class AiProviderResult:
+    text: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
+def _period_start_utc(period: str) -> str:
+    now = datetime.now(timezone.utc)
+    if period == "month":
+        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    return now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+
+def _estimated_cost_cents(prompt_tokens: int, completion_tokens: int) -> int:
+    prompt_rate = settings.ai_prompt_cost_per_million_cents
+    completion_rate = settings.ai_completion_cost_per_million_cents
+    if prompt_rate <= 0 and completion_rate <= 0:
+        return 0
+    cost_units = (prompt_tokens * max(0, prompt_rate)) + (
+        completion_tokens * max(0, completion_rate)
+    )
+    return (cost_units + 999_999) // 1_000_000
+
+
+def _usage_int(usage: dict[str, object], *keys: str) -> int:
+    for key in keys:
+        value = usage.get(key)
+        if isinstance(value, int):
+            return max(0, value)
+        if isinstance(value, float):
+            return max(0, int(value))
+    return 0
+
+
+def _usage_from_response(data: object) -> dict[str, int]:
+    if not isinstance(data, dict) or not isinstance(data.get("usage"), dict):
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    usage = data["usage"]
+    prompt_tokens = _usage_int(usage, "prompt_tokens", "input_tokens")
+    completion_tokens = _usage_int(usage, "completion_tokens", "output_tokens")
+    total_tokens = _usage_int(usage, "total_tokens")
+    if total_tokens <= 0:
+        total_tokens = prompt_tokens + completion_tokens
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def _normalize_provider_result(result: AiProviderResult | str) -> AiProviderResult:
+    if isinstance(result, AiProviderResult):
+        return result
+    return AiProviderResult(text=str(result))
+
+
 def _extract_chat_completion_text(data: object) -> str:
     if isinstance(data, dict):
         choices = data.get("choices")
@@ -48,7 +109,7 @@ def _extract_chat_completion_text(data: object) -> str:
     return ""
 
 
-def _call_openrouter(system_prompt: str, user_prompt: str) -> str:
+def _call_openrouter(system_prompt: str, user_prompt: str) -> AiProviderResult:
     payload = {
         "model": settings.ai_model,
         "messages": [
@@ -84,7 +145,45 @@ def _call_openrouter(system_prompt: str, user_prompt: str) -> str:
     text = _extract_chat_completion_text(data)
     if not text:
         raise HTTPException(status_code=502, detail="AI provider returned an empty response.")
-    return text
+    usage = _usage_from_response(data)
+    return AiProviderResult(text=text, **usage)
+
+
+def _enforce_ai_cost_budget(user_id: str) -> None:
+    daily_limit = settings.ai_daily_cost_limit_cents
+    monthly_limit = settings.ai_monthly_cost_limit_cents
+    if daily_limit > 0:
+        daily = db.get_ai_usage_totals(user_id, _period_start_utc("day"))
+        if daily["estimated_cost_cents"] >= daily_limit:
+            raise HTTPException(
+                status_code=429,
+                detail="AI 일일 비용 한도에 도달했습니다. 내일 다시 시도해 주세요.",
+            )
+    if monthly_limit > 0:
+        monthly = db.get_ai_usage_totals(user_id, _period_start_utc("month"))
+        if monthly["estimated_cost_cents"] >= monthly_limit:
+            raise HTTPException(
+                status_code=429,
+                detail="AI 월간 비용 한도에 도달했습니다. 다음 달 다시 시도해 주세요.",
+            )
+
+
+def _record_ai_usage(user_id: str, feature: str, result: AiProviderResult) -> None:
+    db.record_ai_usage(
+        user_id,
+        {
+            "provider": "openrouter",
+            "model": settings.ai_model,
+            "feature": feature,
+            "prompt_tokens": result.prompt_tokens,
+            "completion_tokens": result.completion_tokens,
+            "total_tokens": result.total_tokens,
+            "estimated_cost_cents": _estimated_cost_cents(
+                result.prompt_tokens,
+                result.completion_tokens,
+            ),
+        },
+    )
 
 
 @router.get("/status")
@@ -100,6 +199,7 @@ def explain_term(
     if not settings.ai_enabled:
         raise HTTPException(status_code=503, detail="AI 보조 기능이 아직 설정되지 않았습니다.")
     enforce_ai_rate_limit(user_id)
+    _enforce_ai_cost_budget(user_id)
 
     context = body.context.strip()
     if len(context) > 2400:
@@ -116,4 +216,6 @@ def explain_term(
 주변 맥락:
 {context or "(제공된 맥락 없음)"}
 """
-    return TermExplanationResponse(explanation=_call_openrouter(system_prompt, user_prompt))
+    result = _normalize_provider_result(_call_openrouter(system_prompt, user_prompt))
+    _record_ai_usage(user_id, "term_explanation", result)
+    return TermExplanationResponse(explanation=result.text)

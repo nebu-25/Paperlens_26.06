@@ -27,8 +27,16 @@ def test_explain_term_uses_redis_rate_limit_store_when_configured(monkeypatch):
     monkeypatch.setattr(settings, "ai_api_key", "key")
     monkeypatch.setattr(settings, "ai_rate_limit_per_minute", 2)
     monkeypatch.setattr(settings, "redis_url", "redis://cache")
+    monkeypatch.setattr(settings, "ai_daily_cost_limit_cents", 0)
+    monkeypatch.setattr(settings, "ai_monthly_cost_limit_cents", 0)
     monkeypatch.setattr(ai_rate_limit_module, "_redis_store_for_url", lambda url: fake_store)
     monkeypatch.setattr(ai_module, "_call_openrouter", lambda *args, **kwargs: "설명")
+    monkeypatch.setattr(ai_module.db, "record_ai_usage", lambda *args, **kwargs: {})
+    monkeypatch.setattr(
+        ai_module.db,
+        "get_ai_usage_totals",
+        lambda *args, **kwargs: {"estimated_cost_cents": 0},
+    )
 
     assert explain_term(TermExplanationRequest(term="t"), user_id="u1").explanation == "설명"
 

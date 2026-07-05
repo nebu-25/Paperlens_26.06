@@ -50,7 +50,13 @@ class TestRoundTrip:
                     "SELECT name FROM sqlite_master WHERE type = 'table'"
                 ).fetchall()
             }
-        assert {"paper_metadata", "paper_texts", "review_notes", "paper_files"}.issubset(tables)
+        assert {
+            "paper_metadata",
+            "paper_texts",
+            "review_notes",
+            "paper_files",
+            "ai_usage_events",
+        }.issubset(tables)
 
     def test_upsert_get_delete(self, db):
         paper = {
@@ -98,6 +104,41 @@ class TestRoundTrip:
         db.upsert_note("u1", "n1", {"title": "Mine"}, {})
         assert db.get_note("u2", "n1") is None
         assert db.list_notes("u2") == {"library": {}, "notes": {}}
+
+    def test_ai_usage_ledger_records_and_sums_by_period(self, db):
+        db.record_ai_usage(
+            USER_ID,
+            {
+                "provider": "openrouter",
+                "model": "model-a",
+                "feature": "term_explanation",
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "estimated_cost_cents": 2,
+            },
+        )
+        db.record_ai_usage(
+            "other",
+            {
+                "provider": "openrouter",
+                "model": "model-a",
+                "feature": "term_explanation",
+                "prompt_tokens": 100,
+                "completion_tokens": 100,
+                "total_tokens": 200,
+                "estimated_cost_cents": 99,
+            },
+        )
+
+        totals = db.get_ai_usage_totals(USER_ID, "2000-01-01T00:00:00+00:00")
+        assert totals == {
+            "requests": 1,
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "estimated_cost_cents": 2,
+        }
 
     def test_legacy_papers_are_migrated_to_split_tables(self, tmp_path, monkeypatch):
         monkeypatch.setattr(settings, "database_path", str(tmp_path / "legacy.db"))
@@ -183,7 +224,7 @@ class TestRepositoryFactory:
 def _drop_all_pg_tables(repo) -> None:
     with repo.connect() as conn:
         conn.execute(
-            "DROP TABLE IF EXISTS paper_files, paper_texts, review_notes, "
+            "DROP TABLE IF EXISTS ai_usage_events, paper_files, paper_texts, review_notes, "
             "paper_metadata, papers CASCADE"
         )
 
@@ -215,7 +256,13 @@ class TestPostgreSQLRoundTrip:
                     "WHERE table_schema = 'public'"
                 ).fetchall()
             }
-        assert {"paper_metadata", "paper_texts", "review_notes", "paper_files"}.issubset(tables)
+        assert {
+            "paper_metadata",
+            "paper_texts",
+            "review_notes",
+            "paper_files",
+            "ai_usage_events",
+        }.issubset(tables)
 
     def test_upsert_get_delete(self, pg_repo):
         user = str(uuid.uuid4())
@@ -279,6 +326,30 @@ class TestPostgreSQLRoundTrip:
         pg_repo.upsert_note(owner, "n1", {"title": "Mine"}, {})
         assert pg_repo.get_note(other, "n1") is None
         assert pg_repo.list_notes(other) == {"library": {}, "notes": {}}
+
+    def test_ai_usage_ledger_records_and_sums_by_period(self, pg_repo):
+        user = str(uuid.uuid4())
+        pg_repo.record_ai_usage(
+            user,
+            {
+                "provider": "openrouter",
+                "model": "model-a",
+                "feature": "term_explanation",
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "estimated_cost_cents": 2,
+            },
+        )
+
+        totals = pg_repo.get_ai_usage_totals(user, "2000-01-01T00:00:00+00:00")
+        assert totals == {
+            "requests": 1,
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "estimated_cost_cents": 2,
+        }
 
     def test_legacy_papers_are_migrated_to_split_tables(self, pg_repo):
         from psycopg.types.json import Jsonb

@@ -10,6 +10,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from app.config import settings
 
@@ -63,11 +64,26 @@ CREATE TABLE IF NOT EXISTS research_docs (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS ai_usage_events (
+  id                   TEXT PRIMARY KEY,
+  user_id              TEXT NOT NULL,
+  provider             TEXT NOT NULL DEFAULT '',
+  model                TEXT NOT NULL DEFAULT '',
+  feature              TEXT NOT NULL DEFAULT '',
+  prompt_tokens        INTEGER NOT NULL DEFAULT 0,
+  completion_tokens    INTEGER NOT NULL DEFAULT 0,
+  total_tokens         INTEGER NOT NULL DEFAULT 0,
+  estimated_cost_cents INTEGER NOT NULL DEFAULT 0,
+  created_at           TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS paper_metadata_user_updated_idx
   ON paper_metadata(user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS review_notes_user_idx ON review_notes(user_id);
 CREATE INDEX IF NOT EXISTS paper_texts_user_idx ON paper_texts(user_id);
 CREATE INDEX IF NOT EXISTS paper_files_user_idx ON paper_files(user_id);
+CREATE INDEX IF NOT EXISTS ai_usage_events_user_created_idx
+  ON ai_usage_events(user_id, created_at DESC);
 """
 
 _LEGACY_SCHEMA = """
@@ -419,6 +435,64 @@ class SQLiteNotesRepository:
             return {"doc": doc, "updatedAt": now}
         finally:
             conn.close()
+
+    def record_ai_usage(self, user_id: str, event: dict[str, object]) -> dict[str, object]:
+        now = _now()
+        event_id = str(event.get("id") or uuid4())
+        conn = self.connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO ai_usage_events (
+                  id, user_id, provider, model, feature,
+                  prompt_tokens, completion_tokens, total_tokens,
+                  estimated_cost_cents, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    user_id,
+                    str(event.get("provider", "")),
+                    str(event.get("model", "")),
+                    str(event.get("feature", "")),
+                    int(event.get("prompt_tokens") or 0),
+                    int(event.get("completion_tokens") or 0),
+                    int(event.get("total_tokens") or 0),
+                    int(event.get("estimated_cost_cents") or 0),
+                    now,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return {"id": event_id, "createdAt": now}
+
+    def get_ai_usage_totals(self, user_id: str, since: str) -> dict[str, int]:
+        conn = self.connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT
+                  COUNT(*) AS requests,
+                  COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                  COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                  COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                  COALESCE(SUM(estimated_cost_cents), 0) AS estimated_cost_cents
+                FROM ai_usage_events
+                WHERE user_id = ? AND created_at >= ?
+                """,
+                (user_id, since),
+            ).fetchone()
+        finally:
+            conn.close()
+        return {
+            "requests": int(row["requests"] or 0),
+            "prompt_tokens": int(row["prompt_tokens"] or 0),
+            "completion_tokens": int(row["completion_tokens"] or 0),
+            "total_tokens": int(row["total_tokens"] or 0),
+            "estimated_cost_cents": int(row["estimated_cost_cents"] or 0),
+        }
 
     def _paper_params(
         self,

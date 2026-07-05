@@ -54,3 +54,11 @@ def get_research_doc(user_id: str) -> dict[str, object] | None:
 
 def put_research_doc(user_id: str, doc: dict[str, object]) -> dict[str, object]:
     return _repository.put_research_doc(user_id, doc)
+
+
+def record_ai_usage(user_id: str, event: dict[str, object]) -> dict[str, object]:
+    return _repository.record_ai_usage(user_id, event)
+
+
+def get_ai_usage_totals(user_id: str, since: str) -> dict[str, int]:
+    return _repository.get_ai_usage_totals(user_id, since)

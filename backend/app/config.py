@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     ai_app_name: str = "PaperLens"
     # AI 엔드포인트 사용자별 분당 호출 상한(비용·남용 방지). 0 이하면 제한 없음.
     ai_rate_limit_per_minute: int = 10
+    # AI 비용 원장/예산. 가격은 모델·공급자에 따라 변하므로 환경변수로 주입한다.
+    # 금액 단위는 USD cents, 토큰 단가는 1M tokens당 cents. 0 이하면 해당 제한/추정 비활성.
+    ai_daily_cost_limit_cents: int = 0
+    ai_monthly_cost_limit_cents: int = 0
+    ai_prompt_cost_per_million_cents: int = 0
+    ai_completion_cost_per_million_cents: int = 0
     # AI rate limit 상태를 공유할 Redis URL. 설정 시 다중 워커/다중 인스턴스에서 공유된다.
     # 비워두면 개발 편의를 위해 프로세스 메모리 저장소를 사용한다.
     redis_url: str = ""

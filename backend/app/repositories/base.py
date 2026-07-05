@@ -30,3 +30,13 @@ class NotesRepository(Protocol):
 
     def put_research_doc(self, user_id: str, doc: dict[str, object]) -> dict[str, object]:
         ...
+
+    def record_ai_usage(
+        self,
+        user_id: str,
+        event: dict[str, object],
+    ) -> dict[str, object]:
+        ...
+
+    def get_ai_usage_totals(self, user_id: str, since: str) -> dict[str, int]:
+        ...
