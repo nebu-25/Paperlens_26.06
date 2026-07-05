@@ -8,7 +8,7 @@ from starlette.responses import Response
 
 from app import db
 from app.config import settings
-from app.routers import ai, notes, papers
+from app.routers import ai, notes, papers, research
 
 
 @asynccontextmanager
@@ -44,6 +44,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.include_router(papers.router, prefix="/api")
 app.include_router(notes.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
+app.include_router(research.router, prefix="/api")
 
 
 @app.get("/api/health")

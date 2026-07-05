@@ -54,6 +54,13 @@ CREATE TABLE IF NOT EXISTS paper_files (
   updated_at TEXT NOT NULL
 );
 
+-- 연구 질문 빌더 프로젝트 문서 (FR-28) — 사용자당 1건, 노트와 분리된 경량 JSON.
+CREATE TABLE IF NOT EXISTS research_docs (
+  user_id    TEXT PRIMARY KEY,
+  doc        TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS paper_metadata_user_updated_idx
   ON paper_metadata(user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS review_notes_user_idx ON review_notes(user_id);
@@ -360,6 +367,36 @@ class SQLiteNotesRepository:
                 conn.execute(f"DELETE FROM {table} WHERE paper_id = ? AND user_id = ?", (note_id, user_id))
             conn.execute("DELETE FROM paper_metadata WHERE id = ? AND user_id = ?", (note_id, user_id))
             conn.commit()
+        finally:
+            conn.close()
+
+    def get_research_doc(self, user_id: str) -> dict[str, object] | None:
+        """연구 질문 빌더 프로젝트 문서 조회 (FR-28). 없으면 None."""
+        conn = self.connect()
+        try:
+            row = conn.execute(
+                "SELECT doc, updated_at FROM research_docs WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            if row is None:
+                return None
+            return {"doc": json.loads(row["doc"] or "{}"), "updatedAt": row["updated_at"]}
+        finally:
+            conn.close()
+
+    def put_research_doc(self, user_id: str, doc: dict[str, object]) -> dict[str, object]:
+        """연구 질문 빌더 프로젝트 문서 upsert. last-write-wins."""
+        now = _now()
+        conn = self.connect()
+        try:
+            conn.execute(
+                """
+                INSERT INTO research_docs(user_id, doc, updated_at) VALUES(?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET doc=excluded.doc, updated_at=excluded.updated_at
+                """,
+                (user_id, json.dumps(doc, ensure_ascii=False), now),
+            )
+            conn.commit()
+            return {"doc": doc, "updatedAt": now}
         finally:
             conn.close()
 

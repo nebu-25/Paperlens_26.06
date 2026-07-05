@@ -24,3 +24,9 @@ class NotesRepository(Protocol):
 
     def delete_note(self, user_id: str, note_id: str) -> None:
         ...
+
+    def get_research_doc(self, user_id: str) -> dict[str, object] | None:
+        ...
+
+    def put_research_doc(self, user_id: str, doc: dict[str, object]) -> dict[str, object]:
+        ...

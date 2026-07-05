@@ -72,7 +72,7 @@ export const EXPANSION_QUESTIONS: { key: string; label: string }[] = [
   },
 ];
 
-// 프로젝트 문서 (MVP: 사용자별 단일 문서, localStorage 저장 §13)
+// 프로젝트 문서 (사용자별 단일 문서 — localStorage 캐시 + 서버 동기화 §13)
 export interface ResearchQuestionDoc {
   frameId: FrameId;
   // 취합 재료에서 본 연구 공백 메모
@@ -80,6 +80,8 @@ export interface ResearchQuestionDoc {
   // frameId별 슬롯 답변: frameId -> slotKey -> 답변 (프레임 전환 시 답 보존)
   slots: Record<string, Record<string, string>>;
   expansion: Record<string, string>;
+  // 마지막 수정 시각 (last-write-wins 비교용)
+  updatedAt?: string;
 }
 
 export const EMPTY_RESEARCH_DOC: ResearchQuestionDoc = {
@@ -114,7 +116,18 @@ export function normalizeResearchDoc(raw: unknown): ResearchQuestionDoc {
     gapNote: typeof data.gapNote === 'string' ? data.gapNote : '',
     slots,
     expansion: stringMap(data.expansion),
+    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : undefined,
   };
+}
+
+// last-write-wins: 로컬과 서버 문서 중 최근 수정본을 고른다. 시각이 없으면 상대가 이긴다.
+export function pickNewerDoc(
+  local: ResearchQuestionDoc,
+  server: ResearchQuestionDoc,
+): ResearchQuestionDoc {
+  const localTime = Date.parse(local.updatedAt ?? '') || 0;
+  const serverTime = Date.parse(server.updatedAt ?? '') || 0;
+  return serverTime >= localTime ? server : local;
 }
 
 // 연구 질문 문서 Markdown (FS-11 출력)
