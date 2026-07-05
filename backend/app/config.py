@@ -21,8 +21,10 @@ class Settings(BaseSettings):
     ai_site_url: str = "https://nebu-25.github.io/Paperlens_26.06/"
     ai_app_name: str = "PaperLens"
     # AI 엔드포인트 사용자별 분당 호출 상한(비용·남용 방지). 0 이하면 제한 없음.
-    # 단일 프로세스 인메모리 카운터라 인스턴스 재시작 시 리셋되고 인스턴스 간 공유되지 않는다.
     ai_rate_limit_per_minute: int = 10
+    # AI rate limit 상태를 공유할 Redis URL. 설정 시 다중 워커/다중 인스턴스에서 공유된다.
+    # 비워두면 개발 편의를 위해 프로세스 메모리 저장소를 사용한다.
+    redis_url: str = ""
     # OCR fallback (opt-in). 손상/스캔 PDF를 렌더→RapidOCR(한국어)로 재인식한다.
     # 무겁고 느려 기본 off. 켜려면 requirements-ocr.txt 설치 필요.
     ocr_enabled: bool = False
