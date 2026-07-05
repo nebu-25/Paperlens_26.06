@@ -13,6 +13,10 @@ export interface DetectedSection {
 export interface FigureImageRef {
   page: number;
   bbox?: number[];
+  // 캡션↔이미지 자동 매칭(백엔드 휴리스틱): 같은 페이지 캡션과 이어졌을 때 채워진다.
+  // captionId는 lib/figureIndex.ts와 동일 규칙('figure-1' 등)이라 네비게이터에서 캡션 행에 조인된다.
+  captionId?: string;
+  captionLabel?: string;
 }
 
 export type ExtractionQualityStatus = 'good' | 'review' | 'poor' | 'failed';
