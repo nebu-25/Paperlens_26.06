@@ -1,10 +1,13 @@
-// 시그널 문장 스캐너 (기획서 v4.0 §8-5, FR-24) — M4 범위: 한계 시그널 + 키워드 후보.
+// 시그널 문장 스캐너 (기획서 v4.0 §8-5, FR-24) — 관점·한계·비판점 시그널 + 키워드 후보.
 // 규칙 기반·결정적. AI 아님. 결과는 저장하지 않는 휘발성 안내이며,
 // 사용자가 승격한 하이라이트/용어만 노트에 남는다. 순수 함수만 둔다.
 import type { DetectedSection } from '../types';
 
+// 저자 입장 표명(관점) / 저자 인정 한계(한계) / 비판적으로 볼 후보(비판점).
+export type SignalType = 'limitation' | 'perspective' | 'critique';
+
 export interface SignalMatch {
-  type: 'limitation';
+  type: SignalType;
   // paper.text 내 문장 오프셋
   start: number;
   end: number;
@@ -35,8 +38,53 @@ const LIMITATION_PATTERNS: { pattern: RegExp; label: string }[] = [
   { pattern: /일반화(?:하기|가)? ?어렵/, label: '일반화 어려움' },
 ];
 
+// 관점 시그널: 저자의 입장·주장·전제 표명 문장 (§8-5). 승격 시 '주장' 라벨로 간다.
+const PERSPECTIVE_PATTERNS: { pattern: RegExp; label: string }[] = [
+  { pattern: /\bwe (?:argue|claim|contend|posit|propose|hypothesize|believe|suggest)\b/i, label: 'we argue' },
+  {
+    pattern: /\bthis (?:paper|study|work|article) (?:propose|present|argue|introduce|claim)s?\b/i,
+    label: 'this paper proposes',
+  },
+  { pattern: /\bour (?:hypothesis|claim|assumption|position|argument|thesis)\b/i, label: 'our claim' },
+  { pattern: /관점에서/, label: '…관점에서' },
+  { pattern: /를 전제로|을 전제로|전제한다/, label: '…를 전제로' },
+  { pattern: /(?:라고|다고) (?:본다|주장한다|주장하며|가정한다)/, label: '…라고 본다' },
+  { pattern: /(?:주장한다|제안한다|제안하고자|주장하고자|규명하고자)/, label: '주장/제안' },
+];
+
+// 비판점 후보: 직접 탐지 불가 → 표본/데이터 규모·가정 표명·통계 유의성 경계를 "비판적으로 볼 후보"로 표시.
+const CRITIQUE_PATTERNS: { pattern: RegExp; label: string }[] = [
+  { pattern: /\bassume(?:s|d)?\b|\bassumption\b/i, label: 'assume' },
+  { pattern: /\bsample size\b|\bsmall (?:sample|dataset|number)\b|\blimited data\b/i, label: 'sample size' },
+  {
+    pattern: /\b(?:statistical(?:ly)? significan\w*|not significant|p\s?[<=>]\s?0?\.\d+)\b/i,
+    label: 'significance',
+  },
+  { pattern: /가정(?:한다|하면|하고|에서|을|은|이)/, label: '가정' },
+  { pattern: /표본(?:이|의|수|을|은|가)|데이터(?:셋)?(?: ?규모|가 (?:작|적))/, label: '표본/데이터 규모' },
+  { pattern: /유의(?:하지 않|미하지 않|성)|통계적으로 유의/, label: '통계 유의성' },
+];
+
+// 카테고리 정의. 한 문장이 여러 카테고리에 걸리면 앞선 순서가 우선한다(한계 > 비판 > 관점).
+interface SignalCategory {
+  type: SignalType;
+  patterns: { pattern: RegExp; label: string }[];
+  reasonPrefix: string;
+}
+const LIMITATION_CATEGORY: SignalCategory = {
+  type: 'limitation',
+  patterns: LIMITATION_PATTERNS,
+  reasonPrefix: '한계 시그널',
+};
+const ALL_CATEGORIES: SignalCategory[] = [
+  LIMITATION_CATEGORY,
+  { type: 'critique', patterns: CRITIQUE_PATTERNS, reasonPrefix: '비판점 후보' },
+  { type: 'perspective', patterns: PERSPECTIVE_PATTERNS, reasonPrefix: '관점 시그널' },
+];
+
 // 오탐 폭주 방지 상한. 넘치면 Discussion/Conclusion 문장을 우선 보존한다.
 const MAX_LIMITATION_MATCHES = 40;
+const MAX_SIGNAL_MATCHES = 60;
 const MIN_SENTENCE_LENGTH = 10;
 const MAX_SENTENCE_LENGTH = 400;
 
@@ -75,9 +123,11 @@ function sectionAt(sections: DetectedSection[], offset: number): string {
   return canonical;
 }
 
-export function scanLimitationSignals(
+function scanCategories(
   text: string,
-  sections: DetectedSection[] = [],
+  sections: DetectedSection[],
+  categories: SignalCategory[],
+  max: number,
 ): SignalMatch[] {
   if (!text) return [];
   const sorted = [...sections]
@@ -88,23 +138,40 @@ export function scanLimitationSignals(
     const length = end - start;
     if (length < MIN_SENTENCE_LENGTH || length > MAX_SENTENCE_LENGTH) continue;
     const sentence = text.slice(start, end);
-    const hit = LIMITATION_PATTERNS.find((p) => p.pattern.test(sentence));
-    if (!hit) continue;
-    matches.push({
-      type: 'limitation',
-      start,
-      end,
-      reason: `한계 시그널: "${hit.label}"`,
-      emphasized: EMPHASIZED_SECTIONS.has(sectionAt(sorted, start)),
-    });
+    // 한 문장은 첫 매칭 카테고리 하나로만 표시(마커 겹침 방지).
+    for (const category of categories) {
+      const hit = category.patterns.find((p) => p.pattern.test(sentence));
+      if (!hit) continue;
+      matches.push({
+        type: category.type,
+        start,
+        end,
+        reason: `${category.reasonPrefix}: "${hit.label}"`,
+        emphasized: EMPHASIZED_SECTIONS.has(sectionAt(sorted, start)),
+      });
+      break;
+    }
   }
-  if (matches.length <= MAX_LIMITATION_MATCHES) return matches;
+  if (matches.length <= max) return matches;
   // 상한 초과 시 Discussion/Conclusion 문장을 먼저 남기고 위치순 재정렬
   const kept = [
     ...matches.filter((m) => m.emphasized),
     ...matches.filter((m) => !m.emphasized),
-  ].slice(0, MAX_LIMITATION_MATCHES);
+  ].slice(0, max);
   return kept.sort((a, b) => a.start - b.start);
+}
+
+// 한계 시그널만 (하위 호환·단위 테스트용).
+export function scanLimitationSignals(
+  text: string,
+  sections: DetectedSection[] = [],
+): SignalMatch[] {
+  return scanCategories(text, sections, [LIMITATION_CATEGORY], MAX_LIMITATION_MATCHES);
+}
+
+// 관점·한계·비판점 시그널 전체 (§8-5). pass 3 정독 안내에 사용.
+export function scanSignals(text: string, sections: DetectedSection[] = []): SignalMatch[] {
+  return scanCategories(text, sections, ALL_CATEGORIES, MAX_SIGNAL_MATCHES);
 }
 
 // 키워드 후보: ① 키워드 섹션 표기를 최우선 파싱 ② 약어/영문 용어 빈도 × 초록 등장 가중.

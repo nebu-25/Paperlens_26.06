@@ -50,7 +50,8 @@ export function SourcePanel() {
     signalScanEnabled,
     setSignalScanEnabled,
     signalScanBlocked,
-    limitationSignals,
+    signalMatches,
+    signalCounts,
     keywordCandidates,
     figureCaptions,
     figureMentionCounts,
@@ -489,8 +490,11 @@ export function SourcePanel() {
                     </span>
                   ) : signalScanEnabled ? (
                     <span className="rounded bg-white px-1.5 py-0.5 text-[11px] text-muted">
-                      한계 시그널 <b className="text-rose-600">{limitationSignals.length}</b>건 —
-                      점선 문장을 클릭하면 한계/비판 하이라이트로 추가됩니다
+                      시그널 <b>{signalMatches.length}</b>건 (관점{' '}
+                      <b className="text-indigo-600">{signalCounts.perspective}</b> · 한계{' '}
+                      <b className="text-rose-600">{signalCounts.limitation}</b> · 비판{' '}
+                      <b className="text-amber-600">{signalCounts.critique}</b>) — 점선 문장을 클릭하면
+                      해당 라벨 하이라이트로 추가됩니다
                     </span>
                   ) : (
                     <span className="text-[11px] text-muted">
