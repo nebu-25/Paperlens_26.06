@@ -19,6 +19,8 @@ export function usePaperBodyNodes(
   // 그림/표 교차참조(FR-27). 클릭하면 캡션 위치로 점프한다.
   figureMentions: FigureMentionLink[] = [],
   onJumpToCaption?: (mention: FigureMentionLink) => void,
+  // 취합 역링크(FR-25 후속)로 이동해 온 하이라이트 id — 잠시 강조 표시한다.
+  focusedHighlightId: string | null = null,
 ): React.ReactNode {
   // 콜백은 ref로 유지해 매 렌더마다 본문 노드를 재계산하지 않는다.
   const promoteRef = useRef(onPromoteSignal);
@@ -29,10 +31,11 @@ export function usePaperBodyNodes(
   return useMemo(() => {
     const text = paper?.text ?? '';
     if (!text) return null;
+    type HighlightRange = { id: string; start: number; end: number; color?: HighlightColor };
     const ranges = (
       (note.highlights ?? [])
         .filter((h) => activeHighlightColor === 'all' || (h.color ?? 'yellow') === activeHighlightColor)
-        .map((h): { start: number; end: number; color?: HighlightColor } | null => {
+        .map((h): HighlightRange | null => {
           if (
             typeof h.start === 'number' &&
             typeof h.end === 'number' &&
@@ -40,15 +43,15 @@ export function usePaperBodyNodes(
             h.end <= text.length &&
             h.end > h.start
           ) {
-            return { start: h.start, end: h.end, color: h.color };
+            return { id: h.id, start: h.start, end: h.end, color: h.color };
           }
           if (h.text) {
             const idx = text.indexOf(h.text);
-            if (idx >= 0) return { start: idx, end: idx + h.text.length, color: h.color };
+            if (idx >= 0) return { id: h.id, start: idx, end: idx + h.text.length, color: h.color };
           }
           return null;
         })
-        .filter((range): range is { start: number; end: number; color?: HighlightColor } => range !== null)
+        .filter((range): range is HighlightRange => range !== null)
         .sort((a, b) => a.start - b.start)
     );
 
@@ -130,8 +133,15 @@ export function usePaperBodyNodes(
       if (end <= cursor) continue;
       if (start > cursor) nodes.push(...renderPlainSegment(cursor, start));
       const color = highlightStyle(range.color);
+      const focused = focusedHighlightId !== null && range.id === focusedHighlightId;
       nodes.push(
-        <mark key={`hl-${start}-${end}`} className={`rounded ${color.markClass} text-ink`}>
+        <mark
+          key={`hl-${start}-${end}`}
+          data-highlight-id={range.id}
+          className={`rounded ${color.markClass} text-ink ${
+            focused ? 'ring-2 ring-action ring-offset-1' : ''
+          }`}
+        >
           {text.slice(start, end)}
         </mark>,
       );
@@ -139,5 +149,5 @@ export function usePaperBodyNodes(
     }
     if (cursor < text.length) nodes.push(...renderPlainSegment(cursor, text.length));
     return nodes;
-  }, [activeHighlightColor, paper?.text, note.highlights, signals, figureMentions]);
+  }, [activeHighlightColor, paper?.text, note.highlights, signals, figureMentions, focusedHighlightId]);
 }

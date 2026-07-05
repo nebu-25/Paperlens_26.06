@@ -343,6 +343,44 @@ export function useReviewStore({
     setSavedAt('복원됨');
   }
 
+  // ── 취합 항목 → 원본 노트 역링크 (FR-25 후속) ──
+  // 취합 뷰에서 항목을 클릭하면 해당 논문을 열고, 하이라이트면 원문 위치로 스크롤 + 잠시 강조한다.
+  const [focusHighlightId, setFocusHighlightId] = useState<string | null>(null);
+
+  function openAggregatedItem(paperId: string, itemId: string) {
+    openPaper(paperId);
+    // 라벨 필터에 가려 대상 하이라이트가 렌더되지 않는 일을 방지
+    setHighlightFilter('all');
+    setFocusHighlightId(itemId);
+  }
+
+  useEffect(() => {
+    if (!focusHighlightId || !paper) return;
+    const target = note.highlights.find((h) => h.id === focusHighlightId);
+    if (!target) {
+      // 수동 요약 항목은 원문 오프셋이 없어 논문 전환까지만 안내한다.
+      setFocusHighlightId(null);
+      return;
+    }
+    const start =
+      typeof target.start === 'number'
+        ? target.start
+        : target.text
+          ? paper.text.indexOf(target.text)
+          : -1;
+    // 논문 전환 직후 원문 DOM이 그려질 시간을 준 뒤 스크롤한다.
+    const jumpTimer = window.setTimeout(() => {
+      if (start >= 0) jumpToTextOffset(start);
+    }, 200);
+    // 강조 표시는 잠시 유지 후 해제
+    const clearTimer = window.setTimeout(() => setFocusHighlightId(null), 2500);
+    return () => {
+      window.clearTimeout(jumpTimer);
+      window.clearTimeout(clearTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusHighlightId, paper?.id]);
+
   function deletePaper(id: string) {
     forgetDirty(id);
     const nextLibrary = { ...libraryRef.current };
@@ -1064,6 +1102,7 @@ export function useReviewStore({
     promoteSignal,
     figureIndex.mentions,
     jumpToCaption,
+    focusHighlightId,
   );
 
   function contextForTerm(term: string): string {
@@ -1240,6 +1279,7 @@ export function useReviewStore({
     figureCaptions: figureIndex.captions,
     figureMentionCounts,
     jumpToTextOffset,
+    openAggregatedItem,
   };
 }
 
