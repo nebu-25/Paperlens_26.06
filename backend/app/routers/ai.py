@@ -57,6 +57,18 @@ def _estimated_cost_cents(prompt_tokens: int, completion_tokens: int) -> int:
     return (cost_units + 999_999) // 1_000_000
 
 
+def _ai_cost_guardrails_enabled() -> bool:
+    return any(
+        value > 0
+        for value in (
+            settings.ai_daily_cost_limit_cents,
+            settings.ai_monthly_cost_limit_cents,
+            settings.ai_prompt_cost_per_million_cents,
+            settings.ai_completion_cost_per_million_cents,
+        )
+    )
+
+
 def _usage_int(usage: dict[str, object], *keys: str) -> int:
     for key in keys:
         value = usage.get(key)
@@ -87,6 +99,17 @@ def _normalize_provider_result(result: AiProviderResult | str) -> AiProviderResu
     if isinstance(result, AiProviderResult):
         return result
     return AiProviderResult(text=str(result))
+
+
+def _require_accountable_usage(result: AiProviderResult) -> None:
+    if not _ai_cost_guardrails_enabled():
+        return
+    if result.total_tokens > 0 or result.prompt_tokens > 0 or result.completion_tokens > 0:
+        return
+    raise HTTPException(
+        status_code=503,
+        detail="AI usage accounting is unavailable. Try again later.",
+    )
 
 
 def _extract_chat_completion_text(data: object) -> str:
@@ -153,14 +176,26 @@ def _enforce_ai_cost_budget(user_id: str) -> None:
     daily_limit = settings.ai_daily_cost_limit_cents
     monthly_limit = settings.ai_monthly_cost_limit_cents
     if daily_limit > 0:
-        daily = db.get_ai_usage_totals(user_id, _period_start_utc("day"))
+        try:
+            daily = db.get_ai_usage_totals(user_id, _period_start_utc("day"))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="AI cost ledger is unavailable. Try again later.",
+            ) from exc
         if daily["estimated_cost_cents"] >= daily_limit:
             raise HTTPException(
                 status_code=429,
                 detail="AI 일일 비용 한도에 도달했습니다. 내일 다시 시도해 주세요.",
             )
     if monthly_limit > 0:
-        monthly = db.get_ai_usage_totals(user_id, _period_start_utc("month"))
+        try:
+            monthly = db.get_ai_usage_totals(user_id, _period_start_utc("month"))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="AI cost ledger is unavailable. Try again later.",
+            ) from exc
         if monthly["estimated_cost_cents"] >= monthly_limit:
             raise HTTPException(
                 status_code=429,
@@ -169,21 +204,27 @@ def _enforce_ai_cost_budget(user_id: str) -> None:
 
 
 def _record_ai_usage(user_id: str, feature: str, result: AiProviderResult) -> None:
-    db.record_ai_usage(
-        user_id,
-        {
-            "provider": "openrouter",
-            "model": settings.ai_model,
-            "feature": feature,
-            "prompt_tokens": result.prompt_tokens,
-            "completion_tokens": result.completion_tokens,
-            "total_tokens": result.total_tokens,
-            "estimated_cost_cents": _estimated_cost_cents(
-                result.prompt_tokens,
-                result.completion_tokens,
-            ),
-        },
-    )
+    try:
+        db.record_ai_usage(
+            user_id,
+            {
+                "provider": "openrouter",
+                "model": settings.ai_model,
+                "feature": feature,
+                "prompt_tokens": result.prompt_tokens,
+                "completion_tokens": result.completion_tokens,
+                "total_tokens": result.total_tokens,
+                "estimated_cost_cents": _estimated_cost_cents(
+                    result.prompt_tokens,
+                    result.completion_tokens,
+                ),
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="AI usage could not be recorded. Try again later.",
+        ) from exc
 
 
 @router.get("/status")
@@ -217,5 +258,6 @@ def explain_term(
 {context or "(제공된 맥락 없음)"}
 """
     result = _normalize_provider_result(_call_openrouter(system_prompt, user_prompt))
+    _require_accountable_usage(result)
     _record_ai_usage(user_id, "term_explanation", result)
     return TermExplanationResponse(explanation=result.text)

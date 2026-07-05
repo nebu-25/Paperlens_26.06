@@ -348,6 +348,8 @@ AI 비용 보호는 `AI_RATE_LIMIT_PER_MINUTE`로 사용자별 분당 호출 상
 
 3차 방어선으로 provider-side 안전장치를 운영 필수 항목으로 둔다. OpenRouter 등 provider 콘솔에서 spend limit와 billing alert를 설정하고, API key 회전/폐기 runbook URL을 Render 환경변수로 표시한다. `/api/diagnostics`는 비밀값 없이 이 설정 여부를 점검해 `ai.ready`와 warning으로 노출한다.
 
+장애 시 정책은 fail-closed다. Redis rate limit, DB 비용 원장 조회, AI 사용량 기록, provider token usage 중 비용 보호 판단에 필요한 요소가 불확실하면 AI 결과를 반환하지 않고 503으로 차단한다.
+
 ---
 
 ## 10. 요구사항 명세 (Requirements Specification)
@@ -397,7 +399,7 @@ AI 비용 보호는 `AI_RATE_LIMIT_PER_MINUTE`로 사용자별 분당 호출 상
 | NFR-03 | 규칙 기능 성능 | 스캐너·아웃라인·그림 네비의 규칙 매칭은 클라이언트에서 체감 지연 없이(백그라운드/지연 계산) 수행 |
 | NFR-04 | 데이터 보존 | 자동화가 사용자 입력을 덮어쓰지 않음(`user_edited` 우선). 추출 실패에도 등록 차단 금지 |
 | NFR-05 | 저장 안정성 | dirty 기반 debounce 저장, 수동 저장, 실패 시 최대 5분 backoff 재시도, IndexedDB 계정별 캐시, 로그아웃 전 저장 확인 |
-| NFR-06 | AI 비용 보호 | 운영 환경은 Redis 기반 rate limit를 사용해 사용자별 호출 상한을 인스턴스 간 공유하고, DB 기반 일/월 비용 원장으로 누적 추정 비용 한도를 차단. provider-side spend limit·billing alert·key rotation runbook을 diagnostics로 점검. Redis 설정 오류·연결 실패 시 AI 요청은 503으로 차단 |
+| NFR-06 | AI 비용 보호 | 운영 환경은 Redis 기반 rate limit를 사용해 사용자별 호출 상한을 인스턴스 간 공유하고, DB 기반 일/월 비용 원장으로 누적 추정 비용 한도를 차단. provider-side spend limit·billing alert·key rotation runbook을 diagnostics로 점검. Redis·비용 원장·사용량 기록·provider usage가 불확실하면 AI 요청은 fail-closed(503) |
 | NFR-07 | 지원 언어 | 한국어, 영어 (스캐너·네비 규칙은 한/영 병행) |
 | NFR-08 | 테스트 | 스캐너·로드맵 진행률·섹션/그림 파싱 등 규칙 로직은 순수 함수로 작성, 단위 테스트 필수. 기존 CI(ruff+pytest / eslint+vitest+build) 통과 |
 

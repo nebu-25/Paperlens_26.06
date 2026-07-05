@@ -139,6 +139,51 @@ def test_daily_cost_budget_blocks_before_provider_call(monkeypatch):
     assert "일일 비용 한도" in exc.value.detail
 
 
+def test_cost_budget_check_fails_closed_when_ledger_unavailable(monkeypatch):
+    _enable_ai(monkeypatch, 3)
+    monkeypatch.setattr(settings, "ai_daily_cost_limit_cents", 100)
+
+    def fail_totals(*args, **kwargs):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(ai_module.db, "get_ai_usage_totals", fail_totals)
+
+    with pytest.raises(HTTPException) as exc:
+        explain_term(TermExplanationRequest(term="t"), user_id="u1")
+    assert exc.value.status_code == 503
+    assert "cost ledger" in exc.value.detail
+
+
+def test_usage_recording_fails_closed(monkeypatch):
+    _enable_ai(monkeypatch, 3)
+    monkeypatch.setattr(
+        ai_module,
+        "_call_openrouter",
+        lambda *args, **kwargs: AiProviderResult(text="설명", prompt_tokens=1, total_tokens=1),
+    )
+
+    def fail_record(*args, **kwargs):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(ai_module.db, "record_ai_usage", fail_record)
+
+    with pytest.raises(HTTPException) as exc:
+        explain_term(TermExplanationRequest(term="t"), user_id="u1")
+    assert exc.value.status_code == 503
+    assert "could not be recorded" in exc.value.detail
+
+
+def test_missing_provider_usage_fails_closed_when_cost_guardrails_enabled(monkeypatch):
+    _enable_ai(monkeypatch, 3)
+    monkeypatch.setattr(settings, "ai_prompt_cost_per_million_cents", 10)
+    monkeypatch.setattr(ai_module, "_call_openrouter", lambda *args, **kwargs: AiProviderResult(text="설명"))
+
+    with pytest.raises(HTTPException) as exc:
+        explain_term(TermExplanationRequest(term="t"), user_id="u1")
+    assert exc.value.status_code == 503
+    assert "usage accounting" in exc.value.detail
+
+
 def test_extract_chat_completion_text_from_message_content():
     data = {"choices": [{"message": {"content": "  설명입니다.  "}}]}
 
