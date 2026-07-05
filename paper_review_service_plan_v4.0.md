@@ -346,6 +346,8 @@ AI 비용 보호는 `AI_RATE_LIMIT_PER_MINUTE`로 사용자별 분당 호출 상
 
 또한 성공한 AI 호출은 DB의 `ai_usage_events` 원장에 사용자·기능·모델·토큰·추정 비용 단위로 기록한다. `AI_DAILY_COST_LIMIT_CENTS`, `AI_MONTHLY_COST_LIMIT_CENTS`가 설정되면 호출 전 일/월 누적 추정 비용을 확인해 한도 도달 시 AI 요청을 차단한다. 모델 가격은 변동 가능성이 크므로 `AI_PROMPT_COST_PER_MILLION_CENTS`, `AI_COMPLETION_COST_PER_MILLION_CENTS`로 운영 환경에서 주입한다.
 
+3차 방어선으로 provider-side 안전장치를 운영 필수 항목으로 둔다. OpenRouter 등 provider 콘솔에서 spend limit와 billing alert를 설정하고, API key 회전/폐기 runbook URL을 Render 환경변수로 표시한다. `/api/diagnostics`는 비밀값 없이 이 설정 여부를 점검해 `ai.ready`와 warning으로 노출한다.
+
 ---
 
 ## 10. 요구사항 명세 (Requirements Specification)
@@ -395,7 +397,7 @@ AI 비용 보호는 `AI_RATE_LIMIT_PER_MINUTE`로 사용자별 분당 호출 상
 | NFR-03 | 규칙 기능 성능 | 스캐너·아웃라인·그림 네비의 규칙 매칭은 클라이언트에서 체감 지연 없이(백그라운드/지연 계산) 수행 |
 | NFR-04 | 데이터 보존 | 자동화가 사용자 입력을 덮어쓰지 않음(`user_edited` 우선). 추출 실패에도 등록 차단 금지 |
 | NFR-05 | 저장 안정성 | dirty 기반 debounce 저장, 수동 저장, 실패 시 최대 5분 backoff 재시도, IndexedDB 계정별 캐시, 로그아웃 전 저장 확인 |
-| NFR-06 | AI 비용 보호 | 운영 환경은 Redis 기반 rate limit를 사용해 사용자별 호출 상한을 인스턴스 간 공유하고, DB 기반 일/월 비용 원장으로 누적 추정 비용 한도를 차단. Redis 설정 오류·연결 실패 시 AI 요청은 503으로 차단 |
+| NFR-06 | AI 비용 보호 | 운영 환경은 Redis 기반 rate limit를 사용해 사용자별 호출 상한을 인스턴스 간 공유하고, DB 기반 일/월 비용 원장으로 누적 추정 비용 한도를 차단. provider-side spend limit·billing alert·key rotation runbook을 diagnostics로 점검. Redis 설정 오류·연결 실패 시 AI 요청은 503으로 차단 |
 | NFR-07 | 지원 언어 | 한국어, 영어 (스캐너·네비 규칙은 한/영 병행) |
 | NFR-08 | 테스트 | 스캐너·로드맵 진행률·섹션/그림 파싱 등 규칙 로직은 순수 함수로 작성, 단위 테스트 필수. 기존 CI(ruff+pytest / eslint+vitest+build) 통과 |
 
@@ -565,7 +567,7 @@ UC-07: 연구 질문 잡기 [코어] (프로젝트 레벨)
 | 자동 저장 | dirty 기반 debounce + 수동 저장 + backoff 재시도 + IndexedDB 계정별 캐시 | 코어 |
 | 인증 | Supabase Auth (HS256 직접 검증 + `/auth/v1/user` fallback) | 코어 |
 | AI/LLM | OpenRouter — **용어 설명 전용(본문·캡션)** (`AI_API_KEY` 선택 설정) | 보조 |
-| AI 비용 보호 | Redis 기반 rate limit (`REDIS_URL`, `AI_RATE_LIMIT_PER_MINUTE`) + DB 기반 비용 원장(`ai_usage_events`, 일/월 비용 한도) | 운영은 Redis 및 가격/한도 설정 필수 |
+| AI 비용 보호 | Redis 기반 rate limit (`REDIS_URL`, `AI_RATE_LIMIT_PER_MINUTE`) + DB 기반 비용 원장(`ai_usage_events`, 일/월 비용 한도) + provider-side 한도/알림/키 회전 점검 | 운영은 Redis 및 가격/한도/provider guardrail 설정 필수 |
 | ~~Vector DB~~ | ~~Pinecone/Chroma (RAG)~~ | Q&A 폐기로 불필요 |
 | ~~인용 네트워크~~ | ~~Semantic Scholar API~~ | 보류 |
 | CI/검증 | GitHub Actions (ruff+pytest, eslint+vitest+build, Production smoke) | |

@@ -67,7 +67,13 @@ Backend:
 | `AI_MODEL` | 선택. 기본 `openai/gpt-4o-mini` |
 | `AI_SITE_URL` | 선택. OpenRouter 앱 표시용 |
 | `AI_APP_NAME` | 선택. OpenRouter 앱 표시용 |
-| `AI_RATE_LIMIT_PER_MINUTE` | 선택. AI 엔드포인트 사용자별 분당 호출 상한(기본 10, 0이면 무제한). 인메모리 카운터라 인스턴스 재시작 시 리셋·인스턴스 간 비공유 |
+| `AI_RATE_LIMIT_PER_MINUTE` | 선택. AI 엔드포인트 사용자별 분당 호출 상한(기본 10, 0이면 무제한) |
+| `REDIS_URL` | 운영 필수. AI rate limit 상태 공유용 Redis URL |
+| `AI_DAILY_COST_LIMIT_CENTS` / `AI_MONTHLY_COST_LIMIT_CENTS` | 운영 권장. DB 비용 원장 기반 일/월 AI 추정 비용 한도 |
+| `AI_PROMPT_COST_PER_MILLION_CENTS` / `AI_COMPLETION_COST_PER_MILLION_CENTS` | 운영 권장. 모델별 1M token당 prompt/completion 가격(USD cents) |
+| `AI_PROVIDER_SPEND_LIMIT_CONFIGURED` | 운영 필수 marker. OpenRouter 등 provider 콘솔의 spend limit 설정 완료 시 `true` |
+| `AI_PROVIDER_BILLING_ALERTS_CONFIGURED` | 운영 필수 marker. provider 결제 알림 설정 완료 시 `true` |
+| `AI_KEY_ROTATION_RUNBOOK_URL` | 운영 필수 marker. AI API key 회전/폐기 절차 문서 URL |
 | `CROSSREF_MAILTO` | 선택. CrossRef User-Agent contact |
 | `SAMPLE_PDF_URL` | 선택. 배포 서버에 샘플 PDF 파일을 두지 않고 샘플 버튼을 사용할 때의 원격 PDF URL |
 | `OCR_ENABLED` | 선택. 손상/스캔 PDF의 OCR 재추출 활성화(기본 false). 켜려면 requirements-ocr.txt 설치 필요 |
@@ -143,6 +149,26 @@ Fallback 사용자 조회 결과는 token hash 기준으로 최대 5분 동안, 
 
 AI 보조 엔드포인트(`POST /api/ai/term-explanation`)도 인증이 켜져 있으면 로그인 토큰을 요구하며, 검증된 `user_id` 기준으로 분당 호출을 제한합니다(`AI_RATE_LIMIT_PER_MINUTE`). 인증이 꺼져 있으면 단일 사용자 `local` 기준으로 합산됩니다.
 
+## AI Cost Guardrails
+
+AI 보조 기능은 짧은 용어 설명 전용이지만, 운영에서는 앱 내부 제한과 provider-side 제한을 같이 둡니다.
+
+앱 내부 보호:
+
+- `REDIS_URL`이 설정되면 AI rate limit가 Redis에 저장되어 다중 워커·다중 인스턴스에서 공유됩니다.
+- 성공한 AI 호출은 DB `ai_usage_events` 원장에 사용자, 기능, 모델, token usage, 추정 비용으로 기록됩니다.
+- `AI_DAILY_COST_LIMIT_CENTS`, `AI_MONTHLY_COST_LIMIT_CENTS`가 설정되면 호출 전에 누적 추정 비용을 확인하고 초과 시 429로 차단합니다.
+- token 단가는 provider/model 변경 시 바뀌므로 `AI_PROMPT_COST_PER_MILLION_CENTS`, `AI_COMPLETION_COST_PER_MILLION_CENTS`로 운영 환경에서 주입합니다.
+
+Provider-side 운영 체크:
+
+- OpenRouter 등 provider 콘솔에서 API key 또는 account 단위 spend limit를 설정합니다.
+- 결제 알림을 최소 1개 이상 설정합니다.
+- API key 유출·퇴사·권한 변경 시 키를 폐기하고 재발급하는 회전 절차 문서를 유지합니다.
+- 위 세 항목을 완료한 뒤 `AI_PROVIDER_SPEND_LIMIT_CONFIGURED=true`, `AI_PROVIDER_BILLING_ALERTS_CONFIGURED=true`, `AI_KEY_ROTATION_RUNBOOK_URL=<runbook-url>`을 Render에 설정합니다.
+
+`/api/diagnostics`는 비밀값을 반환하지 않고 위 guardrail 설정 여부와 warning만 반환합니다. AI가 켜져 있는데 guardrail이 비어 있으면 `ai.ready=false`와 warning이 표시됩니다.
+
 ## PostgreSQL
 
 운영 배포에서는 외부 PostgreSQL을 권장합니다. Render 환경변수 `DATABASE_URL`에 연결 문자열을 설정한 뒤 재배포합니다.
@@ -215,7 +241,7 @@ python3 backend/scripts/smoke_deployment.py
 
 GitHub Actions의 `Production smoke` 워크플로도 같은 검사를 수행합니다. 이 워크플로는 수동 실행할 수 있고, GitHub Pages 배포 워크플로가 성공한 뒤 자동으로도 실행됩니다. Render 배포는 GitHub Actions가 완료 시점을 직접 알 수 없으므로 Render 배포 후 필요할 때 수동 실행합니다.
 
-`/api/diagnostics`는 비밀값을 반환하지 않고 Supabase/Auth/DB/AI 설정 여부만 반환합니다. 운영에서는 `auth.mode`가 `supabase`, `auth.ready`가 `true`, `auth.warnings`가 빈 배열이어야 합니다. `smoke_deployment.py`는 다음 공개 항목을 확인합니다.
+`/api/diagnostics`는 비밀값을 반환하지 않고 Supabase/Auth/DB/AI 설정 여부만 반환합니다. 운영에서는 `auth.mode`가 `supabase`, `auth.ready`가 `true`, `auth.warnings`가 빈 배열이어야 합니다. AI를 켠 운영 환경에서는 `ai.ready`도 `true`, `ai.warnings`도 빈 배열이어야 합니다. `smoke_deployment.py`는 다음 공개 항목을 확인합니다.
 
 - Pages 루트, `/service_home/`, `favicon.svg`
 - Render `/api/health`, `/api/diagnostics`(`auth`/`ai`/`ocr` 상태 포함), `/api/ai/status`

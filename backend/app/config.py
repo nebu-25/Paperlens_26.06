@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     ai_monthly_cost_limit_cents: int = 0
     ai_prompt_cost_per_million_cents: int = 0
     ai_completion_cost_per_million_cents: int = 0
+    # Provider-side guardrails are configured outside the app (OpenRouter billing UI, alerts,
+    # and key rotation process). These flags make deployment diagnostics catch missing ops setup.
+    ai_provider_spend_limit_configured: bool = False
+    ai_provider_billing_alerts_configured: bool = False
+    ai_key_rotation_runbook_url: str = ""
     # AI rate limit 상태를 공유할 Redis URL. 설정 시 다중 워커/다중 인스턴스에서 공유된다.
     # 비워두면 개발 편의를 위해 프로세스 메모리 저장소를 사용한다.
     redis_url: str = ""
@@ -102,6 +107,43 @@ class Settings(BaseSettings):
             "mode": "supabase" if configured["supabase_jwt_secret"] else "local",
             "configured": configured,
             "ready": all(configured.values()),
+            "warnings": warnings,
+        }
+
+    @property
+    def ai_diagnostics(self) -> dict[str, object]:
+        configured = {
+            "api_key": bool(self.ai_api_key.strip()),
+            "redis_url": bool(self.redis_url.strip()),
+            "daily_cost_limit": self.ai_daily_cost_limit_cents > 0,
+            "monthly_cost_limit": self.ai_monthly_cost_limit_cents > 0,
+            "prompt_price": self.ai_prompt_cost_per_million_cents > 0,
+            "completion_price": self.ai_completion_cost_per_million_cents > 0,
+            "provider_spend_limit": self.ai_provider_spend_limit_configured,
+            "provider_billing_alerts": self.ai_provider_billing_alerts_configured,
+            "key_rotation_runbook": bool(self.ai_key_rotation_runbook_url.strip()),
+        }
+        warnings: list[str] = []
+        if self.ai_enabled:
+            if not configured["redis_url"]:
+                warnings.append("Set REDIS_URL so AI rate limits are shared across workers.")
+            if not configured["daily_cost_limit"] and not configured["monthly_cost_limit"]:
+                warnings.append("Set AI_DAILY_COST_LIMIT_CENTS or AI_MONTHLY_COST_LIMIT_CENTS.")
+            if not configured["prompt_price"] or not configured["completion_price"]:
+                warnings.append(
+                    "Set AI_PROMPT_COST_PER_MILLION_CENTS and AI_COMPLETION_COST_PER_MILLION_CENTS for cost estimates."
+                )
+            if not configured["provider_spend_limit"]:
+                warnings.append("Configure provider-side AI spend limits.")
+            if not configured["provider_billing_alerts"]:
+                warnings.append("Configure provider-side billing alerts.")
+            if not configured["key_rotation_runbook"]:
+                warnings.append("Document the AI API key rotation runbook URL.")
+        return {
+            "enabled": self.ai_enabled,
+            "model": self.ai_model,
+            "configured": configured,
+            "ready": not warnings if self.ai_enabled else True,
             "warnings": warnings,
         }
 

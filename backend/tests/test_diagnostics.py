@@ -30,3 +30,39 @@ def test_diagnostics_reports_supabase_ready(monkeypatch):
     assert data["auth"]["mode"] == "supabase"
     assert data["auth"]["ready"] is True
     assert data["auth"]["warnings"] == []
+
+
+def test_diagnostics_reports_ai_guardrail_warnings(monkeypatch):
+    monkeypatch.setattr(settings, "ai_api_key", "key")
+    monkeypatch.setattr(settings, "redis_url", "")
+    monkeypatch.setattr(settings, "ai_daily_cost_limit_cents", 0)
+    monkeypatch.setattr(settings, "ai_monthly_cost_limit_cents", 0)
+    monkeypatch.setattr(settings, "ai_prompt_cost_per_million_cents", 0)
+    monkeypatch.setattr(settings, "ai_completion_cost_per_million_cents", 0)
+    monkeypatch.setattr(settings, "ai_provider_spend_limit_configured", False)
+    monkeypatch.setattr(settings, "ai_provider_billing_alerts_configured", False)
+    monkeypatch.setattr(settings, "ai_key_rotation_runbook_url", "")
+
+    data = diagnostics()
+
+    assert data["ai"]["enabled"] is True
+    assert data["ai"]["ready"] is False
+    assert data["ai"]["configured"]["provider_spend_limit"] is False
+    assert data["ai"]["warnings"]
+
+
+def test_diagnostics_reports_ai_guardrails_ready(monkeypatch):
+    monkeypatch.setattr(settings, "ai_api_key", "key")
+    monkeypatch.setattr(settings, "redis_url", "redis://cache")
+    monkeypatch.setattr(settings, "ai_daily_cost_limit_cents", 100)
+    monkeypatch.setattr(settings, "ai_monthly_cost_limit_cents", 1000)
+    monkeypatch.setattr(settings, "ai_prompt_cost_per_million_cents", 10)
+    monkeypatch.setattr(settings, "ai_completion_cost_per_million_cents", 20)
+    monkeypatch.setattr(settings, "ai_provider_spend_limit_configured", True)
+    monkeypatch.setattr(settings, "ai_provider_billing_alerts_configured", True)
+    monkeypatch.setattr(settings, "ai_key_rotation_runbook_url", "https://example.com/runbook")
+
+    data = diagnostics()
+
+    assert data["ai"]["ready"] is True
+    assert data["ai"]["warnings"] == []

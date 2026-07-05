@@ -99,6 +99,8 @@ def _check_api(api_base: str) -> None:
         f"database.mode expected postgresql, got {database.get('mode')}",
     )
     _assert(ai.get("enabled") is True, f"ai.enabled expected true, got {ai.get('enabled')}")
+    _assert(ai.get("ready") is True, f"ai.ready expected true, got {ai.get('ready')}")
+    _assert(ai.get("warnings") == [], f"ai.warnings expected [], got {ai.get('warnings')}")
 
     ai_status = _request("GET", f"{api_base}/api/ai/status")
     _assert(ai_status.status == 200, f"ai/status expected 200, got {ai_status.status}")

@@ -60,10 +60,7 @@ def diagnostics() -> dict[str, object]:
         "database": {
             "mode": "postgresql" if settings.database_url.strip() else "sqlite",
         },
-        "ai": {
-            "enabled": settings.ai_enabled,
-            "model": settings.ai_model,
-        },
+        "ai": settings.ai_diagnostics,
         "ocr": {
             "enabled": settings.ocr_enabled,
             "max_pages": settings.ocr_max_pages,
