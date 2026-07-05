@@ -13,7 +13,7 @@ interface WorkspaceHeaderProps {
 }
 
 export function WorkspaceHeader({ authEnabled, authReady, user }: WorkspaceHeaderProps) {
-  const { paper, aiEnabled } = useWorkspace().store;
+  const { paper, aiEnabled, pending, syncing, savedAt, saveNow } = useWorkspace().store;
   // 라이브러리 취합 + 연구 질문 빌더 오버레이 (FR-25/28)
   const [digestOpen, setDigestOpen] = useState(false);
   return (
@@ -59,7 +59,16 @@ export function WorkspaceHeader({ authEnabled, authReady, user }: WorkspaceHeade
         <span className="hidden rounded bg-paper px-3 py-1 text-xs text-muted sm:inline-flex">
           코어 MVP · {aiEnabled ? 'AI 용어 설명 활성' : 'AI 보조 준비 중'}
         </span>
-        <AuthControls enabled={authEnabled} ready={authReady} user={user} variant="compact" />
+        <AuthControls
+          enabled={authEnabled}
+          ready={authReady}
+          user={user}
+          variant="compact"
+          pendingChanges={pending}
+          syncing={syncing}
+          savedAt={savedAt}
+          onBeforeSignOut={saveNow}
+        />
       </div>
       {digestOpen && <LibraryDigest onClose={() => setDigestOpen(false)} />}
     </header>

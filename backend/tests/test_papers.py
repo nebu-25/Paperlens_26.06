@@ -4,6 +4,7 @@ DOI 추출, 메타 정규화, 섹션 헤딩 자동 분류(#6), arXiv 메타·ref
 """
 
 import pytest
+from fastapi import HTTPException
 
 from app.routers import papers
 
@@ -48,6 +49,97 @@ class TestUniqueTags:
         tags = papers._unique_tags(values, limit=8)
         assert tags[:3] == ["NLP", "Vision", "A"]
         assert len(tags) == 8
+
+
+class TestPublicPdfUrlValidation:
+    def test_allows_public_domain_when_dns_is_public(self, monkeypatch):
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            assert host == "example.com"
+            assert port is None
+            return [(papers.socket.AF_INET, papers.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
+
+        monkeypatch.setattr(papers.socket, "getaddrinfo", fake_getaddrinfo)
+
+        assert papers._validate_public_pdf_url(" https://example.com/paper.pdf ") == "https://example.com/paper.pdf"
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "ftp://example.com/paper.pdf",
+            "https://user:pass@example.com/paper.pdf",
+            "https://example.com:bad/paper.pdf",
+            "https:///paper.pdf",
+        ],
+    )
+    def test_rejects_invalid_url_shapes(self, url):
+        with pytest.raises(HTTPException) as exc:
+            papers._validate_public_pdf_url(url)
+
+        assert exc.value.status_code == 400
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://localhost/paper.pdf",
+            "http://127.0.0.1/paper.pdf",
+            "http://[::1]/paper.pdf",
+            "http://10.0.0.1/paper.pdf",
+            "http://172.16.0.1/paper.pdf",
+            "http://192.168.0.10/paper.pdf",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://0.0.0.0/paper.pdf",
+        ],
+    )
+    def test_rejects_local_and_private_ip_literals(self, url):
+        with pytest.raises(HTTPException) as exc:
+            papers._validate_public_pdf_url(url)
+
+        assert exc.value.status_code == 400
+        assert "공용 인터넷 주소" in str(exc.value.detail)
+
+    def test_rejects_domain_that_resolves_to_private_ip(self, monkeypatch):
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            assert host == "evil.example"
+            return [(papers.socket.AF_INET, papers.socket.SOCK_STREAM, 6, "", ("10.0.0.5", 443))]
+
+        monkeypatch.setattr(papers.socket, "getaddrinfo", fake_getaddrinfo)
+
+        with pytest.raises(HTTPException) as exc:
+            papers._validate_public_pdf_url("https://evil.example/paper.pdf")
+
+        assert exc.value.status_code == 400
+        assert "evil.example" in str(exc.value.detail)
+
+    def test_rejects_domain_when_any_resolved_ip_is_private(self, monkeypatch):
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            assert host == "mixed.example"
+            return [
+                (papers.socket.AF_INET, papers.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+                (papers.socket.AF_INET, papers.socket.SOCK_STREAM, 6, "", ("192.168.0.10", 443)),
+            ]
+
+        monkeypatch.setattr(papers.socket, "getaddrinfo", fake_getaddrinfo)
+
+        with pytest.raises(HTTPException) as exc:
+            papers._validate_public_pdf_url("https://mixed.example/paper.pdf")
+
+        assert exc.value.status_code == 400
+
+    def test_revalidates_redirect_target(self):
+        handler = papers._PublicOnlyRedirectHandler()
+        request = papers.urllib.request.Request("https://example.com/paper.pdf")
+
+        with pytest.raises(HTTPException) as exc:
+            handler.redirect_request(
+                request,
+                fp=None,
+                code=302,
+                msg="Found",
+                headers={},
+                newurl="http://127.0.0.1/paper.pdf",
+            )
+
+        assert exc.value.status_code == 400
 
 
 class TestCanonicalSection:

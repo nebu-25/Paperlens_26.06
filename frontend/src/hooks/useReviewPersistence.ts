@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { API_BASE, STORAGE_KEY } from '../constants';
+import { API_BASE } from '../constants';
 import { classifyApiException, throwApiResponseError } from '../lib/apiErrors';
+import {
+  clearLegacyLocalReviewCache,
+  readLegacyLocalReviewCache,
+  readLocalReviewCache,
+  writeLocalReviewCache,
+  type LocalReviewSnapshot,
+} from '../lib/localReviewCache';
 import { EMPTY_NOTE, normalizeNote } from '../lib/notes';
 import type { AppNotice, Paper, ReviewNote } from '../types';
 
@@ -15,6 +22,7 @@ interface UseReviewPersistenceArgs {
   accessToken: string | null;
   authReady: boolean;
   authEnabled: boolean;
+  userId: string | null;
 }
 
 const SAVE_DEBOUNCE_MS = 5000; // 편집 멈춘 뒤 저장까지 대기(trailing)
@@ -25,15 +33,6 @@ const SAVE_MAX_WAIT_MS = 10000; // 연속 편집 중 강제 저장 상한(maxWai
 export function nextSaveWaitMs(elapsedSinceFirstDirty: number): number {
   return Math.min(SAVE_DEBOUNCE_MS, Math.max(0, SAVE_MAX_WAIT_MS - elapsedSinceFirstDirty));
 }
-
-type LocalSnapshot = {
-  library?: Record<string, Paper>;
-  notes?: Record<string, ReviewNote>;
-  activeId?: string | null;
-  dirtyIds?: string[];
-  textDirtyIds?: string[];
-  deletedIds?: string[];
-};
 
 async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -47,6 +46,10 @@ async function fetchWithTimeout(
   } finally {
     window.clearTimeout(timer);
   }
+}
+
+function localCacheAccountKey(authEnabled: boolean, userId: string | null): string {
+  return authEnabled ? `user:${userId ?? 'anonymous'}` : 'local';
 }
 
 function noticeForSyncError(error: unknown): AppNotice {
@@ -69,6 +72,7 @@ export function useReviewPersistence({
   accessToken,
   authReady,
   authEnabled,
+  userId,
 }: UseReviewPersistenceArgs) {
   const [loaded, setLoaded] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -86,9 +90,11 @@ export function useReviewPersistence({
   const textDirtyRef = useRef<Set<string>>(new Set());
   const deletedIdsRef = useRef<Set<string>>(new Set());
   const accessTokenRef = useRef(accessToken);
+  const accountKeyRef = useRef(localCacheAccountKey(authEnabled, userId));
   const retryDelayMsRef = useRef(10000);
   const nextRetryAtRef = useRef(0);
   const flushInFlightRef = useRef(false);
+  const flushPromiseRef = useRef<Promise<boolean> | null>(null);
   // 연속 편집 중 debounce가 계속 밀려도 저장을 보장하기 위한 maxWait 기준점.
   // 첫 미저장 변경 시각을 담고, flush 시 null로 초기화한다.
   const dirtySinceRef = useRef<number | null>(null);
@@ -96,6 +102,7 @@ export function useReviewPersistence({
   notesRef.current = notes;
   activeIdRef.current = activeId;
   accessTokenRef.current = accessToken;
+  accountKeyRef.current = localCacheAccountKey(authEnabled, userId);
 
   const authHeaders = useCallback((): Record<string, string> => {
     const token = accessTokenRef.current;
@@ -106,19 +113,22 @@ export function useReviewPersistence({
     setPending(dirtyRef.current.size + deletedIdsRef.current.size);
   }, []);
 
+  const localSnapshot = useCallback((): LocalReviewSnapshot => ({
+    library: libraryRef.current,
+    notes: notesRef.current,
+    activeId: activeIdRef.current,
+    dirtyIds: Array.from(dirtyRef.current),
+    textDirtyIds: Array.from(textDirtyRef.current),
+    deletedIds: Array.from(deletedIdsRef.current),
+  }), []);
+
+  const persistLocalNow = useCallback(async () => {
+    await writeLocalReviewCache(accountKeyRef.current, localSnapshot());
+  }, [localSnapshot]);
+
   const persistLocal = useCallback(() => {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        library: libraryRef.current,
-        notes: notesRef.current,
-        activeId: activeIdRef.current,
-        dirtyIds: Array.from(dirtyRef.current),
-        textDirtyIds: Array.from(textDirtyRef.current),
-        deletedIds: Array.from(deletedIdsRef.current),
-      }),
-    );
-  }, []);
+    void persistLocalNow().catch(() => {});
+  }, [persistLocalNow]);
 
   const markDirty = useCallback((id: string | null, options: { includeText?: boolean } = {}) => {
     if (!id) return;
@@ -192,73 +202,82 @@ export function useReviewPersistence({
     setSyncNotice(null);
   }, []);
 
-  const flush = useCallback(async () => {
-    if (flushInFlightRef.current) return;
-    if (deletedIdsRef.current.size === 0 && dirtyRef.current.size === 0) return;
-    flushInFlightRef.current = true;
-    setSyncing(true);
+  const flush = useCallback(async (): Promise<boolean> => {
+    if (flushPromiseRef.current) return flushPromiseRef.current;
+    if (deletedIdsRef.current.size === 0 && dirtyRef.current.size === 0) return true;
+    const run = async (): Promise<boolean> => {
+      flushInFlightRef.current = true;
+      setSyncing(true);
+      try {
+        try {
+          await persistLocalNow();
+        } catch {
+          /* ignore */
+        }
+        const deleteIds = Array.from(deletedIdsRef.current);
+        const ids = Array.from(dirtyRef.current);
+        let savedAny = false;
+        let failure: unknown = null;
+        for (const id of deleteIds) {
+          try {
+            await deleteRemote(id);
+            deletedIdsRef.current.delete(id);
+            savedAny = true;
+          } catch (error) {
+            failure = failure ?? error;
+          }
+        }
+        for (const id of ids) {
+          if (deletedIdsRef.current.has(id)) {
+            dirtyRef.current.delete(id);
+            continue;
+          }
+          const paper = libraryRef.current[id];
+          if (!paper) {
+            dirtyRef.current.delete(id);
+            continue;
+          }
+          try {
+            const res = await fetch(`${API_BASE}/notes/${id}`, {
+              method: 'PUT',
+              headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                paper: paperForSave(id, paper),
+                note: notesRef.current[id] ?? EMPTY_NOTE,
+              }),
+            });
+            if (!res.ok) await throwApiResponseError(res, '노트 저장을 서버에 반영하지 못했습니다.');
+            dirtyRef.current.delete(id);
+            textDirtyRef.current.delete(id);
+            savedAny = true;
+          } catch (error) {
+            failure = failure ?? error;
+          }
+        }
+        try {
+          await persistLocalNow();
+        } catch {
+          /* ignore */
+        }
+        updatePending();
+        if (failure) {
+          noteSyncFailure(failure);
+          return false;
+        }
+        if (savedAny) noteSyncSuccess(savedAny);
+        return true;
+      } finally {
+        flushInFlightRef.current = false;
+        setSyncing(false);
+      }
+    };
+    flushPromiseRef.current = run();
     try {
-      try {
-        persistLocal();
-      } catch {
-        /* ignore */
-      }
-      const deleteIds = Array.from(deletedIdsRef.current);
-      const ids = Array.from(dirtyRef.current);
-      let savedAny = false;
-      let failure: unknown = null;
-      for (const id of deleteIds) {
-        try {
-          await deleteRemote(id);
-          deletedIdsRef.current.delete(id);
-          savedAny = true;
-        } catch (error) {
-          failure = failure ?? error;
-        }
-      }
-      for (const id of ids) {
-        if (deletedIdsRef.current.has(id)) {
-          dirtyRef.current.delete(id);
-          continue;
-        }
-        const paper = libraryRef.current[id];
-        if (!paper) {
-          dirtyRef.current.delete(id);
-          continue;
-        }
-        try {
-          const res = await fetch(`${API_BASE}/notes/${id}`, {
-            method: 'PUT',
-            headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              paper: paperForSave(id, paper),
-              note: notesRef.current[id] ?? EMPTY_NOTE,
-            }),
-          });
-          if (!res.ok) await throwApiResponseError(res, '노트 저장을 서버에 반영하지 못했습니다.');
-          dirtyRef.current.delete(id);
-          textDirtyRef.current.delete(id);
-          savedAny = true;
-        } catch (error) {
-          failure = failure ?? error;
-        }
-      }
-      try {
-        persistLocal();
-      } catch {
-        /* ignore */
-      }
-      updatePending();
-      if (failure) {
-        noteSyncFailure(failure);
-      } else if (savedAny) {
-        noteSyncSuccess(savedAny);
-      }
+      return await flushPromiseRef.current;
     } finally {
-      flushInFlightRef.current = false;
-      setSyncing(false);
+      flushPromiseRef.current = null;
     }
-  }, [authHeaders, deleteRemote, noteSyncFailure, noteSyncSuccess, paperForSave, persistLocal, updatePending]);
+  }, [authHeaders, deleteRemote, noteSyncFailure, noteSyncSuccess, paperForSave, persistLocalNow, updatePending]);
 
   const retryNow = useCallback(() => {
     nextRetryAtRef.current = 0;
@@ -336,27 +355,35 @@ export function useReviewPersistence({
       return;
     }
 
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const data = JSON.parse(raw) as LocalSnapshot;
-        activeHint = data.activeId ?? null;
-        dirtyRef.current = new Set(data.dirtyIds ?? []);
-        textDirtyRef.current = new Set(data.textDirtyIds ?? []);
-        deletedIdsRef.current = new Set(data.deletedIds ?? []);
-        updatePending();
-        if (data.library && data.notes) {
-          apply(data.library, data.notes);
-          restoredLocal = Object.keys(data.library).length > 0;
-          if (restoredLocal) setSavedAt('로컬 캐시 표시');
-          setLoaded(true);
-        }
-      }
-    } catch {
-      /* 손상된 캐시는 무시 */
-    }
-
     (async () => {
+      try {
+        const accountKey = accountKeyRef.current;
+        const currentSnapshot = await readLocalReviewCache(accountKey);
+        const data = currentSnapshot ?? readLegacyLocalReviewCache();
+        const shouldMigrateLegacy = !currentSnapshot && Boolean(data);
+        if (cancelled) return;
+        if (data) {
+          activeHint = data.activeId ?? null;
+          dirtyRef.current = new Set(data.dirtyIds ?? []);
+          textDirtyRef.current = new Set(data.textDirtyIds ?? []);
+          deletedIdsRef.current = new Set(data.deletedIds ?? []);
+          updatePending();
+          if (data.library && data.notes) {
+            apply(data.library, data.notes);
+            restoredLocal = Object.keys(data.library).length > 0;
+            if (restoredLocal) setSavedAt('로컬 캐시 표시');
+            setLoaded(true);
+          }
+        }
+        if (shouldMigrateLegacy && restoredLocal) {
+          void writeLocalReviewCache(accountKey, localSnapshot())
+            .then(clearLegacyLocalReviewCache)
+            .catch(() => {});
+        }
+      } catch {
+        /* 손상된 캐시는 무시 */
+      }
+
       try {
         if (!restoredLocal) setSavedAt('서버 연결 확인 중');
         await fetchWithTimeout(`${API_BASE}/health`, {}, 5000).catch(() => undefined);
@@ -389,7 +416,18 @@ export function useReviewPersistence({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, authEnabled, authHeaders, authReady, setActiveId, setLibrary, setNotes, updatePending]);
+  }, [
+    accessToken,
+    authEnabled,
+    authHeaders,
+    authReady,
+    localSnapshot,
+    setActiveId,
+    setLibrary,
+    setNotes,
+    updatePending,
+    userId,
+  ]);
 
   useEffect(() => {
     if (!loaded) return;

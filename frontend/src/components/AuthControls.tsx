@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertCircle, ArrowRight, LogIn, LogOut, UserCircle } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { clearLegacyLocalReviewCache, clearLocalReviewCache } from '../lib/localReviewCache';
 
 interface AuthControlsProps {
   enabled: boolean;
@@ -9,14 +10,68 @@ interface AuthControlsProps {
   user: User | null;
   variant?: 'panel' | 'compact';
   onEnterService?: () => void;
+  pendingChanges?: number;
+  syncing?: boolean;
+  savedAt?: string | null;
+  onBeforeSignOut?: () => Promise<boolean>;
 }
 
-export function AuthControls({ enabled, ready, user, variant = 'panel', onEnterService }: AuthControlsProps) {
+export function AuthControls({
+  enabled,
+  ready,
+  user,
+  variant = 'panel',
+  onEnterService,
+  pendingChanges = 0,
+  syncing = false,
+  savedAt = null,
+  onBeforeSignOut,
+}: AuthControlsProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+
+  async function signOut() {
+    if (pendingChanges > 0 || syncing) {
+      const shouldSave = window.confirm(
+        syncing
+          ? '저장이 진행 중입니다. 완료를 기다린 뒤 로그아웃합니다.'
+          : `서버에 아직 반영되지 않은 변경 ${pendingChanges}건이 있습니다. 지금 저장한 뒤 로그아웃할까요?`,
+      );
+      if (!shouldSave) return;
+      setBusy(true);
+      setMessage('저장 후 로그아웃 중입니다.');
+      const saved = await onBeforeSignOut?.();
+      setBusy(false);
+      if (!saved) {
+        setMessage('서버 저장에 실패했습니다. 로컬 임시 저장본은 유지됩니다.');
+        const signOutWithoutClearing = window.confirm(
+          '서버 저장에 실패했습니다. 로그아웃하면 이 브라우저의 임시 저장본은 유지하고, 다음 로그인 때 다시 동기화합니다. 그래도 로그아웃할까요?',
+        );
+        if (!signOutWithoutClearing) return;
+        await supabase?.auth.signOut();
+        return;
+      }
+    } else if (savedAt?.startsWith('로컬 저장')) {
+      const proceed = window.confirm(
+        '최근 변경이 서버가 아니라 이 브라우저에만 저장되어 있습니다. 지금 저장을 다시 시도한 뒤 로그아웃할까요?',
+      );
+      if (!proceed) return;
+      setBusy(true);
+      setMessage('저장 후 로그아웃 중입니다.');
+      const saved = await onBeforeSignOut?.();
+      setBusy(false);
+      if (!saved) {
+        setMessage('서버 저장에 실패했습니다. 로컬 임시 저장본은 유지됩니다.');
+        return;
+      }
+    }
+    if (user?.id) await clearLocalReviewCache(`user:${user.id}`);
+    clearLegacyLocalReviewCache();
+    await supabase?.auth.signOut();
+  }
 
   if (!enabled) {
     if (variant === 'compact') {
@@ -67,7 +122,7 @@ export function AuthControls({ enabled, ready, user, variant = 'panel', onEnterS
             className="rounded p-1 hover:bg-paper hover:text-action sm:ml-1 sm:p-0.5"
             title="로그아웃"
             aria-label="로그아웃"
-            onClick={() => void supabase?.auth.signOut()}
+            onClick={() => void signOut()}
           >
             <LogOut size={13} />
           </button>
@@ -83,7 +138,7 @@ export function AuthControls({ enabled, ready, user, variant = 'panel', onEnterS
           <button
             type="button"
             className="inline-flex shrink-0 items-center gap-1 rounded border border-line px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
-            onClick={() => void supabase?.auth.signOut()}
+            onClick={() => void signOut()}
           >
             <LogOut size={13} />
             로그아웃

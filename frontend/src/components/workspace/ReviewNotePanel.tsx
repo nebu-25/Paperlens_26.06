@@ -167,14 +167,15 @@ export function ReviewNotePanel() {
                 {retryLabel}
               </span>
             )}
-            {pending > 0 && !online && (
+            {pending > 0 && (
               <button
                 type="button"
                 className="inline-flex items-center rounded border border-line bg-white px-2 py-1 text-xs font-semibold text-muted hover:border-action hover:text-action disabled:opacity-60"
                 disabled={syncing}
                 onClick={retryNow}
+                title={online ? '미저장 변경을 지금 서버에 저장합니다' : '서버 연결을 다시 시도합니다'}
               >
-                지금 다시 저장
+                {online ? '지금 저장' : '지금 다시 저장'}
               </button>
             )}
           </div>

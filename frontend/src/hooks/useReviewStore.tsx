@@ -47,10 +47,12 @@ export function useReviewStore({
   accessToken,
   authReady,
   authEnabled,
+  userId = null,
 }: {
   accessToken: string | null;
   authReady: boolean;
   authEnabled: boolean;
+  userId?: string | null;
 }) {
   // 논문별로 보관: library[id] = 논문, notes[id] = 그 논문의 리뷰 노트
   const [library, setLibrary] = useState<Record<string, Paper>>({});
@@ -117,6 +119,7 @@ export function useReviewStore({
       accessToken,
       authReady,
       authEnabled,
+      userId,
     });
 
   const authHeaders: Record<string, string> = accessToken
@@ -174,6 +177,13 @@ export function useReviewStore({
     } catch {
       return false;
     }
+  }
+
+  function isLocalFileReference(value: string): boolean {
+    return /^file:\/\//i.test(value)
+      || /^[a-z]:[\\/]/i.test(value)
+      || /^\\\\/.test(value)
+      || value.startsWith('/');
   }
 
   function isLikelyDoi(value: string): boolean {
@@ -725,6 +735,16 @@ export function useReviewStore({
     setDoiLoading(true);
     setUploadPhase('metadata');
     try {
+      if (isLocalFileReference(query)) {
+        setUploadNotice({
+          tone: 'warning',
+          title: 'PDF 파일 업로드가 필요합니다',
+          message:
+            '내 컴퓨터의 PDF는 URL 입력칸이 아니라 PDF 업로드 버튼으로 등록해 주세요. URL 등록은 공용 인터넷에서 바로 열리는 PDF 주소만 지원합니다.',
+        });
+        return;
+      }
+
       if (isPdfUrl(query)) {
         const sourceKey = `url:${query}`;
         const duplicate = Object.values(libraryRef.current).find((p) => p.sourceKey === sourceKey);
@@ -751,7 +771,15 @@ export function useReviewStore({
           headers: authHeaders,
           body: form,
         });
-        if (!pdfRes.ok) await throwApiResponseError(pdfRes, 'PDF URL을 처리하지 못했습니다.');
+        if (!pdfRes.ok) {
+          const apiError = await apiErrorFromResponse(pdfRes, 'PDF URL을 처리하지 못했습니다.');
+          setUploadNotice({
+            tone: pdfRes.status >= 500 ? 'error' : 'warning',
+            title: apiError.title,
+            message: apiError.message,
+          });
+          return;
+        }
         const data: {
           filename: string;
           text: string;
@@ -814,7 +842,7 @@ export function useReviewStore({
         setUploadNotice({
           tone: 'warning',
           title: 'PDF 원문 URL이 필요합니다',
-          message: '웹페이지 주소는 원문을 안정적으로 가져올 수 없습니다. PDF 파일을 업로드하거나 PDF로 바로 열리는 URL을 입력해 주세요.',
+          message: '웹페이지 주소는 원문을 안정적으로 가져올 수 없습니다. 내 컴퓨터의 PDF는 업로드 버튼으로 등록하고, URL 등록에는 PDF로 바로 열리는 공용 인터넷 주소를 입력해 주세요.',
         });
         return;
       }
@@ -1269,6 +1297,7 @@ export function useReviewStore({
     registerPaper,
     openPaper,
     deletePaper,
+    saveNow: flush,
     retryNow,
     handleFile,
     handleSamplePdf,

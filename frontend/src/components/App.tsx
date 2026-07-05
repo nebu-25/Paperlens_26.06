@@ -67,7 +67,7 @@ interface ReviewWorkspaceProps {
 }
 
 function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWorkspaceProps) {
-  const store = useReviewStore({ accessToken, authReady, authEnabled });
+  const store = useReviewStore({ accessToken, authReady, authEnabled, userId: user?.id ?? null });
   const { paper, mobilePanel, setMobilePanel, setSelection } = store;
 
   return (

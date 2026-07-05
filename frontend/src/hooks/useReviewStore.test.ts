@@ -179,4 +179,45 @@ describe('useReviewStore', () => {
     expect(result.current.notes.p1).toBeUndefined();
     expect(result.current.activeId).toBeNull();
   });
+
+  it('로컬 파일 경로는 URL 등록 대신 PDF 업로드 안내를 표시한다', async () => {
+    const { result } = await renderStore();
+    act(() => result.current.setDoiInput('file:///C:/Users/me/paper.pdf'));
+
+    await act(async () => {
+      await result.current.registerByDoi();
+    });
+
+    expect(result.current.uploadNotice).toMatchObject({
+      tone: 'warning',
+      title: 'PDF 파일 업로드가 필요합니다',
+    });
+    expect(result.current.uploadNotice?.message).toContain('PDF 업로드 버튼');
+    expect(result.current.library).toEqual({});
+  });
+
+  it('차단된 PDF URL은 안내만 표시하고 수동 노트를 만들지 않는다', async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/papers/extract-url')) {
+        return new Response(
+          JSON.stringify({
+            detail:
+              '공용 인터넷 주소의 PDF만 등록할 수 있습니다. 내 컴퓨터의 PDF는 URL 입력칸이 아니라 PDF 업로드로 등록해 주세요.',
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return jsonResponse({});
+    });
+    const { result } = await renderStore();
+    act(() => result.current.setDoiInput('http://127.0.0.1/paper.pdf'));
+
+    await act(async () => {
+      await result.current.registerByDoi();
+    });
+
+    expect(result.current.uploadNotice?.message).toContain('PDF 업로드');
+    expect(result.current.library).toEqual({});
+  });
 });
