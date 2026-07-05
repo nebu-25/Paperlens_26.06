@@ -1,7 +1,5 @@
 import json
-import ipaddress
 import re
-import socket
 import statistics
 import urllib.error
 import urllib.parse
@@ -16,100 +14,42 @@ from fastapi.responses import FileResponse, Response as FastAPIResponse
 from app import db
 from app.auth import current_user_id
 from app.config import settings
+from app.services import paper_metadata as _paper_metadata
+from app.services import paper_sections as _paper_sections
+from app.services import pdf_security as _pdf_security
+from app.services.figure_images import detect_figure_images as _detect_figure_images
 
 router = APIRouter(prefix="/papers", tags=["papers"])
-
-# DOI 패턴 (Crossref 권장 정규식 기반). DOI 또는 DOI URL 어디에 묻어 있어도 추출한다.
-DOI_PATTERN = re.compile(r"10\.\d{4,9}/[-._;()/:A-Za-z0-9]+", re.IGNORECASE)
-TRAILING_DOI_CHARS = ".,;:)]}>"
 
 # 입력 가드 (기획서 FS-01)
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50MB
 MAX_PDF_PAGES = 200
 SAMPLE_PDF_PATH = Path(__file__).resolve().parents[3] / "2604.04977v1.pdf"
 
-
-def _ip_address_or_none(value: str):
-    try:
-        return ipaddress.ip_address(value)
-    except ValueError:
-        return None
-
-
-def _ensure_public_ip(hostname: str, ip_value: str) -> None:
-    ip = _ip_address_or_none(ip_value)
-    if ip is None:
-        raise HTTPException(status_code=400, detail="PDF URL 호스트를 확인할 수 없습니다.")
-    if not ip.is_global:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"공용 인터넷 주소의 PDF만 등록할 수 있습니다. 차단된 호스트: {hostname}. "
-                "내 컴퓨터의 PDF는 URL 입력칸이 아니라 PDF 업로드로 등록해 주세요."
-            ),
-        )
-
-
-def _validate_public_pdf_url(url: str) -> str:
-    """사용자 제공 URL이 서버 내부망을 가리키지 않는 공용 HTTP(S) 주소인지 확인한다."""
-    cleaned = url.strip()
-    parsed = urllib.parse.urlparse(cleaned)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "PDF URL은 http 또는 https 주소여야 합니다. "
-                "내 컴퓨터의 PDF는 URL 입력칸이 아니라 PDF 업로드로 등록해 주세요."
-            ),
-        )
-    if parsed.username or parsed.password:
-        raise HTTPException(status_code=400, detail="PDF URL에는 사용자 인증 정보를 포함할 수 없습니다.")
-    try:
-        port = parsed.port
-    except ValueError:
-        raise HTTPException(status_code=400, detail="PDF URL 포트가 올바르지 않습니다.") from None
-    hostname = parsed.hostname
-    if not hostname:
-        raise HTTPException(status_code=400, detail="PDF URL 호스트가 올바르지 않습니다.")
-
-    if _ip_address_or_none(hostname) is not None:
-        _ensure_public_ip(hostname, hostname)
-        return cleaned
-
-    try:
-        addr_infos = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
-    except socket.gaierror as exc:
-        raise HTTPException(status_code=502, detail="PDF URL 호스트를 확인하지 못했습니다.") from exc
-    if not addr_infos:
-        raise HTTPException(status_code=502, detail="PDF URL 호스트를 확인하지 못했습니다.")
-
-    addresses = {info[4][0] for info in addr_infos if info[4]}
-    for address in addresses:
-        _ensure_public_ip(hostname, address)
-    return cleaned
-
-
-class _PublicOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
-        _validate_public_pdf_url(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-def _open_public_pdf_url(request: urllib.request.Request, *, timeout: int):
-    opener = urllib.request.build_opener(_PublicOnlyRedirectHandler)
-    return opener.open(request, timeout=timeout)  # noqa: S310 - URL is validated before every request
-
-
-def _format_authors(authors: list[dict]) -> str:
-    names: list[str] = []
-    for author in authors:
-        full = " ".join(part for part in (author.get("given"), author.get("family")) if part)
-        names.append(full or author.get("name", "").strip())
-    return ", ".join(name for name in names if name)
-
-
-def _clean_doi(raw: str) -> str:
-    return raw.strip().rstrip(TRAILING_DOI_CHARS)
+# Backward-compatible aliases for tests and any internal imports that still
+# reach through app.routers.papers during the service split.
+socket = _pdf_security.socket
+_PublicOnlyRedirectHandler = _pdf_security.PublicOnlyRedirectHandler
+_open_public_pdf_url = _pdf_security.open_public_pdf_url
+_validate_public_pdf_url = _pdf_security.validate_public_pdf_url
+ARXIV_PATTERN = _paper_metadata.ARXIV_PATTERN
+DOI_PATTERN = _paper_metadata.DOI_PATTERN
+TRAILING_DOI_CHARS = _paper_metadata.TRAILING_DOI_CHARS
+_arxiv_meta = _paper_metadata.arxiv_meta
+_clean_doi = _paper_metadata.clean_doi
+_crossref_meta = _paper_metadata.crossref_meta
+_filename_from_content_disposition = _paper_metadata.filename_from_content_disposition
+_filename_from_pdf_url = _paper_metadata.filename_from_pdf_url
+_find_arxiv_id = _paper_metadata.find_arxiv_id
+_find_doi = _paper_metadata.find_doi
+_format_authors = _paper_metadata.format_authors
+_metadata_text = _paper_metadata.metadata_text
+_parse_arxiv_atom = _paper_metadata.parse_arxiv_atom
+_unique_tags = _paper_metadata.unique_tags
+HEADING_PATTERN = _paper_sections.HEADING_PATTERN
+SECTION_ALIASES = _paper_sections.SECTION_ALIASES
+_canonical_section = _paper_sections.canonical_section
+_detect_sections = _paper_sections.detect_sections
 
 
 def _clean_text_line(value: str) -> str:
@@ -150,125 +90,6 @@ def _repair_spaced_glyphs(line: str) -> str:
 
 def _clean_pdf_line(value: str) -> str:
     return _repair_spaced_glyphs(_clean_text_line(value))
-
-
-def _metadata_text(metadata: dict) -> str:
-    return " ".join(str(value) for value in metadata.values() if value)
-
-
-def _filename_from_content_disposition(value: str) -> str:
-    match = re.search(r"filename\*=UTF-8''([^;]+)", value, re.IGNORECASE)
-    if match:
-        return urllib.parse.unquote(match.group(1).strip().strip('"'))
-    match = re.search(r'filename="?([^";]+)"?', value, re.IGNORECASE)
-    return match.group(1).strip() if match else ""
-
-
-def _filename_from_pdf_url(url: str, content_disposition: str = "") -> str:
-    filename = _filename_from_content_disposition(content_disposition)
-    if not filename:
-        parsed = urllib.parse.urlparse(url)
-        filename = Path(urllib.parse.unquote(parsed.path)).name or "paper.pdf"
-    if not filename.casefold().endswith(".pdf"):
-        filename = f"{filename}.pdf"
-    if filename == "2604.04977.pdf":
-        filename = "2604.04977v1.pdf"
-    return filename
-
-
-def _unique_tags(values: list[str], *, limit: int = 8) -> list[str]:
-    seen: set[str] = set()
-    tags: list[str] = []
-    for value in values:
-        tag = _clean_text_line(value).strip(" .,/;:")
-        key = tag.casefold()
-        if not tag or key in seen:
-            continue
-        seen.add(key)
-        tags.append(tag)
-        if len(tags) >= limit:
-            break
-    return tags
-
-
-def _crossref_meta(clean_doi: str) -> dict[str, object]:
-    """CrossRef에서 메타정보를 조회한다. 실패 시 urllib/JSON 예외를 그대로 던진다."""
-    url = f"https://api.crossref.org/works/{urllib.parse.quote(clean_doi)}"
-    request = urllib.request.Request(url, headers={"User-Agent": settings.crossref_user_agent})
-    with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310 - trusted host
-        payload = json.loads(response.read().decode("utf-8"))
-    message = payload.get("message", {})
-    title_list = message.get("title") or []
-    subjects = [str(subject) for subject in message.get("subject") or []]
-    containers = [str(title) for title in message.get("container-title") or []]
-    return {
-        "doi": clean_doi,
-        "title": title_list[0] if title_list else "(제목 없음)",
-        "authors": _format_authors(message.get("author") or []) or "저자 미상",
-        "link": message.get("URL") or f"https://doi.org/{clean_doi}",
-        "suggested_tags": _unique_tags(subjects + containers),
-    }
-
-
-def _find_doi(text: str, pdf_meta: dict) -> str | None:
-    candidates = [_metadata_text(pdf_meta), text]
-    for candidate in candidates:
-        match = DOI_PATTERN.search(candidate or "")
-        if match:
-            return _clean_doi(match.group(0))
-    return None
-
-
-# arXiv ID: 신형(2107.12345[v2]) 또는 구형(cs.CL/0701001). CrossRef DOI가 없는 arXiv 논문
-# (및 다수 프리프린트)에서 저자·분류(태그)를 정확히 얻기 위한 보조 식별자.
-ARXIV_PATTERN = re.compile(
-    r"arXiv:\s*(\d{4}\.\d{4,5}(?:v\d+)?|[a-z\-]+(?:\.[A-Za-z]{2})?/\d{7}(?:v\d+)?)",
-    re.IGNORECASE,
-)
-
-
-def _find_arxiv_id(text: str, pdf_meta: dict) -> str | None:
-    for candidate in (_metadata_text(pdf_meta), text):
-        match = ARXIV_PATTERN.search(candidate or "")
-        if match:
-            return match.group(1)
-    return None
-
-
-def _parse_arxiv_atom(payload: bytes | str) -> dict[str, object]:
-    """arXiv API(Atom feed)에서 제목·저자·분류를 파싱한다. HTTP와 분리해 테스트 가능하게 둔다."""
-    ns = {"a": "http://www.w3.org/2005/Atom"}
-    root = ET.fromstring(payload)
-    entry = root.find("a:entry", ns)
-    if entry is None:
-        raise ValueError("arXiv 응답에 entry가 없습니다.")
-    title = _clean_text_line(entry.findtext("a:title", default="", namespaces=ns))
-    authors = [_clean_text_line(name.text or "") for name in entry.findall("a:author/a:name", ns)]
-    categories = [c.get("term", "") for c in entry.findall("a:category", ns)]
-    link = ""
-    for node in entry.findall("a:link", ns):
-        if node.get("rel") == "alternate":
-            link = node.get("href", "")
-            break
-    return {
-        "title": title or "(제목 없음)",
-        "authors": ", ".join(a for a in authors if a) or "저자 미상",
-        "link": link,
-        "suggested_tags": _unique_tags(categories),
-    }
-
-
-def _arxiv_meta(arxiv_id: str) -> dict[str, object]:
-    """arXiv에서 메타정보를 조회한다. 실패 시 urllib/XML 예외를 그대로 던진다."""
-    query = urllib.parse.urlencode({"id_list": arxiv_id, "max_results": 1})
-    url = f"http://export.arxiv.org/api/query?{query}"
-    request = urllib.request.Request(url, headers={"User-Agent": settings.crossref_user_agent})
-    with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310 - trusted host
-        payload = response.read()
-    meta = _parse_arxiv_atom(payload)
-    if not meta.get("link"):
-        meta["link"] = f"https://arxiv.org/abs/{arxiv_id}"
-    return meta
 
 
 def _is_metadata_noise(line: str) -> bool:
@@ -503,128 +324,6 @@ def _first_page_metadata(document) -> dict[str, object]:
         "confidence": "low" if (title or authors) else "none",
         "warnings": warnings,
     }
-
-
-# 섹션 헤딩 자동 분류 (#6). 표준 섹션명 → 정규화 카테고리. 별칭은 긴 것부터 매칭한다.
-SECTION_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Abstract", ("abstract",)),
-    ("Introduction", ("introduction",)),
-    ("Related Work", ("related work", "related works", "background", "prior work", "literature review")),
-    (
-        "Method",
-        (
-            "materials and methods",
-            "methodology",
-            "proposed method",
-            "proposed approach",
-            "method",
-            "methods",
-            "approach",
-            "model",
-        ),
-    ),
-    ("Experiment", ("experimental setup", "experimental results", "experiments", "experiment", "evaluation")),
-    ("Result", ("results", "result", "findings")),
-    ("Analysis", ("ablation study", "ablation", "analysis")),
-    ("Discussion", ("discussion",)),
-    ("Conclusion", ("conclusions", "conclusion", "concluding remarks", "summary and conclusions", "summary")),
-    ("References", ("references", "bibliography")),
-    ("Acknowledgments", ("acknowledgments", "acknowledgements", "acknowledgment", "acknowledgement")),
-    ("Appendix", ("appendix", "appendices")),
-)
-
-# 헤딩 후보 라인: (선택)섹션 번호 + 짧은 제목.
-HEADING_PATTERN = re.compile(r"^(?P<num>\d+(?:\.\d+)*\.?)?\s*(?P<name>[A-Za-z][A-Za-z0-9 \-&:/,]{2,70})$")
-
-
-def _canonical_section(name: str) -> str:
-    lowered = name.casefold().strip(" .:-")
-    for canonical, aliases in SECTION_ALIASES:
-        for alias in aliases:
-            if lowered == alias or lowered.startswith(alias + " "):
-                return canonical
-    return ""
-
-
-# 그림/표 이미지 인덱스 (FR-27 / M5b): 페이지별 유의미한 이미지 위치를 수집한다.
-# 페이지 면적 대비 3% 미만(로고·아이콘·장식)과 85% 초과(스캔 전면 이미지)는 제외한다.
-_FIGURE_IMAGE_MIN_AREA_RATIO = 0.03
-_FIGURE_IMAGE_MAX_AREA_RATIO = 0.85
-_FIGURE_IMAGE_LIMIT = 60
-
-
-def _detect_figure_images(document) -> list[dict[str, object]]:
-    figures: list[dict[str, object]] = []
-    for page_index in range(document.page_count):
-        page = document[page_index]
-        page_area = float(page.rect.width * page.rect.height) or 1.0
-        try:
-            infos = page.get_image_info()
-        except Exception:  # pragma: no cover - 렌더 불가 페이지는 건너뛴다
-            continue
-        for info in infos:
-            bbox = info.get("bbox")
-            if not bbox or len(bbox) != 4:
-                continue
-            width = float(bbox[2]) - float(bbox[0])
-            height = float(bbox[3]) - float(bbox[1])
-            ratio = (width * height) / page_area
-            if ratio < _FIGURE_IMAGE_MIN_AREA_RATIO or ratio > _FIGURE_IMAGE_MAX_AREA_RATIO:
-                continue
-            figures.append(
-                {"page": page_index + 1, "bbox": [round(float(v), 2) for v in bbox]}
-            )
-            if len(figures) >= _FIGURE_IMAGE_LIMIT:
-                return figures
-    return figures
-
-
-def _detect_sections(text: str) -> list[dict[str, object]]:
-    """원문 텍스트에서 섹션 헤딩을 추정해 등장 순서대로 반환한다(#6, FS-01).
-
-    - 번호가 붙은 헤딩("1 Introduction", "3.2 Multi-Head Attention") 또는 알려진
-      섹션 키워드(Abstract, Conclusion 등)만 헤딩으로 인정해 오탐을 줄인다.
-    - 같은 정규화 섹션(canonical)이 머리글/꼬리글로 반복되면 첫 등장만 남긴다.
-    - start: 원문 내 문자 오프셋(향후 본문 점프용). text는 "\\n"으로만 구분되므로
-      split("\\n") 누적 길이로 오프셋을 정확히 복원할 수 있다.
-    """
-    sections: list[dict[str, object]] = []
-    seen_titles: set[str] = set()
-    seen_canonical: set[str] = set()
-    offset = 0
-    for raw_line in text.split("\n"):
-        line_start = offset
-        offset += len(raw_line) + 1
-        stripped = raw_line.strip()
-        if not 4 <= len(stripped) <= 80:
-            continue
-        match = HEADING_PATTERN.match(stripped)
-        if not match:
-            continue
-        number = match.group("num")
-        name = _clean_text_line(match.group("name"))
-        canonical = _canonical_section(name)
-        # 번호 없는 라인은 알려진 섹션 키워드일 때만 헤딩으로 인정(오탐 방지).
-        if not number and not canonical:
-            continue
-        # 번호만 있는 비표준 헤딩: 대문자로 시작하고 본문 문장이 아닌 짧은 제목만 허용.
-        if not canonical and (len(name.split()) > 6 or not name[:1].isupper()):
-            continue
-        title = canonical or name
-        if canonical:
-            if canonical in seen_canonical:
-                continue
-            seen_canonical.add(canonical)
-        else:
-            key = title.casefold()
-            if key in seen_titles:
-                continue
-            seen_titles.add(key)
-        lead = len(raw_line) - len(raw_line.lstrip())
-        sections.append({"title": title, "canonical": canonical, "start": line_start + lead})
-        if len(sections) >= 40:
-            break
-    return sections
 
 
 def _is_cjk(ch: str) -> bool:

@@ -4,25 +4,11 @@ import { resolveApiUrl } from '../../constants';
 import { scrollToTextOffset } from '../../lib/domText';
 import { needsPdfText } from '../../lib/format';
 import { buildOutline } from '../../lib/outline';
-import type { ExtractionQuality } from '../../types';
+import { extractionQualityLabel } from '../../lib/paperInputs';
 import { PdfViewer } from './PdfViewer';
 import { useWorkspace } from './WorkspaceContext';
 
 type PaperViewMode = 'text' | 'pdf';
-
-const EXTRACTION_QUALITY_LABEL: Record<ExtractionQuality['status'], string> = {
-  good: '양호',
-  review: '확인 필요',
-  poor: '낮음',
-  failed: '추출 실패',
-};
-
-function extractionQualityLabel(quality?: ExtractionQuality) {
-  if (!quality) return '';
-  if (quality.source === 'user_edited') return '사용자 보정됨';
-  if (quality.source === 'ocr') return 'OCR 복구됨';
-  return EXTRACTION_QUALITY_LABEL[quality.status];
-}
 
 export function SourcePanel() {
   const { store, accessToken } = useWorkspace();
