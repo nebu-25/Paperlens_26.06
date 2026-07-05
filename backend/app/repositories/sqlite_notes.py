@@ -33,10 +33,12 @@ CREATE TABLE IF NOT EXISTS paper_metadata (
 );
 
 CREATE TABLE IF NOT EXISTS paper_texts (
-  paper_id   TEXT PRIMARY KEY,
-  user_id    TEXT NOT NULL DEFAULT 'local',
-  text       TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL
+  paper_id      TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL DEFAULT 'local',
+  text          TEXT NOT NULL DEFAULT '',
+  sections      TEXT NOT NULL DEFAULT '[]',
+  figure_images TEXT NOT NULL DEFAULT '[]',
+  updated_at    TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS review_notes (
@@ -154,6 +156,13 @@ class SQLiteNotesRepository:
             conn.execute(
                 "ALTER TABLE paper_metadata ADD COLUMN extraction_quality TEXT NOT NULL DEFAULT '{}'"
             )
+        text_columns = {row["name"] for row in conn.execute("PRAGMA table_info(paper_texts)").fetchall()}
+        if "sections" not in text_columns:
+            conn.execute("ALTER TABLE paper_texts ADD COLUMN sections TEXT NOT NULL DEFAULT '[]'")
+        if "figure_images" not in text_columns:
+            conn.execute(
+                "ALTER TABLE paper_texts ADD COLUMN figure_images TEXT NOT NULL DEFAULT '[]'"
+            )
 
     def _migrate_from_legacy_papers(self, conn: sqlite3.Connection) -> None:
         conn.execute(
@@ -220,7 +229,9 @@ class SQLiteNotesRepository:
         try:
             row = conn.execute(
                 """
-                SELECT m.*, t.text, f.filename AS stored_pdf_filename
+                SELECT m.*, t.text, t.sections AS sections_json,
+                       t.figure_images AS figure_images_json,
+                       f.filename AS stored_pdf_filename
                 FROM paper_metadata m
                 LEFT JOIN paper_texts t ON t.paper_id = m.id AND t.user_id = m.user_id
                 LEFT JOIN paper_files f ON f.paper_id = m.id AND f.user_id = m.user_id
@@ -291,15 +302,24 @@ class SQLiteNotesRepository:
                 ),
             )
             if text:
+                # 구조 인덱스(섹션·그림 이미지)는 원문과 함께 추출되므로 원문 저장 시에만 갱신한다.
                 conn.execute(
                     """
-                    INSERT INTO paper_texts (paper_id, user_id, text, updated_at)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO paper_texts (paper_id, user_id, text, sections, figure_images, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(paper_id) DO UPDATE SET
-                      text=excluded.text, updated_at=excluded.updated_at
+                      text=excluded.text, sections=excluded.sections,
+                      figure_images=excluded.figure_images, updated_at=excluded.updated_at
                     WHERE paper_texts.user_id = excluded.user_id
                     """,
-                    (note_id, user_id, text, now),
+                    (
+                        note_id,
+                        user_id,
+                        text,
+                        json.dumps(paper.get("sections") or [], ensure_ascii=False),
+                        json.dumps(paper.get("figureImages") or [], ensure_ascii=False),
+                        now,
+                    ),
                 )
             conn.execute(
                 """
@@ -429,7 +449,20 @@ class SQLiteNotesRepository:
 
     def _paper_of(self, row: sqlite3.Row, *, include_text: bool = True) -> dict[str, object]:
         pdf_filename = row["stored_pdf_filename"] or row["pdf_filename"]
+        keys = row.keys()
+        structure: dict[str, object] = {}
+        if include_text:
+            # 구조 인덱스는 단일 노트 조회(paper_texts JOIN)에서만 함께 내려간다.
+            structure = {
+                "sections": json.loads(row["sections_json"] or "[]") if "sections_json" in keys else [],
+                "figureImages": (
+                    json.loads(row["figure_images_json"] or "[]")
+                    if "figure_images_json" in keys
+                    else []
+                ),
+            }
         return {
+            **structure,
             "id": row["id"],
             "title": row["title"],
             "authors": row["authors"],

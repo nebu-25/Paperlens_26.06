@@ -28,10 +28,12 @@ CREATE TABLE IF NOT EXISTS paper_metadata (
 );
 
 CREATE TABLE IF NOT EXISTS paper_texts (
-  paper_id   TEXT PRIMARY KEY REFERENCES paper_metadata(id) ON DELETE CASCADE,
-  user_id    UUID NOT NULL,
-  text       TEXT NOT NULL DEFAULT '',
-  updated_at TIMESTAMPTZ NOT NULL
+  paper_id      TEXT PRIMARY KEY REFERENCES paper_metadata(id) ON DELETE CASCADE,
+  user_id       UUID NOT NULL,
+  text          TEXT NOT NULL DEFAULT '',
+  sections      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  figure_images JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at    TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS review_notes (
@@ -120,6 +122,12 @@ class PostgreSQLNotesRepository:
             conn.execute(
                 "ALTER TABLE paper_metadata ADD COLUMN IF NOT EXISTS extraction_quality JSONB NOT NULL DEFAULT '{}'::jsonb"
             )
+            conn.execute(
+                "ALTER TABLE paper_texts ADD COLUMN IF NOT EXISTS sections JSONB NOT NULL DEFAULT '[]'::jsonb"
+            )
+            conn.execute(
+                "ALTER TABLE paper_texts ADD COLUMN IF NOT EXISTS figure_images JSONB NOT NULL DEFAULT '[]'::jsonb"
+            )
             self._migrate_from_legacy_papers(conn)
 
     def _migrate_from_legacy_papers(self, conn) -> None:
@@ -191,7 +199,9 @@ class PostgreSQLNotesRepository:
         with self.connect() as conn:
             row = conn.execute(
                 """
-                SELECT m.*, t.text, f.filename AS stored_pdf_filename
+                SELECT m.*, t.text, t.sections AS sections_json,
+                       t.figure_images AS figure_images_json,
+                       f.filename AS stored_pdf_filename
                 FROM paper_metadata m
                 LEFT JOIN paper_texts t ON t.paper_id = m.id AND t.user_id = m.user_id
                 LEFT JOIN paper_files f ON f.paper_id = m.id AND f.user_id = m.user_id
@@ -245,15 +255,24 @@ class PostgreSQLNotesRepository:
                 self._paper_params(user_id, note_id, paper, now, Jsonb),
             )
             if text:
+                # 구조 인덱스(섹션·그림 이미지)는 원문과 함께 추출되므로 원문 저장 시에만 갱신한다.
                 conn.execute(
                     """
-                    INSERT INTO paper_texts (paper_id, user_id, text, updated_at)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO paper_texts (paper_id, user_id, text, sections, figure_images, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT(paper_id) DO UPDATE SET
-                      text=excluded.text, updated_at=excluded.updated_at
+                      text=excluded.text, sections=excluded.sections,
+                      figure_images=excluded.figure_images, updated_at=excluded.updated_at
                     WHERE paper_texts.user_id = excluded.user_id
                     """,
-                    (note_id, user_id, text, now),
+                    (
+                        note_id,
+                        user_id,
+                        text,
+                        Jsonb(paper.get("sections") or []),
+                        Jsonb(paper.get("figureImages") or []),
+                        now,
+                    ),
                 )
             conn.execute(
                 """
@@ -361,8 +380,17 @@ class PostgreSQLNotesRepository:
         }
 
     def _paper_of(self, row: dict[str, Any], *, include_text: bool = True) -> dict[str, object]:
+        structure: dict[str, object] = (
+            {
+                "sections": row.get("sections_json") or [],
+                "figureImages": row.get("figure_images_json") or [],
+            }
+            if include_text
+            else {}
+        )
         pdf_filename = row.get("stored_pdf_filename") or row.get("pdf_filename") or ""
         return {
+            **structure,
             "id": row["id"],
             "title": row["title"],
             "authors": row["authors"],

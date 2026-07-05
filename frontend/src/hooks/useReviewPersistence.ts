@@ -276,7 +276,16 @@ export function useReviewPersistence({
         setLibrary((lib) => {
           const cur = lib[id];
           if (!cur || cur.text || !data.paper.text) return lib;
-          return { ...lib, [id]: { ...cur, text: data.paper.text } };
+          // 원문과 함께 캐시된 구조 인덱스(섹션·그림 이미지)도 복원한다 (M5b).
+          return {
+            ...lib,
+            [id]: {
+              ...cur,
+              text: data.paper.text,
+              sections: data.paper.sections ?? cur.sections,
+              figureImages: data.paper.figureImages ?? cur.figureImages,
+            },
+          };
         });
       } catch {
         /* 오프라인이면 원문은 비표시 */

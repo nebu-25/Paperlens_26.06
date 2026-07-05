@@ -25,6 +25,7 @@ import type {
   AppNotice,
   DetectedSection,
   ExtractionQuality,
+  FigureImageRef,
   HighlightColor,
   Paper,
   ReviewNote,
@@ -271,6 +272,7 @@ export function useReviewStore({
       const data: {
         text?: string;
         sections?: DetectedSection[];
+        figure_images?: FigureImageRef[];
         extraction_quality?: ExtractionQualityResponse;
       } = await res.json();
       if (!data.text || !data.text.trim()) {
@@ -287,7 +289,13 @@ export function useReviewStore({
         lib[target.id]
           ? {
               ...lib,
-              [target.id]: { ...lib[target.id], text: data.text!, sections: data.sections ?? [], extractionQuality },
+              [target.id]: {
+                ...lib[target.id],
+                text: data.text!,
+                sections: data.sections ?? [],
+                figureImages: data.figure_images ?? lib[target.id].figureImages,
+                extractionQuality,
+              },
             }
           : lib,
       );
@@ -476,6 +484,7 @@ export function useReviewStore({
         link?: string;
         doi?: string;
         sections?: DetectedSection[];
+        figure_images?: FigureImageRef[];
         suggested_tags?: string[];
         metadata_source?: string;
         metadata_confidence?: string;
@@ -517,6 +526,7 @@ export function useReviewStore({
               pdfUrl: pdfUrl || current.pdfUrl || '',
               pdfFilename: data.pdf_filename || current.pdfFilename || '',
               sections: data.sections ?? current.sections,
+              figureImages: data.figure_images ?? current.figureImages,
               text: data.text || current.text,
             },
           };
@@ -557,6 +567,7 @@ export function useReviewStore({
           pdfUrl,
           pdfFilename: data.pdf_filename || '',
           sections: data.sections ?? [],
+          figureImages: data.figure_images ?? [],
           text: data.text || '',
         }, suggestedTags, uploadPaperId);
       }
@@ -749,6 +760,7 @@ export function useReviewStore({
           link?: string;
           doi?: string;
           sections?: DetectedSection[];
+          figure_images?: FigureImageRef[];
           suggested_tags?: string[];
           metadata_source?: string;
           metadata_confidence?: string;
@@ -781,6 +793,7 @@ export function useReviewStore({
           pdfUrl: data.pdf_url ? resolveApiUrl(data.pdf_url) : '',
           pdfFilename: data.pdf_filename || data.filename || '',
           sections: data.sections ?? [],
+          figureImages: data.figure_images ?? [],
           text: data.text || '',
         }, suggestedTags, uploadPaperId);
         setUploadNotice({
