@@ -552,6 +552,103 @@ _FIGURE_IMAGE_MIN_AREA_RATIO = 0.03
 _FIGURE_IMAGE_MAX_AREA_RATIO = 0.85
 _FIGURE_IMAGE_LIMIT = 60
 
+# 캡션↔이미지 자동 매칭 (FR-27 후속): 같은 페이지의 캡션 라인과 이미지를 세로 근접으로 잇는다.
+# 캡션 정규화 규칙은 프론트 lib/figureIndex.ts와 반드시 동일하게 맞춘다(네비게이터 조인 키).
+_FIGURE_CAPTION_PREFIX = r"(Figure|FIGURE|Fig\.|그림|Table|TABLE|표)"
+_FIGURE_CAPTION_NUMBER = r"(\d+[a-zA-Z]?|[IVXLC]+|[Ⅰ-Ⅹ]+)"
+_FIGURE_CAPTION_LINE = re.compile(
+    rf"^[ \t]*{_FIGURE_CAPTION_PREFIX}\s*{_FIGURE_CAPTION_NUMBER}\s*([.:．)\]]?\s*)(.*)$"
+)
+_FIGURE_KO_PARTICLE_START = re.compile(r"^(은|는|이|가|을|를|과|와|의|에|에서|처럼|같이|보다)(\s|$)")
+_FIGURE_EN_VERB_START = re.compile(
+    r"^(shows?|is|are|was|were|presents?|illustrates?|depicts?|summarizes?|demonstrates?)\b",
+    re.IGNORECASE,
+)
+# 캡션과 이미지가 세로로 떨어진 최대 거리(pt)와 살짝 겹침 허용치(pt).
+_FIGURE_CAPTION_MAX_GAP = 160.0
+_FIGURE_CAPTION_OVERLAP_TOL = 24.0
+
+
+def _figure_caption_kind(prefix: str) -> str:
+    return "figure" if re.fullmatch(r"(figure|fig\.|그림)", prefix, re.IGNORECASE) else "table"
+
+
+def _figure_caption_id(prefix: str, num: str) -> str:
+    return f"{_figure_caption_kind(prefix)}-{num.lower()}"
+
+
+def _figure_caption_label(prefix: str, num: str) -> str:
+    if "그림" in prefix or "표" in prefix:
+        return f"{prefix} {num}"
+    return f"{'Figure' if _figure_caption_kind(prefix) == 'figure' else 'Table'} {num}"
+
+
+def _page_caption_lines(page) -> list[dict[str, object]]:
+    """페이지 텍스트 블록에서 캡션 라인(Figure N/그림 N/Table N/표 N)을 위치와 함께 수집한다."""
+    try:
+        data = page.get_text("dict")
+    except Exception:  # pragma: no cover - 텍스트 없는 페이지는 건너뛴다
+        return []
+    captions: list[dict[str, object]] = []
+    for block in data.get("blocks", []):
+        if block.get("type") != 0:  # 0 = 텍스트 블록
+            continue
+        for line in block.get("lines", []):
+            text = "".join(span.get("text", "") for span in line.get("spans", []))
+            match = _FIGURE_CAPTION_LINE.match(text)
+            if not match:
+                continue
+            prefix, num, separator, rest = match.group(1), match.group(2), match.group(3), match.group(4)
+            rest_trimmed = rest.strip()
+            has_separator = bool(separator.strip())
+            looks_like_sentence = bool(
+                _FIGURE_KO_PARTICLE_START.match(rest_trimmed)
+                or _FIGURE_EN_VERB_START.match(rest_trimmed)
+            )
+            if not (has_separator or (len(rest_trimmed) >= 2 and not looks_like_sentence)):
+                continue
+            bbox = line.get("bbox")
+            if not bbox or len(bbox) != 4:
+                continue
+            captions.append(
+                {
+                    "id": _figure_caption_id(prefix, num),
+                    "label": _figure_caption_label(prefix, num),
+                    "kind": _figure_caption_kind(prefix),
+                    "y0": float(bbox[1]),
+                    "y1": float(bbox[3]),
+                }
+            )
+    return captions
+
+
+def _match_captions_to_images(captions: list[dict[str, object]], images: list[dict[str, object]]) -> None:
+    """같은 페이지의 캡션과 이미지를 세로 근접으로 1:1 연결하고 captionId/captionLabel을 부착한다.
+
+    그림 캡션은 이미지 아래, 표 캡션은 이미지 위에 오는 관례를 방향으로 사용한다.
+    """
+    used: set[int] = set()
+    for image in sorted(images, key=lambda im: im["bbox"][1]):
+        image_top, image_bottom = float(image["bbox"][1]), float(image["bbox"][3])
+        best_idx: int | None = None
+        best_distance: float | None = None
+        for idx, caption in enumerate(captions):
+            if idx in used:
+                continue
+            if caption["kind"] == "figure":
+                gap = float(caption["y0"]) - image_bottom  # 캡션이 이미지 아래
+            else:
+                gap = image_top - float(caption["y1"])  # 이미지가 표 캡션 아래
+            if gap < -_FIGURE_CAPTION_OVERLAP_TOL or gap > _FIGURE_CAPTION_MAX_GAP:
+                continue
+            distance = abs(gap)
+            if best_distance is None or distance < best_distance:
+                best_distance, best_idx = distance, idx
+        if best_idx is not None:
+            used.add(best_idx)
+            image["captionId"] = captions[best_idx]["id"]
+            image["captionLabel"] = captions[best_idx]["label"]
+
 
 def _detect_figure_images(document) -> list[dict[str, object]]:
     figures: list[dict[str, object]] = []
@@ -562,6 +659,7 @@ def _detect_figure_images(document) -> list[dict[str, object]]:
             infos = page.get_image_info()
         except Exception:  # pragma: no cover - 렌더 불가 페이지는 건너뛴다
             continue
+        page_images: list[dict[str, object]] = []
         for info in infos:
             bbox = info.get("bbox")
             if not bbox or len(bbox) != 4:
@@ -571,11 +669,14 @@ def _detect_figure_images(document) -> list[dict[str, object]]:
             ratio = (width * height) / page_area
             if ratio < _FIGURE_IMAGE_MIN_AREA_RATIO or ratio > _FIGURE_IMAGE_MAX_AREA_RATIO:
                 continue
-            figures.append(
+            page_images.append(
                 {"page": page_index + 1, "bbox": [round(float(v), 2) for v in bbox]}
             )
-            if len(figures) >= _FIGURE_IMAGE_LIMIT:
-                return figures
+        if page_images:
+            _match_captions_to_images(_page_caption_lines(page), page_images)
+            figures.extend(page_images)
+        if len(figures) >= _FIGURE_IMAGE_LIMIT:
+            return figures[:_FIGURE_IMAGE_LIMIT]
     return figures
 
 
