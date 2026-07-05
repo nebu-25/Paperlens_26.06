@@ -81,6 +81,24 @@ class TestStructureIndexPersistence:
             {"page": 2, "bbox": body["figure_images"][0]["bbox"]}
         ]
 
+    def test_extract_accepts_pdf_sent_as_octet_stream(self, client):
+        res = client.post(
+            "/api/papers/extract-text",
+            files={"file": ("sample.pdf", _sample_pdf(), "application/octet-stream")},
+        )
+
+        assert res.status_code == 200
+        assert res.json()["filename"] == "sample.pdf"
+
+    def test_extract_rejects_non_pdf_by_parser_result(self, client):
+        res = client.post(
+            "/api/papers/extract-text",
+            files={"file": ("not-a-pdf.txt", b"not a pdf", "application/octet-stream")},
+        )
+
+        assert res.status_code == 422
+        assert "PDF" in res.json()["detail"]
+
     def test_sections_and_figures_roundtrip_via_notes(self, client):
         paper = {
             "title": "구조 인덱스 논문",

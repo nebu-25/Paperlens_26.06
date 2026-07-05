@@ -1191,9 +1191,6 @@ async def extract_text(
     paper_id: str = Form(""),
     user_id: str = Depends(current_user_id),
 ) -> dict[str, object]:
-    if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="PDF 파일만 업로드할 수 있습니다.")
-
     content = await file.read()
     return _extract_pdf_content(
         content=content,
