@@ -164,6 +164,7 @@ python3 backend/scripts/smoke_deployment.py
 - `paperlens.codex.smoke@gmail.com` 계정은 anon signup으로 생성 요청이 성공했다.
 - 같은 계정으로 password login을 시도하면 Supabase가 `email_not_confirmed`를 반환한다. 현재 운영 설정에서는 이 계정을 자동 smoke에 쓰려면 Supabase 대시보드에서 이메일 확인 처리하거나 `SUPABASE_SERVICE_ROLE_KEY`로 admin 생성 경로를 다시 실행해야 한다.
 - Supabase SQL 편집기에서 mock 계정을 확인 완료 상태로 조정한 뒤, 같은 계정으로 `backend/scripts/smoke_deployment.py`를 실행해 운영 인증 smoke가 통과했다: `Production deployment smoke passed ... (with authenticated notes check)`.
+- GitHub repository secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `PAPERLENS_SMOKE_EMAIL`, `PAPERLENS_SMOKE_PASSWORD`를 등록한 뒤 `Production smoke` workflow를 브랜치 기준으로 수동 실행했다. Run `28748255495`가 통과했고 로그에서 `with authenticated notes check`를 확인했다.
 
 ### 2026-06-26 운영 실행 기록
 
