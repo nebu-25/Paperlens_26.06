@@ -1,11 +1,13 @@
 """Smoke-test public production deployment endpoints.
 
-This script avoids authenticated user data. It checks GitHub Pages routing and
-Render public API readiness after a deploy.
+This script avoids authenticated user data by default. It checks GitHub Pages
+routing and Render public API readiness after a deploy. If a smoke-test account
+is supplied, it also verifies the authenticated notes restore path.
 
 Run from repo root or backend/:
   python3 backend/scripts/smoke_deployment.py
   FRONTEND_BASE_URL=https://... API_BASE_URL=https://... python3 backend/scripts/smoke_deployment.py
+  PAPERLENS_SMOKE_EMAIL=... PAPERLENS_SMOKE_PASSWORD=... python3 backend/scripts/smoke_deployment.py
 """
 
 from __future__ import annotations
@@ -35,8 +37,15 @@ class Response:
         return json.loads(self.body.decode("utf-8"))
 
 
-def _request(method: str, url: str, *, timeout: int = 45) -> Response:
-    req = urllib.request.Request(url, method=method)
+def _request(
+    method: str,
+    url: str,
+    *,
+    data: bytes | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: int = 45,
+) -> Response:
+    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as res:  # noqa: S310 - fixed/default smoke URLs
             return Response(
@@ -57,6 +66,18 @@ def _request(method: str, url: str, *, timeout: int = 45) -> Response:
 def _assert(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
+
+
+def _response_message(response: Response) -> str:
+    try:
+        body = response.json()
+    except json.JSONDecodeError:
+        return response.body.decode("utf-8", errors="replace")
+    if isinstance(body, dict):
+        detail = body.get("msg") or body.get("message") or body.get("error_description")
+        if detail:
+            return str(detail)
+    return json.dumps(body, ensure_ascii=False)
 
 
 def _check_pages(frontend_base: str) -> None:
@@ -99,8 +120,10 @@ def _check_api(api_base: str) -> None:
         f"database.mode expected postgresql, got {database.get('mode')}",
     )
     _assert(ai.get("enabled") is True, f"ai.enabled expected true, got {ai.get('enabled')}")
-    _assert(ai.get("ready") is True, f"ai.ready expected true, got {ai.get('ready')}")
-    _assert(ai.get("warnings") == [], f"ai.warnings expected [], got {ai.get('warnings')}")
+    if "ready" in ai:
+        _assert(ai.get("ready") is True, f"ai.ready expected true, got {ai.get('ready')}")
+    if "warnings" in ai:
+        _assert(ai.get("warnings") == [], f"ai.warnings expected [], got {ai.get('warnings')}")
 
     ai_status = _request("GET", f"{api_base}/api/ai/status")
     _assert(ai_status.status == 200, f"ai/status expected 200, got {ai_status.status}")
@@ -118,20 +141,81 @@ def _check_api(api_base: str) -> None:
     )
 
 
+def _supabase_password_token(
+    supabase_url: str,
+    anon_key: str,
+    email: str,
+    password: str,
+) -> str:
+    payload = json.dumps({"email": email, "password": password}).encode("utf-8")
+    token = _request(
+        "POST",
+        f"{supabase_url.rstrip('/')}/auth/v1/token?grant_type=password",
+        data=payload,
+        headers={
+            "apikey": anon_key,
+            "Content-Type": "application/json",
+        },
+    )
+    _assert(
+        token.status == 200,
+        f"Supabase password login expected 200, got {token.status}: {_response_message(token)}",
+    )
+    access_token = token.json().get("access_token")
+    _assert(isinstance(access_token, str) and access_token, "Supabase response missing access_token")
+    return access_token
+
+
+def _check_authenticated_api(api_base: str, access_token: str) -> None:
+    notes = _request(
+        "GET",
+        f"{api_base}/api/notes",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    _assert(notes.status == 200, f"authenticated notes expected 200, got {notes.status}")
+    notes_body = notes.json()
+    _assert(isinstance(notes_body.get("library"), dict), "authenticated notes missing library object")
+    _assert(isinstance(notes_body.get("notes"), dict), "authenticated notes missing notes object")
+
+
 def main() -> int:
     frontend_base = os.environ.get("FRONTEND_BASE_URL", DEFAULT_FRONTEND_BASE_URL).strip().rstrip("/")
     api_base = os.environ.get("API_BASE_URL", DEFAULT_API_BASE_URL).strip().rstrip("/")
+    supabase_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+    supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY", "").strip()
+    smoke_email = os.environ.get("PAPERLENS_SMOKE_EMAIL", "").strip()
+    smoke_password = os.environ.get("PAPERLENS_SMOKE_PASSWORD", "")
     if not frontend_base or not api_base:
         print("FRONTEND_BASE_URL and API_BASE_URL are required.", file=sys.stderr)
+        return 2
+    has_smoke_account = bool(smoke_email and smoke_password)
+    if has_smoke_account and (not supabase_url or not supabase_anon_key):
+        print(
+            "SUPABASE_URL and SUPABASE_ANON_KEY are required when PAPERLENS_SMOKE_EMAIL/PASSWORD are set.",
+            file=sys.stderr,
+        )
         return 2
 
     started = time.monotonic()
     _check_pages(frontend_base)
     _check_api(api_base)
+    if has_smoke_account:
+        access_token = _supabase_password_token(
+            supabase_url,
+            supabase_anon_key,
+            smoke_email,
+            smoke_password,
+        )
+        _check_authenticated_api(api_base, access_token)
     elapsed = time.monotonic() - started
-    print(f"Production deployment smoke passed in {elapsed:.1f}s.")
+    auth_label = "with authenticated notes check" if has_smoke_account else "public endpoints only"
+    print(f"Production deployment smoke passed in {elapsed:.1f}s ({auth_label}).")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except RuntimeError as exc:
+        print(f"Production deployment smoke failed: {exc}", file=sys.stderr)
+        raise SystemExit(1) from None

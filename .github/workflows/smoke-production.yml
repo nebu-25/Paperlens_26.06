@@ -38,4 +38,8 @@ jobs:
         env:
           FRONTEND_BASE_URL: ${{ github.event.inputs.frontend_base_url || 'https://nebu-25.github.io/Paperlens_26.06' }}
           API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://paperlens-backend-53ki.onrender.com' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PAPERLENS_SMOKE_EMAIL: ${{ secrets.PAPERLENS_SMOKE_EMAIL }}
+          PAPERLENS_SMOKE_PASSWORD: ${{ secrets.PAPERLENS_SMOKE_PASSWORD }}
         run: python3 backend/scripts/smoke_deployment.py
