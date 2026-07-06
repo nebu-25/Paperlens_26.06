@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
-import { DEMO_AUTH_ENABLED, DEMO_EMAIL, DEMO_PASSWORD } from '../constants';
+import { API_BASE, DEMO_AUTH_ENABLED, DEMO_EMAIL, DEMO_PASSWORD } from '../constants';
 import { AuthControls } from './AuthControls';
 
 interface LandingPageProps {
@@ -103,6 +103,20 @@ function CheckLine({
 export function LandingPage({ authEnabled, authReady, user, onEnterService }: LandingPageProps) {
   const [active, setActive] = useState(3);
   const activeTpl = templates[active];
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 75000);
+    void fetch(`${API_BASE}/health`, {
+      method: 'GET',
+      signal: controller.signal,
+      cache: 'no-store',
+    }).catch(() => undefined);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
 
   function focusLogin() {
     document.getElementById('paperlens-auth-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
