@@ -35,7 +35,7 @@ OpenRouter AI only when AI_API_KEY is set
 
 프론트엔드는 기본적으로 상대경로 `/api`를 호출합니다. 로컬 개발에서는 Vite 프록시가 `127.0.0.1:8000`으로 전달하고, Pages 배포에서는 `VITE_API_BASE_URL`로 Render 백엔드 주소를 주입합니다.
 
-랜딩 페이지는 `VITE_DEMO_EMAIL`/`VITE_DEMO_PASSWORD`가 주입된 공개 데모 빌드에서 로그인 폼을 미리 채웁니다. 값은 프론트 번들에 포함되므로 운영 개인 계정이 아니라 데모 전용 계정만 사용합니다. 랜딩 진입 시에는 `/api/health`를 fire-and-forget으로 호출해 Render 무료 플랜 콜드스타트 지연을 사용자의 다음 행동 전에 흡수합니다.
+랜딩 페이지는 PaperLens.html 시안과 동일한 디자인으로 구성하며, 요금 섹션은 과금 범위 밖이라 제외합니다. 로그인은 별도 섹션 대신 CTA(`무료로 리뷰 노트 만들기` 등)로 여는 모달로 제공합니다. 모달은 `AuthControls`를 재사용하고, `VITE_DEMO_EMAIL`/`VITE_DEMO_PASSWORD`가 주입된 공개 데모 빌드에서 로그인 폼을 미리 채웁니다. 값은 프론트 번들에 포함되므로 운영 개인 계정이 아니라 데모 전용 계정만 사용합니다. 랜딩 진입 시에는 `/api/health`를 fire-and-forget으로 호출해 Render 무료 플랜 콜드스타트 지연을 사용자의 다음 행동 전에 흡수합니다.
 
 GitHub Pages 배포의 경로 구성은 아래와 같습니다.
 

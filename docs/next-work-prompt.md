@@ -11,8 +11,8 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 로그인/사용설명서 랜딩 페이지가 시작 화면이고, 로그인 후 서비스 워크스페이스는 /Paperlens_26.06/service_home/ 입니다.
 - GitHub Pages 빌드는 service_home/index.html, 404.html, favicon.svg를 생성합니다.
 - 백엔드는 Render의 https://paperlens-backend-53ki.onrender.com 입니다.
-- 랜딩 페이지는 PaperLens.html 시안의 주요 섹션을 React로 옮긴 서비스 소개/로그인 진입 화면입니다.
-- 랜딩의 "무료로 리뷰노트 만들기" CTA는 로그인 카드로 스크롤하고 이메일 입력란에 focus합니다.
+- 랜딩 페이지는 PaperLens.html 시안과 동일한 디자인(sticky nav, 제품 목업 히어로, 트러스트 스탯 스트립, 경쟁 분석 밴드, 3-pass·목적 템플릿·기능 카드)을 React로 이식했습니다. 요금 섹션은 과금 범위 밖이라 제외했습니다.
+- 랜딩의 "무료로 리뷰 노트 만들기" 등 CTA는 로그인 모달을 엽니다. 모달은 데모 계정을 미리 채우고 이메일 입력에 focus하며 Esc/배경 클릭으로 닫힙니다. 로그인 상태면 CTA에서 바로 서비스로 이동합니다.
 - GitHub Pages 빌드에 `VITE_DEMO_EMAIL`/`VITE_DEMO_PASSWORD`가 있으면 데모 계정이 로그인 폼에 미리 입력됩니다. 이 값은 공개 번들에 포함되므로 데모 전용 계정만 사용합니다.
 - 랜딩 페이지는 로드 즉시 백그라운드에서 `/api/health`를 호출해 Render 무료 플랜 콜드스타트를 미리 깨웁니다. 요청 실패는 UI에 표시하지 않습니다.
 - Supabase Auth가 켜져 있고, 프론트는 Supabase access token을 Authorization: Bearer로 FastAPI에 보냅니다.
@@ -102,8 +102,8 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 
 3. 랜딩 페이지 polish
    - 로그인된 사용자가 루트 랜딩에 들어왔을 때 "서비스로 이동" CTA를 더 명확하게 배치
-   - 모바일에서 로그인 카드와 설명 카드 간격 확인
-   - 헤더의 compact auth UI가 좁은 화면에서 사라지는 문제를 모바일 메뉴/아이콘으로 개선
+   - 모바일에서 로그인 모달 폭·간격과 배경 스크롤 잠금 동작 확인
+   - 좁은 화면에서 nav 섹션 링크(왜 만들었나/사용 방법/목적 템플릿)가 숨겨질 때 모바일 메뉴/아이콘으로 개선
    - 랜딩 진입 warm-up 호출이 Pages 운영 번들에서 Render `/api/health`로 나가는지 Network 탭에서 확인
 
 4. 문서와 배포 자동화
