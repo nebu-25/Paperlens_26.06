@@ -72,10 +72,16 @@ const competitors = [
   ['PaperLens', '요약 외 전 작업 자동화 + 발굴 구조화', '한국어 최적화'],
 ] as const;
 
-function Pill({ children }: { children: ReactNode }) {
+const passes = [
+  ['1', 'PASS · 훑기', '제목·초록·결론', '읽을 가치가 있는지 판단하고 큰 흐름을 잡습니다.', '섹션 아웃라인 네비게이션'],
+  ['2', 'PASS · 표적', '서론·결과·그림', '중요한 결과와 근거를 확인하고, 숫자가 어디 있는지 찾아 둡니다.', '그림/표 네비게이터 · 교차참조'],
+  ['3', 'PASS · 정독', '방법·한계 정독', '방법과 한계를 꼼꼼히 살피며 나만의 생각을 만듭니다.', '시그널 스캐너 + 목적 템플릿'],
+] as const;
+
+function Pill({ dot = '#65b8a2', children }: { dot?: string; children: ReactNode }) {
   return (
     <div className="mb-4 inline-flex items-center gap-2">
-      <span className="size-[7px] rounded-full bg-[#65b8a2]" />
+      <span className="size-[7px] rounded-full" style={{ background: dot }} />
       <span className="text-[13px] font-medium uppercase tracking-[0.055em] text-[#0e4749]">{children}</span>
     </div>
   );
@@ -84,18 +90,88 @@ function Pill({ children }: { children: ReactNode }) {
 function CheckLine({
   children,
   color = '#1c5d5f',
-  muted = false,
+  size = '15px',
+  textColor = '#283338',
 }: {
   children: ReactNode;
   color?: string;
-  muted?: boolean;
+  size?: string;
+  textColor?: string;
 }) {
   return (
-    <div className={`flex gap-2.5 text-[15px] ${muted ? 'text-[#e4f0f1]' : 'text-[#283338]'}`}>
+    <div className="flex gap-2.5" style={{ fontSize: size, color: textColor }}>
       <span className="font-bold" style={{ color }}>
         ✓
       </span>
       <span>{children}</span>
+    </div>
+  );
+}
+
+function ProductMockup() {
+  return (
+    <div className="relative">
+      <div className="absolute -right-1.5 -top-5 text-[22px] text-[#d6aec1]">+</div>
+      <div className="overflow-hidden rounded-[14px] border border-[#d7e6e6] bg-white">
+        <div className="flex items-center gap-1.5 border-b border-[#eef4f4] px-3.5 py-[11px]">
+          <div className="size-[9px] rounded-full bg-[#d6aec1]" />
+          <div className="size-[9px] rounded-full bg-[#a2cbcd]" />
+          <div className="size-[9px] rounded-full bg-[#cae1e2]" />
+          <div className="ml-2 text-[11px] text-[#8aa0a1]">paperlens · 리뷰 노트</div>
+        </div>
+        <div className="grid min-h-[290px] grid-cols-2">
+          <div className="border-r border-[#eef4f4] p-4">
+            <div className="mb-2.5 text-[10px] uppercase tracking-[0.05em] text-[#8aa0a1]">원문 · 시그널 스캐너</div>
+            <div className="text-[12px] leading-[1.85] text-[#556]">
+              We propose a lightweight method{' '}
+              <span className="text-[#0e4749]" style={{ borderBottom: '2px dotted #1c5d5f' }}>
+                that assumes
+              </span>{' '}
+              a balanced dataset.{' '}
+              <span className="text-[#8a4d66]" style={{ borderBottom: '2px dotted #d6aec1' }}>
+                However,
+              </span>{' '}
+              performance drops on <span className="rounded-[3px] bg-[#e4f0f1] px-0.5">long-tail</span> classes.{' '}
+              <span className="text-[#8a4d66]" style={{ borderBottom: '2px dotted #d6aec1' }}>
+                A key limitation
+              </span>{' '}
+              is the small sample size, and we leave this to{' '}
+              <span className="text-[#8a4d66]" style={{ borderBottom: '2px dotted #d6aec1' }}>
+                future work.
+              </span>
+            </div>
+            <div className="mt-3.5 flex flex-wrap gap-1.5">
+              <span className="rounded-full bg-[#f2e8e2] px-2 py-1 text-[10px] text-[#8a4d66]">한계 후보</span>
+              <span className="rounded-full bg-[#e4f0f1] px-2 py-1 text-[10px] text-[#0e4749]">관점</span>
+              <span className="rounded-full bg-[#e4f0f1] px-2 py-1 text-[10px] text-[#0e4749]">키워드</span>
+            </div>
+          </div>
+          <div className="bg-[#fbfdfd] p-4">
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              <span className="rounded-full bg-[#e4f0f1] px-[9px] py-1 text-[10px] text-[#283338]">T1</span>
+              <span className="rounded-full bg-[#e4f0f1] px-[9px] py-1 text-[10px] text-[#283338]">T2</span>
+              <span className="rounded-full bg-[#e4f0f1] px-[9px] py-1 text-[10px] text-[#283338]">T3</span>
+              <span className="rounded-full bg-[#1c5d5f] px-[9px] py-1 text-[10px] text-white">T4 비판적 검토</span>
+            </div>
+            <div className="mb-[7px] text-[9px] uppercase tracking-[0.04em] text-[#8aa0a1]">3-PASS 읽기</div>
+            <div className="mb-4 flex gap-1.5">
+              <div className="h-[5px] flex-1 rounded-[3px] bg-[#1c5d5f]" />
+              <div className="h-[5px] flex-1 rounded-[3px] bg-[#1c5d5f]" />
+              <div className="h-[5px] flex-1 rounded-[3px] bg-[#cae1e2]" />
+            </div>
+            <div className="mb-[9px] rounded-lg border border-[#e4f0f1] bg-white p-[11px]">
+              <div className="mb-1.5 text-[11px] text-[#283338]">③ 저자가 말하지 않은 한계는?</div>
+              <div className="mb-[5px] h-1.5 rounded-[3px] bg-[#eef4f4]" />
+              <div className="h-1.5 w-[70%] rounded-[3px] bg-[#eef4f4]" />
+            </div>
+            <div className="rounded-lg border border-[#e4f0f1] bg-white p-[11px]">
+              <div className="mb-1.5 text-[11px] text-[#283338]">④ 가장 약한 고리는?</div>
+              <div className="h-1.5 w-[85%] rounded-[3px] bg-[#eef4f4]" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="absolute -bottom-4 -left-[18px] text-[20px] text-[#65b8a2]">✦</div>
     </div>
   );
 }
@@ -129,159 +205,261 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
   }
 
   return (
-    <main className="min-h-screen bg-[#f8fbfa] font-sans text-[#283338]">
-      <section className="bg-[#1c5d5f] px-8 py-20 text-[#f2f8f7]">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-20 flex items-center justify-between gap-6">
-            <div className="flex items-center gap-3">
-              <div className="size-8 rounded-lg bg-[#f2f8f7]" />
-              <span className="font-serif text-2xl font-semibold">PaperLens</span>
+    <main
+      className="min-h-screen overflow-x-hidden bg-[#f2f8f7] text-[#283338]"
+      style={{ fontFamily: "'Pretendard','Pretendard Variable',system-ui,sans-serif" }}
+    >
+      {/* ============ NAV ============ */}
+      <div className="sticky top-0 z-50 border-b border-[#e4f0f1] bg-[#f2f8f7]/[0.88] backdrop-blur-[10px]">
+        <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-6 px-8 py-4">
+          <div className="flex items-center gap-2.5">
+            <div className="relative size-[26px] rounded-[7px] bg-[#1c5d5f]">
+              <div className="absolute inset-x-1.5 top-1.5 h-0.5 rounded-[2px] bg-[#a2cbcd]" />
+              <div className="absolute inset-x-2 left-1.5 top-[11px] h-0.5 rounded-[2px] bg-[#a2cbcd]" />
+              <div className="absolute left-1.5 top-4 size-2 rounded-full border-2 border-[#65b8a2]" />
             </div>
+            <span className="font-serif text-[21px] font-semibold tracking-[-0.01em]">PaperLens</span>
+          </div>
+          <div className="hidden items-center gap-8 md:flex">
+            <a href="#why" className="text-sm text-[#283338] hover:text-[#1c5d5f]">왜 만들었나</a>
+            <a href="#how" className="text-sm text-[#283338] hover:text-[#1c5d5f]">사용 방법</a>
+            <a href="#templates" className="text-sm text-[#283338] hover:text-[#1c5d5f]">목적 템플릿</a>
+            <a href="#pricing" className="text-sm text-[#283338] hover:text-[#1c5d5f]">요금</a>
+          </div>
+          <div className="flex items-center gap-3.5">
+            <button type="button" className="text-sm text-[#283338] hover:text-[#1c5d5f]" onClick={start}>
+              {user ? '서비스로 이동' : '로그인'}
+            </button>
             <button
               type="button"
-              className="rounded-full border border-[#cae1e2]/70 px-5 py-2 text-sm font-medium text-[#f2f8f7] hover:bg-[#f2f8f7] hover:text-[#1c5d5f]"
+              className="rounded-full bg-[#1c5d5f] px-[18px] py-[9px] text-sm font-medium text-white hover:bg-[#156152]"
               onClick={start}
             >
-              무료로 리뷰 노트 만들기
+              무료로 시작
             </button>
           </div>
+        </div>
+      </div>
 
-          <div className="grid gap-12 lg:grid-cols-[1.08fr_0.92fr] lg:items-end">
+      {/* ============ HERO ============ */}
+      <div className="relative mx-auto max-w-[1120px] px-8 pb-10 pt-16">
+        <div className="absolute left-3.5 top-[120px] text-[26px] text-[#65b8a2]">✦</div>
+        <div className="absolute right-[40%] top-9 size-3.5 rounded-full border-2 border-[#d6aec1]" />
+        <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_1fr]">
+          <div>
+            <div className="mb-[26px] inline-flex items-center gap-2.5 rounded-full border border-[#a2cbcd] bg-[#e4f0f1] px-4 py-[7px]">
+              <span className="text-[13px] text-[#1c5d5f]">✦</span>
+              <span className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#0e4749]">요약은 당신, 잡무는 도구</span>
+            </div>
+            <h1 className="mb-[22px] max-w-[532px] font-serif text-[44px] font-normal leading-[1.12] tracking-[-0.01em] sm:text-[51px]">
+              AI가 요약해주는 도구는 많죠.
+              <br />
+              우리는 <span className="font-semibold text-[#1c5d5f]">당신이 직접 읽게</span> 돕습니다.
+            </h1>
+            <p className="mb-8 max-w-[480px] text-[17px] leading-[1.6] text-[#333]">
+              논문을 이해하고 요약하고 따져보는 일은 사용자의 몫입니다. 대신 파일 올리기, 정보 정리, 내보내기처럼 손이 많이 가는 일은
+              도구가 자동으로 처리하고, <b>무엇을 봐야 하는지</b>만 짚어 드립니다.
+            </p>
+            <div className="flex flex-wrap items-center gap-3.5">
+              <button
+                type="button"
+                className="rounded-full bg-[#1c5d5f] px-[26px] py-3.5 text-[15px] font-medium text-white hover:bg-[#156152]"
+                onClick={start}
+              >
+                무료로 리뷰 노트 만들기
+              </button>
+              <a
+                href="#how"
+                className="rounded-full border border-[#0e4749] px-6 py-[13px] text-[15px] font-medium text-[#0e4749]"
+              >
+                사용 방법 보기 →
+              </a>
+            </div>
+            <div className="mt-5 text-[12px] tracking-[0.04em] text-[#0e4749]">한국어 논문(KCI 포함)도 자동으로 정리됩니다</div>
+          </div>
+          <ProductMockup />
+        </div>
+      </div>
+
+      {/* ============ TRUST / STAT STRIP ============ */}
+      <div className="mx-auto mt-6 max-w-[1120px] px-8">
+        <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-[#e4f0f1] px-8 py-5 text-center text-[13px] tracking-[0.03em] text-[#283338]">
+          <span><b className="font-semibold">5종</b> 목적 템플릿</span>
+          <span className="text-[#a2cbcd]">|</span>
+          <span><b className="font-semibold">3단계</b> 읽기 가이드</span>
+          <span className="text-[#a2cbcd]">|</span>
+          <span><b className="font-semibold">6단계</b> 자동 정보 정리</span>
+          <span className="text-[#a2cbcd]">|</span>
+          <span><b className="font-semibold">요약 AI 0개</b> · 의심할 대상이 없음</span>
+        </div>
+      </div>
+
+      {/* ============ WHY IT EXISTS ============ */}
+      <div id="why" className="mx-auto max-w-[1120px] px-8 pt-24">
+        <div className="mx-auto mb-12 max-w-[720px] text-center">
+          <Pill>WHY PAPERLENS · 왜 만들었나</Pill>
+          <h2 className="mb-[18px] font-serif text-[34px] font-normal leading-[1.18] sm:text-[40px]">
+            AI가 대신 읽어 주는 도구는 이미 많습니다.
+            <br />
+            우리는 <span className="font-semibold">정확히 그 반대</span>를 만들었습니다.
+          </h2>
+          <p className="text-[17px] leading-[1.6] text-[#333]">
+            여러 전문가의 조언과 경쟁 서비스를 살펴보고 내린 결론은 하나였습니다.
+            <br />
+            직접 생각하는 과정이 가장 중요하다는 것입니다.
+            <br />
+            그래서 아래 세 가지를 정했습니다.
+          </p>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-3">
+          <article className="rounded-xl bg-[#e4f0f1] p-7">
+            <div className="mb-4 text-[12px] tracking-[0.05em] text-[#0e4749]">01 / DECISION</div>
+            <div className="relative mb-[18px] h-[110px] overflow-hidden rounded-[10px] border border-[#d7e6e6] bg-white">
+              <div className="absolute inset-x-4 top-4 h-2 rounded bg-[#eef4f4]" />
+              <div className="absolute left-4 top-8 h-2 w-[60%] rounded bg-[#eef4f4]" />
+              <div className="absolute inset-x-4 bottom-4 top-14 flex items-center justify-center rounded-lg border-2 border-dashed border-[#d6aec1] text-[11px] text-[#8a4d66]">
+                AI 요약 초안 — 제거됨
+              </div>
+            </div>
+            <h3 className="mb-2.5 font-serif text-[22px] font-semibold">AI 요약을 없앴습니다</h3>
+            <p className="text-[15px] leading-[1.6] text-[#333]">
+              AI가 만든 요약은 결국 "진짜 맞나?"를 확인하는 일을 새로 만듭니다. 그래서 요약 기능을 아예 넣지 않았습니다.{' '}
+              <b>의심할 대상 자체가 없습니다.</b>
+            </p>
+          </article>
+          <article className="rounded-xl bg-[#e4f0f1] p-7">
+            <div className="mb-4 text-[12px] tracking-[0.05em] text-[#0e4749]">02 / DECISION</div>
+            <div className="mb-[18px] flex h-[110px] flex-col justify-center gap-[7px] rounded-[10px] border border-[#d7e6e6] bg-white p-3.5">
+              <div className="flex gap-1.5">
+                <span className="rounded-full bg-[#1c5d5f] px-2 py-[3px] text-[10px] text-white">T4 비판</span>
+                <span className="rounded-full bg-[#e4f0f1] px-2 py-[3px] text-[10px] text-[#283338]">T2 선행연구</span>
+              </div>
+              <div className="text-[11px] text-[#556]">"저자가 말하지 않은 한계는?"</div>
+              <div className="text-[11px] text-[#8aa0a1]">"한 문장으로 소개한다면?"</div>
+            </div>
+            <h3 className="mb-2.5 font-serif text-[22px] font-semibold">목적별 템플릿</h3>
+            <p className="text-[15px] leading-[1.6] text-[#333]">
+              똑같은 논문이라도 <b>왜 읽느냐에 따라 물어볼 질문이 달라집니다.</b> 그래서 목적마다 질문과 정리 방법이 다른 5가지
+              템플릿을 준비했습니다.
+            </p>
+          </article>
+          <article className="rounded-xl bg-[#e4f0f1] p-7">
+            <div className="mb-4 text-[12px] tracking-[0.05em] text-[#0e4749]">03 / DECISION</div>
+            <div className="mb-[18px] h-[110px] overflow-hidden rounded-[10px] border border-[#d7e6e6] bg-white p-3.5 text-[11px] leading-[1.9] text-[#556]">
+              the model{' '}
+              <span className="text-[#8a4d66]" style={{ borderBottom: '2px dotted #d6aec1' }}>
+                is limited by
+              </span>{' '}
+              data …{' '}
+              <span className="text-[#0e4749]" style={{ borderBottom: '2px dotted #1c5d5f' }}>
+                we assume
+              </span>{' '}
+              that …{' '}
+              <span className="text-[#8a4d66]" style={{ borderBottom: '2px dotted #d6aec1' }}>
+                however
+              </span>{' '}
+              the results …
+            </div>
+            <h3 className="mb-2.5 font-serif text-[22px] font-semibold">시그널 스캐너</h3>
+            <p className="text-[15px] leading-[1.6] text-[#333]">
+              논문의 약점과 한계를 빨리 찾도록 도와드립니다. 중요해 보이는 <b>문장에 밑줄만</b> 그어 위치를 알려줄 뿐, 뜻을 판단하는
+              일은 여전히 사용자의 몫입니다. AI 요약이 아닙니다.
+            </p>
+          </article>
+        </div>
+      </div>
+
+      {/* ============ COMPETITOR POSITIONING ============ */}
+      <div className="mt-24 bg-[#f2e8e2]">
+        <div className="mx-auto max-w-[1120px] px-8 py-20">
+          <div className="grid items-center gap-14 lg:grid-cols-[0.85fr_1.15fr]">
             <div>
-              <div className="mb-5 text-[13px] font-medium uppercase tracking-[0.07em] text-[#cae1e2]">
-                PAPERLENS · 왜 만들었나
-              </div>
-              <h1 className="max-w-3xl font-serif text-[52px] font-normal leading-[1.08] sm:text-[72px]">
-                AI가 대신 읽어 주는 도구는 이미 많습니다.
-              </h1>
+              <Pill dot="#d6aec1">POSITIONING · 경쟁 분석</Pill>
+              <h2 className="mb-[18px] font-serif text-[35px] font-normal leading-[1.18]">
+                찾아 주거나 만들어 주거나.
+                <br />
+                <span className="font-semibold">그 사이가 비어 있었습니다.</span>
+              </h2>
+              <p className="text-[15px] leading-[1.65] text-[#333]">
+                다른 서비스는 논문을 <b>찾아 주거나</b> 내용을 <b>요약해 줍니다.</b>
+                <br />
+                PaperLens는 그 둘 대신, 번거로운 일을 전부 대신하고
+                <br />
+                목적에 맞게 무엇을 챙겨야 할지 정리해 드립니다.
+              </p>
             </div>
-            <div className="max-w-xl text-[18px] leading-[1.75] text-[#d8eceb]">
-              우리는 정확히 그 반대를 만들었습니다. 여러 전문가의 조언과 경쟁 서비스를 살펴보고 내린
-              결론은 하나였습니다. 직접 생각하는 과정이 가장 중요하다는 것입니다. 그래서 아래 세 가지를 정했습니다.
+            <div className="flex flex-col gap-2.5">
+              {competitors.map(([name, value, note]) => {
+                const isUs = name === 'PaperLens';
+                return (
+                  <div
+                    key={name}
+                    className={`flex items-center gap-4 rounded-[10px] px-[18px] py-3.5 ${
+                      isUs ? 'bg-[#1c5d5f]' : 'border border-[#ecdcd2] bg-white'
+                    }`}
+                  >
+                    <span className={`min-w-[130px] text-[13px] font-semibold ${isUs ? 'text-white' : ''}`}>{name}</span>
+                    <span className={`flex-1 text-[14px] ${isUs ? 'text-[#cae1e2]' : 'text-[#556]'}`}>{value}</span>
+                    <span className={`text-[12px] ${isUs ? 'text-[#a2cbcd]' : 'text-[#8a4d66]'}`}>{note}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="mx-auto grid max-w-6xl gap-5 px-8 pt-20 lg:grid-cols-3">
-        <article className="rounded-xl bg-[#e4f0f1] p-8">
-          <div className="mb-5 text-xs uppercase tracking-[0.05em] text-[#0e4749]">01 / DECISION</div>
-          <div className="mb-5 rounded-lg bg-white p-4 font-mono text-sm text-[#8aa0a1] line-through">
-            AI 요약 초안 — 제거됨
-          </div>
-          <h2 className="mb-3 font-serif text-[28px] font-semibold">AI 요약을 없앴습니다</h2>
-          <p className="text-[15px] leading-[1.65] text-[#556]">
-            AI가 만든 요약은 결국 "진짜 맞나?"를 확인하는 일을 새로 만듭니다. 그래서 요약 기능을 아예 넣지
-            않았습니다. 의심할 대상 자체가 없습니다.
-          </p>
-        </article>
-        <article className="rounded-xl bg-[#e4f0f1] p-8">
-          <div className="mb-5 text-xs uppercase tracking-[0.05em] text-[#0e4749]">02 / DECISION</div>
-          <div className="mb-5 grid gap-2">
-            <div className="rounded bg-[#1c5d5f] px-3 py-2 text-sm text-white">T4 비판 · "저자가 말하지 않은 한계는?"</div>
-            <div className="rounded bg-white px-3 py-2 text-sm text-[#1c5d5f]">T2 선행연구 · "한 문장으로 소개한다면?"</div>
-          </div>
-          <h2 className="mb-3 font-serif text-[28px] font-semibold">목적별 템플릿</h2>
-          <p className="text-[15px] leading-[1.65] text-[#556]">
-            똑같은 논문이라도 왜 읽느냐에 따라 물어볼 질문이 달라집니다. 그래서 목적마다 질문과 정리 방법이 다른
-            5가지 템플릿을 준비했습니다.
-          </p>
-        </article>
-        <article className="rounded-xl bg-[#e4f0f1] p-8">
-          <div className="mb-5 text-xs uppercase tracking-[0.05em] text-[#0e4749]">03 / DECISION</div>
-          <div className="mb-5 rounded-lg bg-white p-4 font-mono text-sm leading-7 text-[#556]">
-            the model is limited by data
+      {/* ============ HOW TO USE — 3 PASS ============ */}
+      <div id="how" className="mx-auto max-w-[1120px] px-8 pt-24">
+        <div className="mx-auto mb-[52px] max-w-[720px] text-center">
+          <Pill>HOW IT WORKS · 사용 방법</Pill>
+          <h2 className="mb-[18px] font-serif text-[44px] font-normal leading-[1.18]">
+            논문을 처음부터 정독하지 마세요.
             <br />
-            we assume that
-            <br />
-            however the results
-          </div>
-          <h2 className="mb-3 font-serif text-[28px] font-semibold">시그널 스캐너</h2>
-          <p className="text-[15px] leading-[1.65] text-[#556]">
-            논문의 약점과 한계를 빨리 찾도록 도와드립니다. 중요해 보이는 문장에 밑줄만 그어 위치를 알려줄 뿐,
-            뜻을 판단하는 일은 여전히 사용자의 몫입니다.
+            <span className="font-semibold italic">3-pass</span>로 읽으면 됩니다.
+          </h2>
+          <p className="text-[17px] leading-[1.6] text-[#333]">
+            "어디부터 읽지?"라는 막막함을 없애기 위해, 잘 알려진 3단계 읽기법을 그대로 안내합니다. 각 단계에 필요한 기능이 화면에
+            딱 맞게 연결되어 있습니다.
           </p>
-        </article>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-8 pt-24">
-        <Pill>POSITIONING · 경쟁 분석</Pill>
-        <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-          <div>
-            <h2 className="font-serif text-[44px] font-normal leading-[1.18]">
-              찾아 주거나 만들어 주거나.
-              <br />
-              그 사이가 비어 있었습니다.
-            </h2>
-            <p className="mt-5 text-[17px] leading-[1.65] text-[#333]">
-              다른 서비스는 논문을 찾아 주거나 내용을 요약해 줍니다. PaperLens는 그 둘 대신, 번거로운 일을 전부
-              대신하고 목적에 맞게 무엇을 챙겨야 할지 정리해 드립니다.
-            </p>
-          </div>
-          <div className="overflow-hidden rounded-xl border border-[#e4f0f1] bg-white">
-            {competitors.map(([name, value, note]) => (
-              <div key={name} className={`grid grid-cols-[0.72fr_1.1fr_0.85fr] gap-3 border-b border-[#e4f0f1] p-4 text-sm last:border-b-0 ${name === 'PaperLens' ? 'bg-[#e4f0f1]' : ''}`}>
-                <b>{name}</b>
-                <span>{value}</span>
-                <span className="text-[#667]">{note}</span>
-              </div>
-            ))}
-          </div>
         </div>
-      </section>
 
-      <section className="mx-auto max-w-6xl px-8 pt-24">
-        <Pill>HOW IT WORKS · 사용 방법</Pill>
-        <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr]">
-          <div>
-            <h2 className="font-serif text-[44px] font-normal leading-[1.18]">
-              논문을 처음부터
-              <br />
-              정독하지 마세요.
-              <br />
-              <span className="font-semibold">3-pass</span>로 읽으면 됩니다.
-            </h2>
-            <p className="mt-5 text-[17px] leading-[1.65] text-[#333]">
-              "어디부터 읽지?"라는 막막함을 없애기 위해, 잘 알려진 3단계 읽기법을 그대로 안내합니다. 각 단계에
-              필요한 기능이 화면에 딱 맞게 연결되어 있습니다.
-            </p>
-          </div>
-          <div className="grid gap-4">
-            {[
-              ['1 PASS · 훑기', '제목·초록·결론', '읽을 가치가 있는지 판단하고 큰 흐름을 잡습니다.', '섹션 아웃라인 네비게이션'],
-              ['2 PASS · 표적', '서론·결과·그림', '중요한 결과와 근거를 확인하고, 숫자가 어디 있는지 찾아 둡니다.', '그림/표 네비게이터 · 교차참조'],
-              ['3 PASS · 정독', '방법·한계', '방법과 한계를 꼼꼼히 살피며 나만의 생각을 만듭니다.', '시그널 스캐너 + 목적 템플릿'],
-            ].map(([label, title, body, tool]) => (
-              <article key={label} className="rounded-xl bg-white p-6">
-                <div className="mb-2 text-xs uppercase tracking-[0.05em] text-[#0e4749]">{label}</div>
-                <h3 className="mb-2 text-lg font-bold">{title}</h3>
-                <p className="mb-4 text-[15px] leading-[1.6] text-[#556]">{body}</p>
-                <div className="inline-flex items-center gap-2 rounded-lg bg-[#e4f0f1] px-3 py-2 text-[13px] text-[#0e4749]">
-                  <span className="font-bold text-[#1c5d5f]">→</span> {tool}
-                </div>
-              </article>
-            ))}
-          </div>
+        <div className="grid gap-5 lg:grid-cols-3">
+          {passes.map(([num, label, title, body, tool]) => (
+            <article key={num} className="rounded-xl border border-[#e4f0f1] bg-white p-7">
+              <div className="mb-3.5 flex items-baseline gap-2.5">
+                <span className="font-serif text-[40px] font-semibold leading-none text-[#1c5d5f]">{num}</span>
+                <span className="text-[13px] tracking-[0.05em] text-[#0e4749]">{label}</span>
+              </div>
+              <h3 className="mb-2 text-[19px] font-bold">{title}</h3>
+              <p className="mb-3.5 text-[14.5px] leading-[1.6] text-[#556]">{body}</p>
+              <div className="flex items-center gap-2 rounded-lg bg-[#e4f0f1] px-3 py-2.5 text-[13px] text-[#0e4749]">
+                <span className="font-bold text-[#1c5d5f]">→</span> {tool}
+              </div>
+            </article>
+          ))}
         </div>
 
         <div className="mt-14 rounded-xl border border-[#e4f0f1] bg-white px-10 py-9">
-          <div className="mb-6 text-xs uppercase tracking-[0.05em] text-[#8aa0a1]">등록에서 산출물까지 · 4단계</div>
+          <div className="mb-6 text-[12px] uppercase tracking-[0.05em] text-[#8aa0a1]">등록에서 산출물까지 · 4단계</div>
           <div className="grid gap-7 md:grid-cols-4">
             {steps.map((step) => (
               <div key={step.n} className="border-t-2 border-[#65b8a2] pt-4">
-                <div className="mb-2 text-xs text-[#1c5d5f]">STEP {step.n}</div>
+                <div className="mb-2 text-[12px] text-[#1c5d5f]">STEP {step.n}</div>
                 <h4 className="mb-1.5 text-base font-bold">{step.title}</h4>
                 <p className="text-[13.5px] leading-[1.55] text-[#556]">{step.desc}</p>
               </div>
             ))}
           </div>
         </div>
-      </section>
+      </div>
 
-      <section id="templates" className="mx-auto max-w-6xl px-8 pt-24">
+      {/* ============ INTERACTIVE PURPOSE TEMPLATES ============ */}
+      <div id="templates" className="mx-auto max-w-[1120px] px-8 pt-24">
         <div className="mx-auto mb-11 max-w-[720px] text-center">
-          <Pill>PURPOSE TEMPLATES · 목적 축</Pill>
-          <h2 className="mb-4 font-serif text-[44px] font-normal leading-[1.18]">
+          <Pill dot="#16325a">PURPOSE TEMPLATES · 목적 축</Pill>
+          <h2 className="mb-[18px] font-serif text-[44px] font-normal leading-[1.18]">
             왜 읽느냐를 고르면,
             <br />
             <span className="font-semibold">물어야 할 질문</span>이 바뀝니다.
@@ -292,6 +470,7 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             3단계 로드맵이 대신 챙겨 드립니다.
           </p>
         </div>
+
         <div className="mb-7 flex flex-wrap justify-center gap-2.5">
           {templates.map((template, index) => (
             <button
@@ -306,6 +485,7 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             </button>
           ))}
         </div>
+
         <div className="grid gap-11 rounded-2xl bg-[#e4f0f1] p-8 lg:grid-cols-[1fr_1.2fr] lg:p-10">
           <div>
             <div className="mb-3.5 flex items-center gap-2.5">
@@ -331,20 +511,26 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             <div className="grid gap-2.5">
               {activeTpl.questions.map((question, index) => (
                 <div key={question} className="flex items-start gap-3 border-b border-[#f0f5f5] pb-2.5 last:border-b-0">
-                  <span className="font-serif text-lg font-semibold leading-[1.3] text-[#65b8a2]">{['①', '②', '③', '④', '⑤'][index]}</span>
+                  <span className="font-serif text-lg font-semibold leading-[1.3] text-[#65b8a2]">
+                    {['①', '②', '③', '④', '⑤'][index]}
+                  </span>
                   <span className="text-[15px] leading-[1.45] text-[#283338]">{question}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="mx-auto max-w-6xl px-8 pt-24">
+      {/* ============ FEATURE CARDS ============ */}
+      <div className="mx-auto max-w-[1120px] px-8 pt-24">
         <div className="grid gap-5 lg:grid-cols-2">
           <article className="rounded-xl bg-[#e4f0f1] p-8">
-            <Pill>automate · 잡무 자동화</Pill>
-            <h3 className="mb-4 font-serif text-[28px] font-semibold">읽기 주변부는 도구가 합니다</h3>
+            <div className="mb-[18px] inline-flex items-center gap-2">
+              <span className="size-1.5 rounded-full bg-[#1c5d5f]" />
+              <span className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#0e4749]">automate · 잡무 자동화</span>
+            </div>
+            <h3 className="mb-[18px] font-serif text-[28px] font-semibold">읽기 주변부는 도구가 합니다</h3>
             <div className="grid gap-2.5">
               <CheckLine>PDF·링크·DOI만 넣으면 논문 정보를 자동으로 채워 줍니다</CheckLine>
               <CheckLine>내용이 잘 뽑혔는지 점수(0~100)로 알려 줍니다</CheckLine>
@@ -353,22 +539,30 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             </div>
           </article>
           <article className="rounded-xl bg-[#e4f0f1] p-8">
-            <Pill>synthesize · 종합</Pill>
-            <h3 className="mb-4 font-serif text-[28px] font-semibold">읽은 것을 연구 질문으로</h3>
+            <div className="mb-[18px] inline-flex items-center gap-2">
+              <span className="size-1.5 rounded-full bg-[#16325a]" />
+              <span className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#0e4749]">synthesize · 종합</span>
+            </div>
+            <h3 className="mb-[18px] font-serif text-[28px] font-semibold">읽은 것을 연구 질문으로</h3>
             <div className="grid gap-2.5">
               <CheckLine color="#16325a">저장한 논문을 목적별로 다시 모아 봅니다</CheckLine>
               <CheckLine color="#16325a">자주 나오는 한계에서 아직 풀리지 않은 문제를 찾습니다</CheckLine>
               <CheckLine color="#16325a">검증된 틀(FINER·PICOT·PESICO)로 연구 질문을 만듭니다</CheckLine>
               <CheckLine color="#16325a">정리한 내용이 어느 논문에서 왔는지 바로 찾아갑니다</CheckLine>
             </div>
-            <button type="button" className="mt-5 rounded-full bg-[#16325a] px-5 py-2.5 text-sm font-medium text-white" onClick={start}>
+            <button
+              type="button"
+              className="mt-[22px] rounded-full bg-[#16325a] px-[22px] py-[11px] text-sm font-medium text-white"
+              onClick={start}
+            >
               연구 질문 빌더 살펴보기
             </button>
           </article>
         </div>
-      </section>
+      </div>
 
-      <section id="pricing" className="mx-auto max-w-6xl px-8 pt-24">
+      {/* ============ PRICING ============ */}
+      <div id="pricing" className="mx-auto max-w-[1120px] px-8 pt-24">
         <div className="mb-11 text-center">
           <Pill>PRICING · 요금</Pill>
           <h2 className="font-serif text-[40px] font-normal leading-[1.2]">
@@ -380,36 +574,45 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
         <div className="mx-auto grid max-w-[820px] gap-5 md:grid-cols-2">
           <article className="rounded-[14px] border border-[#e4f0f1] bg-white p-8">
             <div className="mb-2.5 text-[13px] uppercase tracking-[0.05em] text-[#0e4749]">Free</div>
-            <div className="mb-5 font-serif text-[38px] font-semibold">무료</div>
-            <div className="grid gap-2">
-              <CheckLine color="#65b8a2">월 5편 리뷰 노트</CheckLine>
-              <CheckLine color="#65b8a2">핵심 정리 기능 전부</CheckLine>
-              <CheckLine color="#65b8a2">기본 템플릿 · 3단계 읽기 · 목차 이동</CheckLine>
+            <div className="mb-[18px] font-serif text-[38px] font-semibold">무료</div>
+            <div className="grid gap-[9px]">
+              <CheckLine color="#65b8a2" size="14.5px" textColor="#556">월 5편 리뷰 노트</CheckLine>
+              <CheckLine color="#65b8a2" size="14.5px" textColor="#556">핵심 정리 기능 전부</CheckLine>
+              <CheckLine color="#65b8a2" size="14.5px" textColor="#556">기본 템플릿 · 3단계 읽기 · 목차 이동</CheckLine>
             </div>
-            <button type="button" className="mt-6 w-full rounded-full border border-[#0e4749] px-4 py-3 text-sm font-medium text-[#0e4749]" onClick={start}>
+            <button
+              type="button"
+              className="mt-6 w-full rounded-full border border-[#0e4749] px-4 py-3 text-sm font-medium text-[#0e4749]"
+              onClick={start}
+            >
               무료로 시작
             </button>
           </article>
           <article className="relative rounded-[14px] bg-[#1c5d5f] p-8 text-white">
             <div className="absolute right-5 top-5 rounded-full bg-[#cae1e2] px-2.5 py-1 text-[10px] uppercase tracking-[0.05em] text-[#0e4749]">추천</div>
             <div className="mb-2.5 text-[13px] uppercase tracking-[0.05em] text-[#a2cbcd]">Pro</div>
-            <div className="mb-5 font-serif text-[38px] font-semibold">
+            <div className="mb-[18px] font-serif text-[38px] font-semibold">
               9,900<span className="text-[17px] font-normal">원/월</span>
             </div>
-            <div className="grid gap-2">
-              <CheckLine color="#cae1e2" muted>리뷰 노트 무제한 · 목적 템플릿 전부(T2~T5)</CheckLine>
-              <CheckLine color="#cae1e2" muted>시그널 스캐너 · 그림/표 바로가기</CheckLine>
-              <CheckLine color="#cae1e2" muted>논문 모아보기 · 연구 질문 만들기</CheckLine>
-              <CheckLine color="#cae1e2" muted>어려운 용어를 AI가 풀어서 설명</CheckLine>
+            <div className="grid gap-[9px]">
+              <CheckLine color="#cae1e2" size="14.5px" textColor="#e4f0f1">리뷰 노트 무제한 · 목적 템플릿 전부(T2~T5)</CheckLine>
+              <CheckLine color="#cae1e2" size="14.5px" textColor="#e4f0f1">시그널 스캐너 · 그림/표 바로가기</CheckLine>
+              <CheckLine color="#cae1e2" size="14.5px" textColor="#e4f0f1">논문 모아보기 · 연구 질문 만들기</CheckLine>
+              <CheckLine color="#cae1e2" size="14.5px" textColor="#e4f0f1">어려운 용어를 AI가 풀어서 설명</CheckLine>
             </div>
-            <button type="button" className="mt-6 w-full rounded-full bg-white px-4 py-3 text-sm font-medium text-[#1c5d5f]" onClick={start}>
+            <button
+              type="button"
+              className="mt-6 w-full rounded-full bg-white px-4 py-3 text-sm font-medium text-[#1c5d5f]"
+              onClick={start}
+            >
               Pro 시작하기
             </button>
           </article>
         </div>
-      </section>
+      </div>
 
-      <section id="paperlens-auth-panel" className="mx-auto max-w-[820px] px-8 pt-24">
+      {/* ============ SERVICE LOGIN ============ */}
+      <div id="paperlens-auth-panel" className="mx-auto max-w-[820px] px-8 pt-24">
         <div className="rounded-2xl border border-[#e4f0f1] bg-white p-6 shadow-sm">
           <div className="mb-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#0e4749]">SERVICE LOGIN</p>
@@ -447,27 +650,33 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             </div>
           )}
         </div>
-      </section>
+      </div>
 
-      <section className="mx-auto max-w-6xl px-8 py-24">
-        <div className="relative overflow-hidden rounded-[18px] bg-[#16325a] px-8 py-16 text-center sm:px-12">
-          <div className="absolute left-10 top-8 text-2xl text-[#65b8a2]">✦</div>
-          <div className="absolute bottom-10 right-12 text-2xl text-[#d6aec1]">+</div>
+      {/* ============ CLOSING CTA ============ */}
+      <div className="mx-auto max-w-[1120px] px-8 py-24">
+        <div className="relative overflow-hidden rounded-[18px] bg-[#16325a] px-12 py-16 text-center">
+          <div className="absolute left-10 top-[34px] text-2xl text-[#65b8a2]">✦</div>
+          <div className="absolute bottom-10 right-[52px] text-2xl text-[#d6aec1]">+</div>
           <h2 className="mb-4 font-serif text-[42px] font-normal leading-[1.2] text-white">
             읽기는 당신의 몫으로, <span className="font-semibold text-[#cae1e2]">나머지는 우리에게.</span>
           </h2>
-          <p className="mx-auto mb-7 max-w-[520px] text-[17px] text-[#a2cbcd]">
-            AI를 연결하지 않아도 목적 템플릿, 3단계 읽기, 바로가기, 시그널 스캐너, 모아보기, 연구 질문 만들기까지
-            전부 그대로 쓸 수 있습니다.
+          <p className="mx-auto mb-[30px] max-w-[520px] text-[17px] text-[#a2cbcd]">
+            AI를 연결하지 않아도 목적 템플릿, 3단계 읽기, 바로가기, 시그널 스캐너, 모아보기, 연구 질문 만들기까지 전부 그대로 쓸 수
+            있습니다.
           </p>
-          <button type="button" className="rounded-full bg-white px-8 py-4 text-[15px] font-medium text-[#16325a]" onClick={start}>
+          <button
+            type="button"
+            className="rounded-full bg-white px-8 py-[15px] text-[15px] font-medium text-[#16325a]"
+            onClick={start}
+          >
             무료로 리뷰 노트 만들기
           </button>
         </div>
-      </section>
+      </div>
 
+      {/* ============ FOOTER ============ */}
       <footer className="border-t border-[#e4f0f1]">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-5 px-8 py-9">
+        <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-5 px-8 py-9">
           <div className="flex items-center gap-2.5">
             <div className="size-[22px] rounded-md bg-[#1c5d5f]" />
             <span className="font-serif text-lg font-semibold">PaperLens</span>

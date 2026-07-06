@@ -9,7 +9,7 @@ __pycache__/
 !.env.example
 
 # 기획서 파일 개발 시 참조에만 사용
-/paper_review_service_plan_v3*.1.md
+/paper_review_service_plan_v3.1*.md
 # 테스팅 기록: 로컬에서 계속 업데이트하되 버전 관리는 제외
 /testing*.md
 # 발표 자료: 배포와 관계없는 파일
@@ -34,3 +34,6 @@ desktop.ini
 
 # pdfjs-dist wasm 빌드 산출물 (predev/prebuild에서 자동 복사, 커밋 불필요)
 frontend/public/pdfjs-wasm/
+
+#랜딩페이지 구현 참고자료
+/PaperLens*.html
