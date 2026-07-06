@@ -178,6 +178,7 @@ function ProductMockup() {
 
 export function LandingPage({ authEnabled, authReady, user, onEnterService }: LandingPageProps) {
   const [active, setActive] = useState(3);
+  const [loginOpen, setLoginOpen] = useState(false);
   const activeTpl = templates[active];
 
   useEffect(() => {
@@ -194,14 +195,25 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
     };
   }, []);
 
-  function focusLogin() {
-    document.getElementById('paperlens-auth-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    window.setTimeout(() => document.getElementById('paperlens-auth-email')?.focus(), 300);
-  }
+  // 로그인 모달이 열리면 이메일 입력에 포커스, Esc로 닫기, 배경 스크롤 잠금
+  useEffect(() => {
+    if (!loginOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLoginOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.setTimeout(() => document.getElementById('paperlens-auth-email')?.focus(), 60);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [loginOpen]);
 
   function start() {
     if (user) onEnterService();
-    else focusLogin();
+    else setLoginOpen(true);
   }
 
   return (
@@ -224,7 +236,6 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             <a href="#why" className="text-sm text-[#283338] hover:text-[#1c5d5f]">왜 만들었나</a>
             <a href="#how" className="text-sm text-[#283338] hover:text-[#1c5d5f]">사용 방법</a>
             <a href="#templates" className="text-sm text-[#283338] hover:text-[#1c5d5f]">목적 템플릿</a>
-            <a href="#pricing" className="text-sm text-[#283338] hover:text-[#1c5d5f]">요금</a>
           </div>
           <div className="flex items-center gap-3.5">
             <button type="button" className="text-sm text-[#283338] hover:text-[#1c5d5f]" onClick={start}>
@@ -561,97 +572,6 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
         </div>
       </div>
 
-      {/* ============ PRICING ============ */}
-      <div id="pricing" className="mx-auto max-w-[1120px] px-8 pt-24">
-        <div className="mb-11 text-center">
-          <Pill>PRICING · 요금</Pill>
-          <h2 className="font-serif text-[40px] font-normal leading-[1.2]">
-            유료 가치는 "AI가 해 준다"가 아니라
-            <br />
-            <span className="font-semibold italic">"내 작업 방식에 맞는 도구"</span>입니다.
-          </h2>
-        </div>
-        <div className="mx-auto grid max-w-[820px] gap-5 md:grid-cols-2">
-          <article className="rounded-[14px] border border-[#e4f0f1] bg-white p-8">
-            <div className="mb-2.5 text-[13px] uppercase tracking-[0.05em] text-[#0e4749]">Free</div>
-            <div className="mb-[18px] font-serif text-[38px] font-semibold">무료</div>
-            <div className="grid gap-[9px]">
-              <CheckLine color="#65b8a2" size="14.5px" textColor="#556">월 5편 리뷰 노트</CheckLine>
-              <CheckLine color="#65b8a2" size="14.5px" textColor="#556">핵심 정리 기능 전부</CheckLine>
-              <CheckLine color="#65b8a2" size="14.5px" textColor="#556">기본 템플릿 · 3단계 읽기 · 목차 이동</CheckLine>
-            </div>
-            <button
-              type="button"
-              className="mt-6 w-full rounded-full border border-[#0e4749] px-4 py-3 text-sm font-medium text-[#0e4749]"
-              onClick={start}
-            >
-              무료로 시작
-            </button>
-          </article>
-          <article className="relative rounded-[14px] bg-[#1c5d5f] p-8 text-white">
-            <div className="absolute right-5 top-5 rounded-full bg-[#cae1e2] px-2.5 py-1 text-[10px] uppercase tracking-[0.05em] text-[#0e4749]">추천</div>
-            <div className="mb-2.5 text-[13px] uppercase tracking-[0.05em] text-[#a2cbcd]">Pro</div>
-            <div className="mb-[18px] font-serif text-[38px] font-semibold">
-              9,900<span className="text-[17px] font-normal">원/월</span>
-            </div>
-            <div className="grid gap-[9px]">
-              <CheckLine color="#cae1e2" size="14.5px" textColor="#e4f0f1">리뷰 노트 무제한 · 목적 템플릿 전부(T2~T5)</CheckLine>
-              <CheckLine color="#cae1e2" size="14.5px" textColor="#e4f0f1">시그널 스캐너 · 그림/표 바로가기</CheckLine>
-              <CheckLine color="#cae1e2" size="14.5px" textColor="#e4f0f1">논문 모아보기 · 연구 질문 만들기</CheckLine>
-              <CheckLine color="#cae1e2" size="14.5px" textColor="#e4f0f1">어려운 용어를 AI가 풀어서 설명</CheckLine>
-            </div>
-            <button
-              type="button"
-              className="mt-6 w-full rounded-full bg-white px-4 py-3 text-sm font-medium text-[#1c5d5f]"
-              onClick={start}
-            >
-              Pro 시작하기
-            </button>
-          </article>
-        </div>
-      </div>
-
-      {/* ============ SERVICE LOGIN ============ */}
-      <div id="paperlens-auth-panel" className="mx-auto max-w-[820px] px-8 pt-24">
-        <div className="rounded-2xl border border-[#e4f0f1] bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[#0e4749]">SERVICE LOGIN</p>
-            <h2 className="mt-1 font-serif text-[30px] font-semibold">
-              {user ? '서비스 입장 준비 완료' : DEMO_AUTH_ENABLED ? '데모 계정으로 시작' : '로그인 후 서비스 시작'}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-[#556]">
-              {user
-                ? '계정 인증이 완료되었습니다. 저장된 논문과 리뷰 노트를 바로 이어서 확인할 수 있습니다.'
-                : DEMO_AUTH_ENABLED
-                  ? '데모 계정 정보가 입력되어 있습니다. 로그인하면 샘플 PDF와 리뷰 노트 흐름을 확인할 수 있습니다.'
-                  : '인증이 완료되면 논문 리뷰 서비스 화면으로 이동합니다.'}
-            </p>
-          </div>
-          <AuthControls
-            enabled={authEnabled}
-            ready={authReady}
-            user={user}
-            initialEmail={DEMO_EMAIL}
-            initialPassword={DEMO_PASSWORD}
-            onEnterService={onEnterService}
-          />
-          {import.meta.env.DEV && !authEnabled && (
-            <div className="mt-4 rounded border border-dashed border-line bg-paper p-3">
-              <p className="text-xs leading-5 text-muted">
-                <b className="text-ink">개발 모드</b> — Supabase 로그인 설정 없이 로컬 사용자로 워크스페이스를 열 수 있습니다.
-              </p>
-              <button
-                type="button"
-                className="mt-2 w-full rounded border border-line px-3 py-2 text-xs font-semibold text-muted hover:border-action hover:text-action"
-                onClick={onEnterService}
-              >
-                개발 모드로 시작
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* ============ CLOSING CTA ============ */}
       <div className="mx-auto max-w-[1120px] px-8 py-24">
         <div className="relative overflow-hidden rounded-[18px] bg-[#16325a] px-12 py-16 text-center">
@@ -684,6 +604,65 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
           <div className="text-xs tracking-[0.03em] text-[#8aa0a1]">논문 리뷰·정리 워크스페이스 · v4.0</div>
         </div>
       </footer>
+
+      {/* ============ LOGIN MODAL ============ */}
+      {loginOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#0e2b2c]/55 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="paperlens-login-title"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setLoginOpen(false);
+          }}
+        >
+          <div className="relative my-auto w-full max-w-[520px] rounded-2xl border border-[#e4f0f1] bg-white p-6 shadow-xl">
+            <button
+              type="button"
+              className="absolute right-4 top-4 flex size-8 items-center justify-center rounded-full text-[#8aa0a1] hover:bg-[#f2f8f7] hover:text-[#0e4749]"
+              aria-label="닫기"
+              onClick={() => setLoginOpen(false)}
+            >
+              ✕
+            </button>
+            <div className="mb-4 pr-8">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#0e4749]">SERVICE LOGIN</p>
+              <h2 id="paperlens-login-title" className="mt-1 font-serif text-[26px] font-semibold">
+                {user ? '서비스 입장 준비 완료' : DEMO_AUTH_ENABLED ? '데모 계정으로 시작' : '로그인 후 서비스 시작'}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-[#556]">
+                {user
+                  ? '계정 인증이 완료되었습니다. 저장된 논문과 리뷰 노트를 바로 이어서 확인할 수 있습니다.'
+                  : DEMO_AUTH_ENABLED
+                    ? '데모 계정 정보가 입력되어 있습니다. 로그인하면 샘플 PDF와 리뷰 노트 흐름을 확인할 수 있습니다.'
+                    : '인증이 완료되면 논문 리뷰 서비스 화면으로 이동합니다.'}
+              </p>
+            </div>
+            <AuthControls
+              enabled={authEnabled}
+              ready={authReady}
+              user={user}
+              initialEmail={DEMO_EMAIL}
+              initialPassword={DEMO_PASSWORD}
+              onEnterService={onEnterService}
+            />
+            {import.meta.env.DEV && !authEnabled && (
+              <div className="mt-4 rounded border border-dashed border-line bg-paper p-3">
+                <p className="text-xs leading-5 text-muted">
+                  <b className="text-ink">개발 모드</b> — Supabase 로그인 설정 없이 로컬 사용자로 워크스페이스를 열 수 있습니다.
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 w-full rounded border border-line px-3 py-2 text-xs font-semibold text-muted hover:border-action hover:text-action"
+                  onClick={onEnterService}
+                >
+                  개발 모드로 시작
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
