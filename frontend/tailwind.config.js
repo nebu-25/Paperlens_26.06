@@ -9,7 +9,7 @@ export default {
         paper: '#f7f5ef',
         panel: '#ffffff',
         line: '#dfdcd3',
-        action: '#2459c6',
+        action: '#1c5d5f',
       },
       borderRadius: {
         DEFAULT: '8px',

@@ -50,6 +50,31 @@ const SIGNAL_PROMOTE_COLOR: Record<SignalType, HighlightColor> = {
   critique: 'pink',
   perspective: 'yellow',
 };
+
+const OCR_REQUEST_TIMEOUT_MS = 120_000;
+
+function ocrRequestFailureNotice(error: unknown): Pick<AppNotice, 'title' | 'message'> {
+  const apiError = classifyApiException(error, 'OCR 재인식 요청을 완료하지 못했습니다.');
+  if (apiError.kind === 'timeout') {
+    return {
+      title: 'OCR 요청 시간 초과',
+      message:
+        'OCR 처리가 오래 걸려 요청을 중단했습니다. 페이지 수가 많은 PDF라면 일부 원문을 직접 입력하거나 잠시 후 다시 시도해 주세요.',
+    };
+  }
+  if (apiError.kind === 'cors_or_network' || apiError.kind === 'network') {
+    return {
+      title: 'OCR 연결 실패',
+      message:
+        'OCR 처리 중 서버 연결이 끊겼습니다. Render 백엔드가 재시작 중이거나 OCR 작업 시간이 길어진 경우일 수 있습니다. 잠시 후 다시 시도하고, 계속되면 PDF 원본을 보며 직접 입력해 주세요.',
+    };
+  }
+  return {
+    title: apiError.title,
+    message: apiError.message,
+  };
+}
+
 export function useReviewStore({
   accessToken,
   authReady,
@@ -207,10 +232,13 @@ export function useReviewStore({
       title: 'OCR 재인식 중',
       message: 'PDF를 이미지로 렌더해 텍스트를 다시 읽고 있습니다. 페이지 수에 따라 시간이 걸릴 수 있습니다.',
     });
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), OCR_REQUEST_TIMEOUT_MS);
     try {
       const res = await fetch(`${API_BASE}/papers/${target.id}/ocr`, {
         method: 'POST',
         headers: authHeaders,
+        signal: controller.signal,
       });
       if (!res.ok) {
         const apiError = await apiErrorFromResponse(res, 'OCR 재인식에 실패했습니다.');
@@ -263,13 +291,15 @@ export function useReviewStore({
           extractionQuality,
         ),
       });
-    } catch {
+    } catch (error) {
+      const failure = ocrRequestFailureNotice(error);
       setSyncNotice({
         tone: 'error',
-        title: 'OCR 요청 실패',
-        message: '서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+        title: failure.title,
+        message: failure.message,
       });
     } finally {
+      window.clearTimeout(timer);
       setOcrRunning(false);
     }
   }

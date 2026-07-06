@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { API_BASE, DEMO_AUTH_ENABLED, DEMO_EMAIL, DEMO_PASSWORD } from '../constants';
 import { AuthControls } from './AuthControls';
+import { BrandLogo } from './BrandLogo';
 
 interface LandingPageProps {
   authEnabled: boolean;
@@ -234,12 +235,7 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
       <div className="sticky top-0 z-50 border-b border-[#e4f0f1] bg-[#f2f8f7]/[0.88] backdrop-blur-[10px]">
         <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-6 px-8 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="relative size-[26px] rounded-[7px] bg-[#1c5d5f]">
-              <div className="absolute inset-x-1.5 top-1.5 h-0.5 rounded-[2px] bg-[#a2cbcd]" />
-              <div className="absolute inset-x-2 left-1.5 top-[11px] h-0.5 rounded-[2px] bg-[#a2cbcd]" />
-              <div className="absolute left-1.5 top-4 size-2 rounded-full border-2 border-[#65b8a2]" />
-            </div>
-            <span className="font-serif text-[21px] font-semibold tracking-[-0.01em]">PaperLens</span>
+            <BrandLogo size={26} wordmarkClassName="text-[21px]" />
             <span className="rounded-full border border-[#a2cbcd] bg-[#e4f0f1] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[#0e4749]">
               Beta
             </span>
@@ -615,10 +611,7 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
       {/* ============ FOOTER ============ */}
       <footer className="border-t border-[#e4f0f1]">
         <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-5 px-8 py-9">
-          <div className="flex items-center gap-2.5">
-            <div className="size-[22px] rounded-md bg-[#1c5d5f]" />
-            <span className="font-serif text-lg font-semibold">PaperLens</span>
-          </div>
+          <BrandLogo size={22} wordmarkClassName="text-lg" />
           <div className="text-xs tracking-[0.03em] text-[#8aa0a1]">논문 리뷰·정리 워크스페이스 · v4.0 · 베타 테스트 중</div>
         </div>
       </footer>

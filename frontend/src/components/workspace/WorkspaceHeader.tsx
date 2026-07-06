@@ -1,8 +1,9 @@
-import { ExternalLink, FileText, Layers } from 'lucide-react';
+import { ExternalLink, Layers } from 'lucide-react';
 import { useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { RESEARCH_LINKS } from '../../constants';
 import { AuthControls } from '../AuthControls';
+import { BrandLogo } from '../BrandLogo';
 import { LibraryDigest } from './LibraryDigest';
 import { useWorkspace } from './WorkspaceContext';
 
@@ -19,14 +20,12 @@ export function WorkspaceHeader({ authEnabled, authReady, user }: WorkspaceHeade
   return (
     <header className={`shrink-0 border-b border-line bg-panel px-4 sm:px-6 ${paper ? 'py-2' : 'py-4'}`}>
       <div className="flex items-center gap-3">
-        <div className={`grid place-items-center rounded bg-action text-white ${paper ? 'size-8' : 'size-11'}`}>
-          <FileText size={paper ? 18 : 23} />
-        </div>
         <div className="min-w-0 flex-1">
-          <h1 className={`font-bold leading-none tracking-normal ${paper ? 'text-xl' : 'text-2xl sm:text-3xl'}`}>
-            PaperLens
-          </h1>
-          {!paper && <p className="text-xs text-muted">사용자 주도 논문 리뷰 노트</p>}
+          <BrandLogo
+            size={paper ? 28 : 34}
+            wordmarkClassName={paper ? 'text-xl' : 'text-2xl sm:text-3xl'}
+          />
+          {!paper && <p className="mt-1 text-xs text-muted">사용자 주도 논문 리뷰 노트</p>}
         </div>
         <nav
           aria-label="논문 검색 사이트"

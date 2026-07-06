@@ -962,6 +962,13 @@ def _clova_request_payload(image_bytes: bytes, *, image_format: str, image_name:
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
+def _clova_request_timeout_sec() -> int:
+    timeout = max(1, settings.clova_ocr_timeout_sec)
+    if settings.ocr_provider_normalized == "auto" and settings.rapidocr_ready:
+        return min(timeout, 10)
+    return timeout
+
+
 def _call_clova_ocr(image_bytes: bytes, *, image_format: str, image_name: str) -> dict[str, object]:
     invoke_url = settings.clova_ocr_invoke_url.strip()
     secret_key = settings.clova_ocr_secret_key.strip()
@@ -981,7 +988,7 @@ def _call_clova_ocr(image_bytes: bytes, *, image_format: str, image_name: str) -
     )
     try:
         with urllib.request.urlopen(  # noqa: S310 - operator-provided CLOVA endpoint
-            request, timeout=max(1, settings.clova_ocr_timeout_sec)
+            request, timeout=_clova_request_timeout_sec()
         ) as response:
             raw = response.read()
     except urllib.error.HTTPError as exc:
