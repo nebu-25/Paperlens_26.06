@@ -12,6 +12,7 @@ export const SUPABASE_AUTH_ENABLED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 export const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL ?? '';
 export const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD ?? '';
 export const DEMO_AUTH_ENABLED = Boolean(DEMO_EMAIL && DEMO_PASSWORD);
+export const DEMO_SURVEY_URL = 'https://forms.gle/WrYxvAt6RQqxVia29';
 
 export function resolveApiUrl(path: string): string {
   if (!path) return '';

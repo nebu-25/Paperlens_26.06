@@ -38,6 +38,7 @@ const EXPORT_OPTION_LABELS: { key: keyof ExportOptions; label: string }[] = [
 ];
 
 export function ReviewNotePanel() {
+  const { store, requestSurveyPrompt } = useWorkspace();
   const {
     paper,
     note,
@@ -60,7 +61,7 @@ export function ReviewNotePanel() {
     setHighlightFilter,
     exportMarkdown,
     exportPdf,
-  } = useWorkspace().store;
+  } = store;
 
   const [manualSummaryDraft, setManualSummaryDraft] = useState('');
   const [manualSummaryColor, setManualSummaryColor] = useState<HighlightColor>('yellow');
@@ -836,14 +837,20 @@ export function ReviewNotePanel() {
           <div className="mt-4 flex gap-2">
             <button
               className="flex flex-1 items-center justify-center gap-2 rounded bg-action px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              onClick={() => exportMarkdown(exportOptions)}
+              onClick={() => {
+                exportMarkdown(exportOptions);
+                requestSurveyPrompt('export');
+              }}
               disabled={reviewDoneCount === 0}
             >
               <Download size={15} /> Markdown
             </button>
             <button
               className="flex flex-1 items-center justify-center gap-2 rounded border border-line px-3 py-2 text-sm disabled:opacity-50"
-              onClick={() => exportPdf(exportOptions)}
+              onClick={() => {
+                exportPdf(exportOptions);
+                requestSurveyPrompt('export');
+              }}
               disabled={reviewDoneCount === 0}
             >
               <Printer size={15} /> PDF로 저장

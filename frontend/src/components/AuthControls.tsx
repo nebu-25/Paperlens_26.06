@@ -16,6 +16,7 @@ interface AuthControlsProps {
   syncing?: boolean;
   savedAt?: string | null;
   onBeforeSignOut?: () => Promise<boolean>;
+  onSignOutComplete?: () => void;
 }
 
 export function AuthControls({
@@ -30,12 +31,18 @@ export function AuthControls({
   syncing = false,
   savedAt = null,
   onBeforeSignOut,
+  onSignOutComplete,
 }: AuthControlsProps) {
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState(initialPassword);
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+
+  async function completeSignOut() {
+    await supabase?.auth.signOut();
+    onSignOutComplete?.();
+  }
 
   async function signOut() {
     if (pendingChanges > 0 || syncing) {
@@ -55,7 +62,7 @@ export function AuthControls({
           '서버 저장에 실패했습니다. 로그아웃하면 이 브라우저의 임시 저장본은 유지하고, 다음 로그인 때 다시 동기화합니다. 그래도 로그아웃할까요?',
         );
         if (!signOutWithoutClearing) return;
-        await supabase?.auth.signOut();
+        await completeSignOut();
         return;
       }
     } else if (savedAt?.startsWith('로컬 저장')) {
@@ -74,7 +81,7 @@ export function AuthControls({
     }
     if (user?.id) await clearLocalReviewCache(`user:${user.id}`);
     clearLegacyLocalReviewCache();
-    await supabase?.auth.signOut();
+    await completeSignOut();
   }
 
   if (!enabled) {

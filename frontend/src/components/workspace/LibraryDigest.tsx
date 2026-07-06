@@ -58,7 +58,7 @@ const SYNC_LABEL: Record<SyncState, string> = {
 };
 
 export function LibraryDigest({ onClose }: { onClose: () => void }) {
-  const { store, accessToken } = useWorkspace();
+  const { store, accessToken, requestSurveyPrompt } = useWorkspace();
   const { library, notes, openAggregatedItem } = store;
   // 역링크: 오버레이를 닫고 해당 논문/하이라이트로 이동
   const jumpToItem = (paperId: string, itemId: string) => {
@@ -256,9 +256,10 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                   type="button"
                   className="inline-flex items-center gap-1 rounded bg-action px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
                   disabled={items.length === 0}
-                  onClick={() =>
-                    downloadMarkdown(`${safeFilename('라이브러리 취합')}.md`, buildAggregateMarkdown(items, filter))
-                  }
+                  onClick={() => {
+                    downloadMarkdown(`${safeFilename('라이브러리 취합')}.md`, buildAggregateMarkdown(items, filter));
+                    requestSurveyPrompt('export');
+                  }}
                 >
                   <Download size={13} /> Markdown 내보내기
                 </button>
@@ -459,7 +460,10 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 rounded bg-action px-3 py-1.5 text-sm font-semibold text-white"
-                  onClick={() => downloadMarkdown(`${safeFilename('연구 질문 문서')}.md`, buildResearchMarkdown(doc))}
+                  onClick={() => {
+                    downloadMarkdown(`${safeFilename('연구 질문 문서')}.md`, buildResearchMarkdown(doc));
+                    requestSurveyPrompt('export');
+                  }}
                 >
                   <Download size={13} /> 연구 질문 문서 내보내기
                 </button>

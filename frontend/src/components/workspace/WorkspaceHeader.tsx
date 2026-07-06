@@ -12,7 +12,8 @@ interface WorkspaceHeaderProps {
 }
 
 export function WorkspaceHeader({ authEnabled, authReady, user }: WorkspaceHeaderProps) {
-  const { paper, aiEnabled, pending, syncing, savedAt, saveNow } = useWorkspace().store;
+  const { store, requestSurveyPrompt } = useWorkspace();
+  const { paper, aiEnabled, pending, syncing, savedAt, saveNow } = store;
   return (
     <header className={`shrink-0 border-b border-line bg-panel px-4 sm:px-6 ${paper ? 'py-2' : 'py-4'}`}>
       <div className="flex items-center gap-3">
@@ -54,6 +55,7 @@ export function WorkspaceHeader({ authEnabled, authReady, user }: WorkspaceHeade
           syncing={syncing}
           savedAt={savedAt}
           onBeforeSignOut={saveNow}
+          onSignOutComplete={() => requestSurveyPrompt('sign-out')}
         />
       </div>
     </header>

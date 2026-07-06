@@ -8,9 +8,15 @@ import { PaperSidebar } from './workspace/PaperSidebar';
 import { ReviewNotePanel } from './workspace/ReviewNotePanel';
 import { SelectionToolbar } from './workspace/SelectionToolbar';
 import { SourcePanel } from './workspace/SourcePanel';
+import { SurveyPrompt } from './SurveyPrompt';
 import { UploadBar } from './workspace/UploadBar';
 import { WorkspaceContext } from './workspace/WorkspaceContext';
 import { WorkspaceHeader } from './workspace/WorkspaceHeader';
+import {
+  canShowSurveyPrompt,
+  markSurveyPromptShown,
+  type SurveyPromptReason,
+} from '../lib/surveyPrompt';
 
 const SERVICE_ROUTE = 'service_home';
 
@@ -64,14 +70,15 @@ interface ReviewWorkspaceProps {
   authReady: boolean;
   user: User | null;
   accessToken: string;
+  requestSurveyPrompt: (reason: SurveyPromptReason) => void;
 }
 
-function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWorkspaceProps) {
+function ReviewWorkspace({ authEnabled, authReady, user, accessToken, requestSurveyPrompt }: ReviewWorkspaceProps) {
   const store = useReviewStore({ accessToken, authReady, authEnabled, userId: user?.id ?? null });
   const { paper, mobilePanel, setMobilePanel, setSelection, sidebarCollapsed } = store;
 
   return (
-    <WorkspaceContext.Provider value={{ store, accessToken }}>
+    <WorkspaceContext.Provider value={{ store, accessToken, requestSurveyPrompt }}>
       <main
         className="flex h-screen flex-col overflow-hidden bg-paper text-ink"
         onMouseDown={() => setSelection(null)}
@@ -130,12 +137,19 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
 function App() {
   const { authEnabled, authReady, user, accessToken } = useAuthSession();
   const { route, navigate } = useAppRoute();
+  const [surveyPromptReason, setSurveyPromptReason] = useState<SurveyPromptReason | null>(null);
   const initialAuthResolvedRef = useRef(false);
   const previousAccessTokenRef = useRef<string | null>(null);
 
   // 개발용 우회: Vite dev 서버 + Supabase 미설정일 때만 로그인 없이 워크스페이스 진입을 허용한다.
   // 백엔드도 동일 조건에서 'local' 단일 사용자로 동작하며, 프로덕션 빌드(DEV=false)에는 영향이 없다.
   const devLocalMode = import.meta.env.DEV && !authEnabled;
+
+  const requestSurveyPrompt = useCallback((reason: SurveyPromptReason) => {
+    if (!canShowSurveyPrompt()) return;
+    markSurveyPromptShown();
+    setSurveyPromptReason(reason);
+  }, []);
 
   useEffect(() => {
     if (!authReady) return;
@@ -160,22 +174,33 @@ function App() {
 
   if (route === 'landing' || (!accessToken && !devLocalMode)) {
     return (
-      <LandingPage
-        authEnabled={authEnabled}
-        authReady={authReady}
-        user={user}
-        onEnterService={() => navigate('service')}
-      />
+      <>
+        <LandingPage
+          authEnabled={authEnabled}
+          authReady={authReady}
+          user={user}
+          onEnterService={() => navigate('service')}
+        />
+        {surveyPromptReason && (
+          <SurveyPrompt reason={surveyPromptReason} onClose={() => setSurveyPromptReason(null)} />
+        )}
+      </>
     );
   }
 
   return (
-    <ReviewWorkspace
-      authEnabled={authEnabled}
-      authReady={authReady}
-      user={user}
-      accessToken={accessToken ?? ''}
-    />
+    <>
+      <ReviewWorkspace
+        authEnabled={authEnabled}
+        authReady={authReady}
+        user={user}
+        accessToken={accessToken ?? ''}
+        requestSurveyPrompt={requestSurveyPrompt}
+      />
+      {surveyPromptReason && (
+        <SurveyPrompt reason={surveyPromptReason} onClose={() => setSurveyPromptReason(null)} />
+      )}
+    </>
   );
 }
 
