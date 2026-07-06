@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Check, Copy } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { API_BASE, DEMO_AUTH_ENABLED, DEMO_EMAIL, DEMO_PASSWORD } from '../constants';
 import { AuthControls } from './AuthControls';
@@ -180,10 +181,12 @@ function ProductMockup() {
 export function LandingPage({ authEnabled, authReady, user, onEnterService }: LandingPageProps) {
   const [active, setActive] = useState(3);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [serviceLinkCopied, setServiceLinkCopied] = useState(false);
   // 'demo': 데모 계정 프리필(신규 체험 CTA) · 'personal': 빈 폼(기존 사용자 로그인)
   const [loginMode, setLoginMode] = useState<'demo' | 'personal'>('demo');
   const activeTpl = templates[active];
   const demoPrefill = loginMode === 'demo';
+  const serviceUrl = `${window.location.origin}${import.meta.env.BASE_URL}service_home/`;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -226,6 +229,16 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
     else openLogin('demo');
   }
 
+  async function copyServiceLink() {
+    try {
+      await navigator.clipboard.writeText(serviceUrl);
+      setServiceLinkCopied(true);
+      window.setTimeout(() => setServiceLinkCopied(false), 2200);
+    } catch {
+      setServiceLinkCopied(false);
+    }
+  }
+
   return (
     <main
       className="min-h-screen overflow-x-hidden bg-[#f2f8f7] text-[#283338]"
@@ -260,6 +273,28 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             >
               무료로 시작
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-b border-[#d7e6e6] bg-white px-5 py-3 md:hidden">
+        <div className="mx-auto max-w-[560px]">
+          <p className="text-[13px] font-semibold text-[#0e4749]">
+            PaperLens는 데스크톱 화면에 최적화되어 있습니다.
+          </p>
+          <p className="mt-1 text-[12px] leading-5 text-[#556]">
+            휴대폰에서는 소개를 먼저 확인하고, 실제 논문 리뷰는 노트북에서 사용해 주세요.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded border border-[#a2cbcd] px-2.5 py-1.5 text-[12px] font-semibold text-[#0e4749]"
+              onClick={() => void copyServiceLink()}
+            >
+              {serviceLinkCopied ? <Check size={13} /> : <Copy size={13} />}
+              {serviceLinkCopied ? '복사됨' : '서비스 링크 복사'}
+            </button>
+            <span className="min-w-0 truncate text-[11px] text-[#8aa0a1]">{serviceUrl}</span>
           </div>
         </div>
       </div>
