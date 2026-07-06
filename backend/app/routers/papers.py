@@ -1238,9 +1238,15 @@ def _ocr_provider_order(document) -> list[str]:
     provider = settings.ocr_provider_normalized
     if provider in {"clova", "rapidocr"}:
         return [provider]
+    if not settings.clova_ocr_ready and not settings.rapidocr_ready:
+        return ["clova", "rapidocr"]
+    if not settings.clova_ocr_ready:
+        return ["rapidocr"]
+    if not settings.rapidocr_ready:
+        return ["clova"]
     if _looks_latin_dominant_document(document):
         return ["rapidocr", "clova"]
-    return ["clova", "rapidocr"]
+    return ["clova"]
 
 
 def _ocr_provider_unavailable_reason(provider: str) -> str:
@@ -1564,26 +1570,28 @@ def ocr_paper(paper_id: str, user_id: str = Depends(current_user_id)) -> dict[st
     if document.needs_pass:
         raise HTTPException(status_code=400, detail="암호로 보호된 PDF입니다.")
 
-    ocr_text, error = _ocr_document_text(
-        document, dpi=settings.ocr_dpi, max_pages=settings.ocr_max_pages
-    )
-    if not ocr_text.strip():
-        raise HTTPException(status_code=422, detail=error or "OCR로 텍스트를 추출하지 못했습니다.")
+    try:
+        ocr_text, error = _ocr_document_text(
+            document, dpi=settings.ocr_dpi, max_pages=settings.ocr_max_pages
+        )
+        if not ocr_text.strip():
+            raise HTTPException(status_code=422, detail=error or "OCR로 텍스트를 추출하지 못했습니다.")
 
-    page_count = document.page_count
-    warnings = _extraction_quality_warnings(ocr_text, page_count)
-    quality = _extraction_quality(ocr_text, page_count, warnings)
-    quality["source"] = "ocr"
-    return {
-        "text": ocr_text,
-        "page_count": page_count,
-        "sections": _detect_sections(ocr_text),
-        "figure_images": _detect_figure_images(document),
-        "extraction_quality": quality,
-        "metadata_warnings": warnings,
-        "notice": " ".join(warnings) or None,
-        "ocr": True,
-    }
+        page_count = document.page_count
+        warnings = _extraction_quality_warnings(ocr_text, page_count)
+        quality = _extraction_quality(ocr_text, page_count, warnings)
+        quality["source"] = "ocr"
+        return {
+            "text": ocr_text,
+            "page_count": page_count,
+            "sections": _detect_sections(ocr_text),
+            "extraction_quality": quality,
+            "metadata_warnings": warnings,
+            "notice": " ".join(warnings) or None,
+            "ocr": True,
+        }
+    finally:
+        document.close()
 
 
 @router.get("/metadata")

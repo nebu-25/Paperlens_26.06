@@ -884,6 +884,50 @@ class TestOcrReflow:
 
         assert papers._ocr_page_render_dpi(_Page(), 150) == 150
 
+    def test_auto_ocr_uses_clova_only_for_non_latin_documents(self, monkeypatch):
+        class _Doc:
+            page_count = 1
+
+            def __getitem__(self, _index):
+                class _Page:
+                    def get_text(self, _kind):
+                        return ""
+
+                return _Page()
+
+        monkeypatch.setattr(papers.settings, "ocr_provider", "auto")
+        monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "https://example.com/ocr")
+        monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "secret")
+        monkeypatch.setattr(
+            type(papers.settings),
+            "rapidocr_ready",
+            property(lambda _self: True),
+        )
+
+        assert papers._ocr_provider_order(_Doc()) == ["clova"]
+
+    def test_auto_ocr_keeps_rapidocr_for_latin_documents(self, monkeypatch):
+        class _Doc:
+            page_count = 1
+
+            def __getitem__(self, _index):
+                class _Page:
+                    def get_text(self, _kind):
+                        return "This paper proposes a robust method for evaluation. " * 2
+
+                return _Page()
+
+        monkeypatch.setattr(papers.settings, "ocr_provider", "auto")
+        monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "https://example.com/ocr")
+        monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "secret")
+        monkeypatch.setattr(
+            type(papers.settings),
+            "rapidocr_ready",
+            property(lambda _self: True),
+        )
+
+        assert papers._ocr_provider_order(_Doc()) == ["rapidocr", "clova"]
+
     def test_ocr_skips_unavailable_rapidocr_in_auto_mode(self, monkeypatch):
         class _Doc:
             page_count = 1
