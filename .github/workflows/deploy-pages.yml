@@ -45,8 +45,8 @@ jobs:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_DEMO_EMAIL: ${{ vars.VITE_DEMO_EMAIL }}
-          VITE_DEMO_PASSWORD: ${{ vars.VITE_DEMO_PASSWORD }}
+          VITE_DEMO_EMAIL: ${{ vars.VITE_DEMO_EMAIL || secrets.VITE_DEMO_EMAIL }}
+          VITE_DEMO_PASSWORD: ${{ vars.VITE_DEMO_PASSWORD || secrets.VITE_DEMO_PASSWORD }}
         run: |
           missing=0
           for name in VITE_API_BASE_URL VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY; do
@@ -71,6 +71,9 @@ jobs:
             echo "::error::Set VITE_DEMO_EMAIL and VITE_DEMO_PASSWORD together, or leave both empty."
             missing=1
           fi
+          if [ -n "$VITE_DEMO_EMAIL" ] && [ -n "$VITE_DEMO_PASSWORD" ]; then
+            echo "::notice::Demo account prefill is configured for this build."
+          fi
           if [ "$missing" -ne 0 ]; then
             exit 1
           fi
@@ -82,8 +85,8 @@ jobs:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_DEMO_EMAIL: ${{ vars.VITE_DEMO_EMAIL }}
-          VITE_DEMO_PASSWORD: ${{ vars.VITE_DEMO_PASSWORD }}
+          VITE_DEMO_EMAIL: ${{ vars.VITE_DEMO_EMAIL || secrets.VITE_DEMO_EMAIL }}
+          VITE_DEMO_PASSWORD: ${{ vars.VITE_DEMO_PASSWORD || secrets.VITE_DEMO_PASSWORD }}
         run: npm run build
 
       - uses: actions/upload-pages-artifact@v3
