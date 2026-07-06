@@ -966,10 +966,7 @@ def _clova_request_payload(image_bytes: bytes, *, image_format: str, image_name:
 
 
 def _clova_request_timeout_sec() -> int:
-    timeout = max(1, settings.clova_ocr_timeout_sec)
-    if settings.ocr_provider_normalized == "auto" and settings.rapidocr_ready:
-        return min(timeout, 10)
-    return timeout
+    return max(1, settings.clova_ocr_timeout_sec)
 
 
 def _ocr_page_render_dpi(page, requested_dpi: int) -> int:
