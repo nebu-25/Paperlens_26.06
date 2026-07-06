@@ -1,4 +1,4 @@
-import { Search, Trash2 } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Search, Trash2 } from 'lucide-react';
 import { useWorkspace } from './WorkspaceContext';
 
 export function PaperSidebar() {
@@ -14,13 +14,45 @@ export function PaperSidebar() {
     toggleTagFilter,
     openPaper,
     deletePaper,
+    sidebarCollapsed,
+    setSidebarCollapsed,
   } = useWorkspace().store;
+
+  // 접힘: 본문을 넓게 쓰도록 얇은 레일만 남기고, 펼치기 버튼을 제공한다.
+  // (lg 이상에선 세로 레일, 그 아래에선 가로 슬림 바)
+  if (sidebarCollapsed) {
+    return (
+      <aside className="flex shrink-0 items-center border-b border-line bg-panel p-2 lg:flex-col lg:border-b-0 lg:border-r lg:py-4">
+        <button
+          type="button"
+          className="flex items-center gap-2 rounded p-1 text-muted hover:text-action lg:flex-col"
+          title="내 리뷰 노트 펼치기"
+          aria-label="내 리뷰 노트 펼치기"
+          onClick={() => setSidebarCollapsed(false)}
+        >
+          <PanelLeftOpen size={18} />
+          <span className="text-[11px] font-semibold lg:[writing-mode:vertical-rl]">내 리뷰 노트</span>
+        </button>
+      </aside>
+    );
+  }
 
   return (
     <aside className="max-h-56 overflow-y-auto border-b border-line bg-panel p-4 lg:max-h-none lg:border-b-0 lg:border-r lg:p-5">
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">
-        내 리뷰 노트 ({visiblePapers.length}/{Object.keys(library).length})
-      </p>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="min-w-0 text-xs font-semibold uppercase tracking-wide text-muted">
+          내 리뷰 노트 ({visiblePapers.length}/{Object.keys(library).length})
+        </p>
+        <button
+          type="button"
+          className="shrink-0 rounded p-1 text-muted hover:bg-paper hover:text-action"
+          title="내 리뷰 노트 접기 (작업 영역 넓게 보기)"
+          aria-label="내 리뷰 노트 접기"
+          onClick={() => setSidebarCollapsed(true)}
+        >
+          <PanelLeftClose size={15} />
+        </button>
+      </div>
       {Object.keys(library).length === 0 ? (
         <p className="text-xs text-muted">아직 등록된 논문이 없습니다.</p>
       ) : (
