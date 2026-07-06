@@ -11,6 +11,10 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 로그인/사용설명서 랜딩 페이지가 시작 화면이고, 로그인 후 서비스 워크스페이스는 /Paperlens_26.06/service_home/ 입니다.
 - GitHub Pages 빌드는 service_home/index.html, 404.html, favicon.svg를 생성합니다.
 - 백엔드는 Render의 https://paperlens-backend-53ki.onrender.com 입니다.
+- 랜딩 페이지는 PaperLens.html 시안의 주요 섹션을 React로 옮긴 서비스 소개/로그인 진입 화면입니다.
+- 랜딩의 "무료로 리뷰노트 만들기" CTA는 로그인 카드로 스크롤하고 이메일 입력란에 focus합니다.
+- GitHub Pages 빌드에 `VITE_DEMO_EMAIL`/`VITE_DEMO_PASSWORD`가 있으면 데모 계정이 로그인 폼에 미리 입력됩니다. 이 값은 공개 번들에 포함되므로 데모 전용 계정만 사용합니다.
+- 랜딩 페이지는 로드 즉시 백그라운드에서 `/api/health`를 호출해 Render 무료 플랜 콜드스타트를 미리 깨웁니다. 요청 실패는 UI에 표시하지 않습니다.
 - Supabase Auth가 켜져 있고, 프론트는 Supabase access token을 Authorization: Bearer로 FastAPI에 보냅니다.
 - 백엔드는 HS256 토큰을 SUPABASE_JWT_SECRET으로 검증하고, 다른 알고리즘이면 Supabase /auth/v1/user fallback으로 사용자 id를 확인합니다.
 - Supabase /auth/v1/user fallback 결과는 token hash 기준으로 최대 5분, token exp 이내에서 캐시합니다.
@@ -47,12 +51,18 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - PDF 추출 경로는 `국 문 초 록`, `A B S T R A C T`처럼 글자 단위로 벌어진 줄을 보정합니다. 일반 문장은 과보정하지 않도록 줄 대부분이 한 글자 토큰일 때만 적용합니다.
 - 좌표 기반 reflow가 비어 있거나 본문 보존량이 크게 부족하면 PyMuPDF 기본 추출 결과를 fallback으로 선택합니다.
 - 원문 패널에는 `텍스트 편집`/`직접 입력` 기능이 있습니다. 자동 추출이 비어 있거나 부자연스러운 경우 사용자가 PDF 원본을 보며 원문 텍스트를 붙여 넣거나 다듬을 수 있습니다.
+- OCR 재추출은 `OCR_ENABLED=true`, `OCR_PROVIDER=auto`, `CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`로 활성화합니다.
+- OCR provider는 NAVER CLOVA OCR과 RapidOCR을 병행합니다. `auto` 모드는 영문 힌트가 있으면 RapidOCR을 우선하고, 그 외에는 CLOVA를 우선합니다. 첫 결과 품질이 낮으면 다른 provider로 fallback합니다.
+- CLOVA OCR은 General 도메인 API Gateway Invoke URL을 사용합니다. CLOVA가 단일 언어 중심이라 한국어 문서 우선 provider로 두고, 기존 영어 OCR 대응은 RapidOCR fallback으로 보완합니다.
+- CLOVA 표 인식은 별도 과금 때문에 비활성화했고 요청 payload에도 포함하지 않습니다.
+- `/api/diagnostics`는 `ocr.provider`, `ocr.providers`, `ocr.ready`, `ocr.configured`, `ocr.warnings`를 반환합니다. 현재 운영 확인 기준은 `ocr.enabled: true`, `provider: auto`, `providers.clova: true`, `providers.rapidocr: true`, `ready: true`, `warnings: []`입니다.
 
 최근 확인된 배포/설정 주의점:
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
 - VITE_SUPABASE_URL은 https://<project-ref>.supabase.co 형식입니다.
 - VITE_SUPABASE_ANON_KEY는 sb_publishable_... 값입니다.
 - Render에는 SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_JWT_SECRET이 모두 필요합니다.
+- Render OCR 환경변수는 `OCR_ENABLED=true`, `OCR_PROVIDER=auto`, `CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`를 사용합니다. 영어 fallback까지 유지하려면 `requirements-ocr.txt` 설치가 포함되어야 합니다.
 - /service_home 직접 접근은 /service_home/로 redirect된 뒤 200이어야 합니다.
 - 브라우저 기본 번역으로 번역된 본문 위에서 직접 하이라이트하는 UX는 안정 지원 대상이 아닙니다. 안정적인 번역 지원은 별도 번역 보기 패널로 설계하는 것이 필요합니다.
 - 로컬 dev에서 백엔드를 띄우지 않으면 Vite `/api` proxy가 502를 낼 수 있습니다. 이 경우 보기만 하는 로컬 캐시가 반복 PUT을 보내지 않는지 확인하세요.
@@ -94,6 +104,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - 로그인된 사용자가 루트 랜딩에 들어왔을 때 "서비스로 이동" CTA를 더 명확하게 배치
    - 모바일에서 로그인 카드와 설명 카드 간격 확인
    - 헤더의 compact auth UI가 좁은 화면에서 사라지는 문제를 모바일 메뉴/아이콘으로 개선
+   - 랜딩 진입 warm-up 호출이 Pages 운영 번들에서 Render `/api/health`로 나가는지 Network 탭에서 확인
 
 4. 문서와 배포 자동화
    - docs/deployment.md의 환경변수 표를 실제 운영값 기준으로 재확인

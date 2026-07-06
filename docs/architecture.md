@@ -22,7 +22,7 @@ OpenRouter AI only when AI_API_KEY is set
   - `WorkspaceHeader.tsx` · `UploadBar.tsx` · `PaperSidebar.tsx` · `SelectionToolbar.tsx`
   - `SourcePanel.tsx`: 원문/PDF 보기 토글, 원문 직접 편집, PDF 미리보기 로드 (패널 전용 상태·이펙트 보유)
   - `ReviewNotePanel.tsx`: 메타정보, 리뷰 로드맵, 수동 요약, 하이라이트, 인용 후보 보드, 용어 사전, 내보내기
-- `frontend/src/components/LandingPage.tsx`: 사용설명서와 로그인 진입 화면
+- `frontend/src/components/LandingPage.tsx`: 서비스 소개, 데모 로그인 진입 화면, Render 백엔드 warm-up용 `/api/health` 백그라운드 호출
 - `frontend/src/hooks/useReviewStore.tsx`: 등록, 업로드, 하이라이트, 용어 추가, AI 설명, 내보내기 액션 (`ReviewStore` 타입 export)
 - `frontend/src/hooks/useReviewPersistence.ts`: 서버 저장, IndexedDB/localStorage 폴백, 재동기화, 수동 저장
 - `frontend/src/lib/localReviewCache.ts`: 계정별 브라우저 임시 캐시. 노트/메타 스냅샷과 원문 텍스트를 분리 저장하고, IndexedDB 사용 불가 시 localStorage fallback
@@ -34,6 +34,8 @@ OpenRouter AI only when AI_API_KEY is set
 - `frontend/src/constants.ts`: 하이라이트 색상, 업로드 단계, 템플릿 질문
 
 프론트엔드는 기본적으로 상대경로 `/api`를 호출합니다. 로컬 개발에서는 Vite 프록시가 `127.0.0.1:8000`으로 전달하고, Pages 배포에서는 `VITE_API_BASE_URL`로 Render 백엔드 주소를 주입합니다.
+
+랜딩 페이지는 `VITE_DEMO_EMAIL`/`VITE_DEMO_PASSWORD`가 주입된 공개 데모 빌드에서 로그인 폼을 미리 채웁니다. 값은 프론트 번들에 포함되므로 운영 개인 계정이 아니라 데모 전용 계정만 사용합니다. 랜딩 진입 시에는 `/api/health`를 fire-and-forget으로 호출해 Render 무료 플랜 콜드스타트 지연을 사용자의 다음 행동 전에 흡수합니다.
 
 GitHub Pages 배포의 경로 구성은 아래와 같습니다.
 

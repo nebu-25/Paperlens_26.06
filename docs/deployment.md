@@ -40,6 +40,7 @@ VITE_API_BASE_URL=https://paperlens-backend-53ki.onrender.com
 
 콜드스타트 대응 원칙:
 
+- 랜딩 페이지는 로드 즉시 백그라운드에서 `/api/health`를 호출해, 사용자가 로그인하거나 서비스로 진입하기 전에 Render 백엔드를 깨웁니다. 요청은 UI를 막지 않고 실패해도 조용히 무시합니다.
 - 현재 프론트엔드는 샘플 PDF 흐름에서 `/api/health`를 먼저 호출해 백엔드를 깨우고, 진행 상태를 `백엔드 확인 중`으로 표시합니다.
 - 노트 복원은 localStorage 캐시를 먼저 보여 주고, `/api/health`와 `/api/notes` 동기화는 백그라운드로 수행합니다. 백엔드가 늦으면 작업 화면을 막지 않고 `서버 준비 중` 또는 `로컬 저장 중` 안내를 표시합니다.
 - 운영 smoke에서는 첫 `/api/health`가 30초 이상 걸릴 수 있음을 정상 범위로 보고, 이후 `/api/diagnostics`, `/api/ai/status`, sample PDF HEAD까지 이어서 확인합니다.
@@ -222,8 +223,8 @@ DATABASE_URL=postgresql://paperlens:paperlens_dev@127.0.0.1:5432/paperlens pytho
 폰트/인코딩이 손상되거나 스캔(이미지) PDF라 텍스트 레이어가 깨진 경우, 저장된 PDF를 렌더→OCR로 재인식해 원문을 복구할 수 있습니다. 외부 API 비용과 PDF 페이지 이미지 전송이 있는 provider가 포함되므로 기본 비활성(opt-in)입니다.
 
 - 활성화: `OCR_ENABLED=true`, `OCR_PROVIDER=auto`, `CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`.
-- 엔진: `auto` 모드는 영문 텍스트 힌트가 있으면 RapidOCR을 먼저 시도하고, 그 외에는 NAVER CLOVA OCR API를 먼저 시도합니다. 첫 provider 결과가 낮은 품질이면 다른 provider를 fallback으로 시도합니다.
-- CLOVA OCR: 서버는 저장된 PDF를 페이지별 PNG로 렌더링해 API에 전송하고, 응답의 OCR 좌표를 기존 1단/2단 reflow 파이프라인으로 재구성합니다. 표 인식 옵션은 요청하지 않습니다.
+- 엔진: `auto` 모드는 영문 텍스트 힌트가 있으면 RapidOCR을 먼저 시도하고, 그 외에는 NAVER CLOVA OCR API를 먼저 시도합니다. 첫 provider 결과가 낮은 품질이면 다른 provider를 fallback으로 시도합니다. `/api/diagnostics`의 `ocr.providers`와 `ocr.configured`로 provider 준비 상태를 확인합니다.
+- CLOVA OCR: 서버는 저장된 PDF를 페이지별 PNG로 렌더링해 General 도메인 API Gateway Invoke URL로 전송하고, 응답의 OCR 좌표를 기존 1단/2단 reflow 파이프라인으로 재구성합니다. CLOVA가 단일 언어 중심이라 한국어 문서 우선 provider로 사용합니다. 표 인식 옵션은 별도 과금 때문에 요청하지 않습니다.
 - RapidOCR: 영어 fallback까지 운영하려면 OCR 활성화 배포에서 `requirements-ocr.txt`를 추가 설치해야 합니다. Render buildCommand 예: `pip install -r requirements.txt && pip install -r requirements-ocr.txt && pip uninstall -y opencv-python`
 - 프론트: 추출 품질이 낮고 PDF가 연결된 경우 원문 패널에 "OCR로 다시 시도" 버튼이 뜹니다.
 - 운영 주의: 논문 원문 이미지가 외부 API로 전송됩니다. 사용자 고지, API 키 비밀 관리, Naver Cloud 콘솔의 과금/호출량 제한을 운영 전에 확인하세요.
