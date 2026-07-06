@@ -1126,6 +1126,8 @@ def _clova_lines_from_response(response: dict[str, object]) -> list[dict[str, ob
 
 def _get_rapidocr_engine():
     global _RAPIDOCR_ENGINE
+    if not settings.rapidocr_ready:
+        raise RuntimeError(settings.rapidocr_unavailable_reason)
     if _RAPIDOCR_ENGINE is None:
         from rapidocr_onnxruntime import RapidOCR  # lazy: 선택 의존성
 
@@ -1207,6 +1209,14 @@ def _ocr_provider_order(document) -> list[str]:
     return ["clova", "rapidocr"]
 
 
+def _ocr_provider_unavailable_reason(provider: str) -> str:
+    if provider == "clova" and not settings.clova_ocr_ready:
+        return "CLOVA OCR 설정을 찾을 수 없습니다."
+    if provider == "rapidocr" and not settings.rapidocr_ready:
+        return f"RapidOCR를 사용할 수 없습니다. 환경 메시지: {settings.rapidocr_unavailable_reason}"
+    return ""
+
+
 def _ocr_text_quality_score(text: str, page_count: int) -> int:
     return int(_extraction_quality(text, page_count).get("score") or 0)
 
@@ -1221,11 +1231,20 @@ def _ocr_document_text(document, *, dpi: int, max_pages: int) -> tuple[str, str 
     if document.page_count > max_pages:
         return "", f"OCR은 {max_pages}페이지 이하 PDF에만 지원합니다(현재 {document.page_count}페이지)."
     if not settings.ocr_ready:
-        return "", "서버에서 사용 가능한 OCR provider를 찾을 수 없습니다. OCR 환경변수를 확인해 주세요."
+        errors = [
+            f"{provider}: {reason}"
+            for provider in _ocr_provider_order(document)
+            if (reason := _ocr_provider_unavailable_reason(provider))
+        ]
+        return "", " / ".join(errors) or "서버에서 사용 가능한 OCR provider를 찾을 수 없습니다. OCR 환경변수를 확인해 주세요."
 
     attempts: list[tuple[str, str, int]] = []
     errors: list[str] = []
     for provider in _ocr_provider_order(document):
+        unavailable = _ocr_provider_unavailable_reason(provider)
+        if unavailable:
+            errors.append(f"{provider}: {unavailable}")
+            continue
         try:
             if provider == "clova":
                 text, error = _ocr_text_with_clova(document, dpi=dpi)

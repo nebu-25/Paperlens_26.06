@@ -93,3 +93,24 @@ def test_diagnostics_reports_clova_ocr_ready(monkeypatch):
     assert data["ocr"]["ready"] is True
     assert data["ocr"]["configured"]["clova_invoke_url"] is True
     assert data["ocr"]["configured"]["clova_secret_key"] is True
+
+
+def test_diagnostics_requires_rapidocr_cv2_dependency(monkeypatch):
+    def fake_find_spec(name: str):
+        if name == "rapidocr_onnxruntime":
+            return object()
+        if name == "onnxruntime":
+            return object()
+        return None
+
+    monkeypatch.setattr(settings, "ocr_enabled", True)
+    monkeypatch.setattr(settings, "ocr_provider", "rapidocr")
+    monkeypatch.setattr("app.config.importlib.util.find_spec", fake_find_spec)
+
+    data = diagnostics()
+
+    assert data["ocr"]["ready"] is False
+    assert data["ocr"]["providers"]["rapidocr"] is False
+    assert data["ocr"]["configured"]["rapidocr_package"] is True
+    assert data["ocr"]["configured"]["rapidocr_cv2"] is False
+    assert "cv2" in data["ocr"]["warnings"][0]

@@ -6,7 +6,7 @@ services:
     runtime: python
     plan: free            # 무료 플랜(15분 미사용 시 잠듦, 첫 요청에서 깨어남)
     rootDir: backend      # 백엔드 코드가 하위 디렉터리에 있음
-    buildCommand: pip install -r requirements.txt && pip install -r requirements-ocr.txt && pip uninstall -y opencv-python
+    buildCommand: pip install -r requirements.txt && pip install -r requirements-ocr.txt && pip uninstall -y opencv-python && pip install --force-reinstall --no-deps "opencv-python-headless>=4.9"
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
@@ -23,4 +23,4 @@ services:
         sync: false
       # OCR 재추출(opt-in)은 NAVER CLOVA OCR API와 선택 의존성 RapidOCR를 병행할 수 있다.
       # 환경변수 OCR_ENABLED=true, OCR_PROVIDER=auto, CLOVA_OCR_INVOKE_URL, CLOVA_OCR_SECRET_KEY를 설정한다.
-      # RapidOCR가 끌어오는 opencv-python은 libGL 이슈를 피하기 위해 buildCommand에서 제거한다.
+      # RapidOCR가 끌어오는 opencv-python은 제거한 뒤 headless cv2를 다시 설치한다.

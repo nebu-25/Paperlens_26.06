@@ -840,3 +840,36 @@ class TestOcrReflow:
 
         out, err = papers._ocr_document_text(_Doc(), dpi=200, max_pages=20)
         assert out == "" and err is not None
+
+    def test_ocr_skips_unavailable_rapidocr_in_auto_mode(self, monkeypatch):
+        class _Doc:
+            page_count = 1
+
+            def __iter__(self):
+                return iter(())
+
+            def __getitem__(self, _index):
+                raise IndexError
+
+        monkeypatch.setattr(papers.settings, "ocr_enabled", True)
+        monkeypatch.setattr(papers.settings, "ocr_provider", "auto")
+        monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "")
+        monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "")
+        monkeypatch.setattr(
+            type(papers.settings),
+            "rapidocr_ready",
+            property(lambda _self: False),
+        )
+        monkeypatch.setattr(
+            type(papers.settings),
+            "rapidocr_unavailable_reason",
+            property(lambda _self: "cv2 모듈을 찾을 수 없습니다."),
+        )
+
+        out, err = papers._ocr_document_text(_Doc(), dpi=200, max_pages=20)
+
+        assert out == ""
+        assert err is not None
+        assert "clova: CLOVA OCR 설정을 찾을 수 없습니다." in err
+        assert "rapidocr: RapidOCR를 사용할 수 없습니다." in err
+        assert "cv2" in err

@@ -100,13 +100,26 @@ class Settings(BaseSettings):
 
     @property
     def rapidocr_ready(self) -> bool:
-        return importlib.util.find_spec("rapidocr_onnxruntime") is not None
+        return self.rapidocr_unavailable_reason == ""
+
+    @property
+    def rapidocr_unavailable_reason(self) -> str:
+        if importlib.util.find_spec("rapidocr_onnxruntime") is None:
+            return "rapidocr_onnxruntime 모듈을 찾을 수 없습니다."
+        if importlib.util.find_spec("cv2") is None:
+            return "cv2 모듈을 찾을 수 없습니다. opencv-python-headless를 설치해 주세요."
+        if importlib.util.find_spec("onnxruntime") is None:
+            return "onnxruntime 모듈을 찾을 수 없습니다."
+        return ""
 
     @property
     def ocr_diagnostics(self) -> dict[str, object]:
         configured = {
             "clova_invoke_url": bool(self.clova_ocr_invoke_url.strip()),
             "clova_secret_key": bool(self.clova_ocr_secret_key.strip()),
+            "rapidocr_package": importlib.util.find_spec("rapidocr_onnxruntime") is not None,
+            "rapidocr_cv2": importlib.util.find_spec("cv2") is not None,
+            "rapidocr_onnxruntime": importlib.util.find_spec("onnxruntime") is not None,
             "rapidocr_custom_rec_model": bool(self.rapidocr_rec_model_path.strip()),
             "rapidocr_custom_rec_keys": bool(self.rapidocr_rec_keys_path.strip()),
         }
@@ -122,7 +135,9 @@ class Settings(BaseSettings):
             )
         if self.ocr_enabled and provider in {"auto", "rapidocr"} and not self.rapidocr_ready:
             warnings.append(
-                "RapidOCR is not installed. Install requirements-ocr.txt to enable English OCR fallback."
+                "RapidOCR is not available. "
+                f"{self.rapidocr_unavailable_reason} "
+                "Install requirements-ocr.txt to enable OCR fallback."
             )
         if self.ocr_provider.strip().casefold() not in {"", "auto", "clova", "rapidocr"}:
             warnings.append("Unknown OCR_PROVIDER. Falling back to auto.")
