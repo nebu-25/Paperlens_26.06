@@ -611,3 +611,39 @@ GitHub Actions `Reset demo account` workflow는 수동 실행과 cron 실행을 
 
 - GitHub Pages가 직접 제공하는 `Expires` 헤더나 `X-Content-Type-Options` 누락은 저장소의 Vite 설정만으로 제어하기 어렵다. 이 항목을 완전히 해결하려면 Cloudflare Pages/Netlify/Vercel 같은 헤더 설정 가능한 정적 호스팅 또는 프록시가 필요하다.
 - Tailwind preflight가 생성하는 `-webkit-text-size-adjust`는 산출물에 남는다. 표준 `text-size-adjust`도 함께 들어가며, 이를 제거하려면 Tailwind preflight 비활성화 또는 CSS 후처리가 필요해 리셋 스타일 영향이 크다.
+
+### 2026-07-06 리뷰 노트 패널 접기(넓게 읽기)
+
+반영한 범위:
+
+- xl 이상 화면에서 리뷰 노트 헤더의 접기 버튼으로 노트 패널을 접어 원문/PDF 뷰어를 넓게 볼 수 있다. 접힌 상태에서는 세로 레일 버튼으로 다시 펼친다.
+- 접힘 상태(`noteCollapsed`)는 `useReviewStore`가 관리하며 모바일 탭 전환과 무관하다.
+- 원문 본문 폭을 `78ch`로 제한해 가독성을 높였다.
+
+실행한 검증:
+
+- `npx tsc -b`: 통과.
+- `npx eslint src/`: 경고 0.
+- `npm test`: 116 passed.
+
+### 2026-07-06 PDF 뷰어 텍스트 레이어 정렬 수정 (하이라이트/용어 추가 영역 불일치)
+
+증상: PDF 원본 보기에서 드래그로 하이라이트/용어를 추가할 때 선택 영역이 실제 본문 글자와 어긋나고, 캡처된 텍스트가 시각 영역과 맞지 않으며 페이지번호·좌표성 조각 등 엉뚱한 텍스트가 섞였다.
+
+원인:
+
+- pdfjs 6.x 텍스트 레이어는 각 글자 스팬을 `font-size: calc(var(--text-scale-factor) * var(--font-height))`와 `transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(...)`로 배치하는데, `styles.css`에 이 스팬 규칙이 빠져 있어 스팬이 상속 폰트 크기로 렌더됐다(글자 폭·위치가 캔버스와 불일치, 세로 텍스트가 가로로 눕음).
+- 스케일 변수 `--total-scale-factor`가 어디에도 설정되지 않아 `--text-scale-factor` 계산이 invalid가 되어 위 font-size가 깨졌다.
+
+반영한 범위:
+
+- `src/styles.css`의 `.pdf-text-layer` 규칙을 공식 pdfjs 텍스트 레이어 CSS 기준으로 보강했다(스팬 `font-size`·`transform`, `--min-font-size`/`--text-scale-factor`/`--min-font-size-inv` 변수).
+- `src/components/workspace/PdfViewer.tsx`가 텍스트 레이어 컨테이너에 현재 배율을 `--total-scale-factor`로 인라인 설정한다(확대/축소 시 자동 갱신, `--scale-round-x/y`도 함께 지정).
+
+실행한 검증:
+
+- `npx tsc -b`: 통과.
+- `npx eslint src/components/workspace/PdfViewer.tsx`: 통과.
+- `npm test`: 116 passed.
+- `npm run build`: 통과.
+- 남는 확인: 시각/상호작용 회귀라 렌더 테스트로는 못 잡는다. 실제 브라우저에서 PDF 선택 정렬 확인 권장(미실시).

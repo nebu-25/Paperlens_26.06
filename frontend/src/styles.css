@@ -26,6 +26,12 @@ button:disabled {
   text-align: initial;
   transform-origin: 0 0;
   user-select: text;
+  /* pdfjs 텍스트 레이어 글자 배치에 필요한 변수. --total-scale-factor 는
+     PdfViewer 가 현재 확대 배율로 인라인 설정한다(이게 없으면 font-size 계산이
+     깨져 선택 영역이 본문과 어긋난다). --min-font-size 는 pdfjs 가 인라인으로 덮어씀. */
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
 }
 
 .pdf-text-layer :is(span, br) {
@@ -33,8 +39,20 @@ button:disabled {
   color: transparent;
   white-space: pre;
   cursor: text;
-  transform-origin: 0 0;
+  transform-origin: 0% 0%;
   user-select: text;
+}
+
+/* 각 글자 스팬의 실제 크기·회전. 이 규칙이 없으면 스팬이 상속 폰트크기로
+   렌더되어 글자 폭/위치가 캔버스와 어긋나고 세로 텍스트가 눕는다. */
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
 }
 
 .pdf-text-layer--pan,

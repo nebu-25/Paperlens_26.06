@@ -9,7 +9,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent } from 'react';
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import type {
   PDFDocumentLoadingTask,
@@ -770,6 +770,15 @@ export function PdfViewer({
                 ref={textLayerRef}
                 className={`pdf-text-layer absolute inset-0 ${isPanMode ? 'pdf-text-layer--pan' : ''}`}
                 data-pdf-text-layer
+                // pdfjs 는 글자 위치/크기를 --total-scale-factor 로 계산한다. 현재 배율을
+                // 넘겨주지 않으면 선택 영역이 본문 글자와 어긋난다.
+                style={
+                  {
+                    '--total-scale-factor': scale,
+                    '--scale-round-x': '1px',
+                    '--scale-round-y': '1px',
+                  } as CSSProperties
+                }
               />
               <div
                 className="pointer-events-none absolute inset-0"
