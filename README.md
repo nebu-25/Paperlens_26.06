@@ -137,11 +137,12 @@ render.yaml
 
 제품 기획서:
 
-- `paper_review_service_plan_v4.0.md`: 제품 기획서 (버전 관리 포함). AI 내용 요약 제외, 요약 이외 작업 자동화, 목적별 템플릿 방향을 정의합니다.
+- `paper_review_service_plan_v4.1.md`: 베타 서비스 기준 최종 제품 기획서 (버전 관리 포함). v4.0의 목적 템플릿·3-pass 로드맵·시그널 스캐너·그림/표 네비게이터·라이브러리 취합·연구 질문 빌더를 운영 중 기능으로 갱신하고, 선택형 OCR 재추출과 경쟁 서비스 분석을 반영합니다.
 
 로컬 전용 문서:
 
 - `paper_review_service_plan_v3.1.md`: 이전 기획서 (로컬 참조용)
+- `paper_review_service_plan_v4.0.md`: v4.1 이전 기획서 (로컬 참조용)
 - `testing.md`: 로컬 테스트·검증 로그
 - `presentation_content.md`: 발표용 내용 정리
 
