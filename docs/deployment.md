@@ -105,6 +105,7 @@ Frontend build:
 | `VITE_API_BASE_URL` | Pages 배포 시 Render 백엔드 오리진 |
 | `VITE_SUPABASE_URL` | Supabase 프로젝트 URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase publishable key. 현재 Supabase 콘솔의 `sb_publishable_...` 값을 사용 |
+| `VITE_DEMO_EMAIL` / `VITE_DEMO_PASSWORD` | 선택. 랜딩 로그인 폼에 데모 계정을 미리 입력. 공개 빌드에 포함되므로 데모 전용 계정만 사용 |
 
 현재 배포 값 예:
 
@@ -112,6 +113,8 @@ Frontend build:
 VITE_API_BASE_URL=https://paperlens-backend-53ki.onrender.com
 VITE_SUPABASE_URL=https://<supabase-project-ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_...
+VITE_DEMO_EMAIL=demo@example.com
+VITE_DEMO_PASSWORD=<demo-only-password>
 ```
 
 GitHub Pages 빌드에서는 이 값들을 GitHub에 넣습니다. Render의 환경변수와는 별개입니다.

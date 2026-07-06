@@ -9,6 +9,9 @@ export const API_BASE = `${API_ORIGIN}/api`;
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? '';
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 export const SUPABASE_AUTH_ENABLED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+export const DEMO_EMAIL = import.meta.env.VITE_DEMO_EMAIL ?? '';
+export const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD ?? '';
+export const DEMO_AUTH_ENABLED = Boolean(DEMO_EMAIL && DEMO_PASSWORD);
 
 export function resolveApiUrl(path: string): string {
   if (!path) return '';

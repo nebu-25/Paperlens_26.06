@@ -9,6 +9,8 @@ interface AuthControlsProps {
   ready: boolean;
   user: User | null;
   variant?: 'panel' | 'compact';
+  initialEmail?: string;
+  initialPassword?: string;
   onEnterService?: () => void;
   pendingChanges?: number;
   syncing?: boolean;
@@ -21,14 +23,16 @@ export function AuthControls({
   ready,
   user,
   variant = 'panel',
+  initialEmail = '',
+  initialPassword = '',
   onEnterService,
   pendingChanges = 0,
   syncing = false,
   savedAt = null,
   onBeforeSignOut,
 }: AuthControlsProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(initialEmail);
+  const [password, setPassword] = useState(initialPassword);
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -200,7 +204,9 @@ export function AuthControls({
   return (
     <div className="rounded border border-line bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-ink">개인 계정</span>
+        <span className="text-xs font-semibold text-ink">
+          {initialEmail && initialPassword ? '데모 계정' : '개인 계정'}
+        </span>
         <button
           type="button"
           className="text-xs text-muted hover:text-action"
