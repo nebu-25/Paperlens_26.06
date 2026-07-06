@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PanelRightOpen } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { useReviewStore } from '../hooks/useReviewStore';
 import { useAuthSession } from '../hooks/useAuthSession';
@@ -68,7 +69,7 @@ interface ReviewWorkspaceProps {
 
 function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWorkspaceProps) {
   const store = useReviewStore({ accessToken, authReady, authEnabled, userId: user?.id ?? null });
-  const { paper, mobilePanel, setMobilePanel, setSelection } = store;
+  const { paper, mobilePanel, setMobilePanel, setSelection, noteCollapsed, setNoteCollapsed } = store;
 
   return (
     <WorkspaceContext.Provider value={{ store, accessToken }}>
@@ -108,9 +109,28 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   리뷰
                 </button>
               </div>
-              <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.8fr)]">
+              <div
+                className={`grid min-h-0 flex-1 grid-cols-1 ${
+                  noteCollapsed
+                    ? 'xl:grid-cols-[minmax(0,1fr)_2.75rem]'
+                    : 'xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.8fr)]'
+                }`}
+              >
                 <SourcePanel />
                 <ReviewNotePanel />
+                {/* 접힘 상태(xl 전용): 리뷰 노트를 다시 펼치는 세로 레일 */}
+                {noteCollapsed && (
+                  <button
+                    type="button"
+                    className="hidden min-h-0 flex-col items-center gap-2 border-l border-line bg-panel py-4 text-muted hover:text-action xl:flex"
+                    title="리뷰 노트 펼치기"
+                    aria-label="리뷰 노트 펼치기"
+                    onClick={() => setNoteCollapsed(false)}
+                  >
+                    <PanelRightOpen size={18} />
+                    <span className="text-[11px] font-semibold [writing-mode:vertical-rl]">리뷰 노트</span>
+                  </button>
+                )}
               </div>
             </section>
           )}

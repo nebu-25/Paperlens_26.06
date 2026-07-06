@@ -79,6 +79,8 @@ export function useReviewStore({
   const [search, setSearch] = useState('');
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [mobilePanel, setMobilePanel] = useState<'paper' | 'review'>('paper');
+  // xl 이상에서 리뷰 노트 패널을 접어 원문/PDF 뷰어를 넓게 쓰는 상태(모바일 탭 전환과 무관).
+  const [noteCollapsed, setNoteCollapsed] = useState(false);
   const [highlightColor, setHighlightColor] = useState<HighlightColor>('yellow');
   const [highlightFilter, setHighlightFilter] = useState<HighlightColor | 'all'>('all');
   const [aiEnabled, setAiEnabled] = useState(false);
@@ -1216,6 +1218,8 @@ export function useReviewStore({
     allTags,
     visiblePapers,
     mobilePanel,
+    noteCollapsed,
+    setNoteCollapsed,
     highlightColor,
     highlightFilter,
     selection,

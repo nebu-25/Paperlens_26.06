@@ -4,6 +4,7 @@ import {
   FileText,
   Highlighter,
   Library,
+  PanelRightClose,
   PencilLine,
   Plus,
   Printer,
@@ -40,6 +41,8 @@ export function ReviewNotePanel() {
     paper,
     note,
     mobilePanel,
+    noteCollapsed,
+    setNoteCollapsed,
     online,
     savedAt,
     pending,
@@ -133,11 +136,22 @@ export function ReviewNotePanel() {
     <article
       className={`min-h-0 flex-col bg-paper xl:flex ${
         mobilePanel === 'review' ? 'flex' : 'hidden'
-      }`}
+      } ${noteCollapsed ? 'xl:hidden' : ''}`}
     >
       <div className="sticky top-0 z-10 shrink-0 border-b border-line bg-paper/95 p-5 pb-3 sm:p-6 sm:pb-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="min-w-0 text-base font-semibold">리뷰 노트</h2>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <button
+              type="button"
+              className="hidden shrink-0 rounded p-1 text-muted hover:bg-paper hover:text-action xl:inline-flex"
+              title="리뷰 노트 접기 (원문/PDF 넓게 보기)"
+              aria-label="리뷰 노트 접기"
+              onClick={() => setNoteCollapsed(true)}
+            >
+              <PanelRightClose size={16} />
+            </button>
+            <h2 className="min-w-0 text-base font-semibold">리뷰 노트</h2>
+          </div>
           <div className="flex min-w-0 shrink-0 items-center gap-2">
             <span
               role="status"

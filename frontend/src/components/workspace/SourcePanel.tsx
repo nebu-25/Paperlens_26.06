@@ -550,7 +550,7 @@ export function SourcePanel() {
                 onMouseUp={onTextMouseUp}
                 onMouseDown={(e) => e.stopPropagation()}
               >
-                <div className="notranslate select-text whitespace-pre-wrap" translate="no">
+                <div className="notranslate max-w-[78ch] select-text whitespace-pre-wrap" translate="no">
                   {paper.text ? (
                     bodyNodes
                   ) : (
