@@ -179,7 +179,10 @@ function ProductMockup() {
 export function LandingPage({ authEnabled, authReady, user, onEnterService }: LandingPageProps) {
   const [active, setActive] = useState(3);
   const [loginOpen, setLoginOpen] = useState(false);
+  // 'demo': 데모 계정 프리필(신규 체험 CTA) · 'personal': 빈 폼(기존 사용자 로그인)
+  const [loginMode, setLoginMode] = useState<'demo' | 'personal'>('demo');
   const activeTpl = templates[active];
+  const demoPrefill = loginMode === 'demo';
 
   useEffect(() => {
     const controller = new AbortController();
@@ -211,9 +214,15 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
     };
   }, [loginOpen]);
 
+  function openLogin(mode: 'demo' | 'personal') {
+    setLoginMode(mode);
+    setLoginOpen(true);
+  }
+
+  // 신규 체험 CTA: 로그인 상태면 바로 서비스로, 아니면 데모 프리필 모달
   function start() {
     if (user) onEnterService();
-    else setLoginOpen(true);
+    else openLogin('demo');
   }
 
   return (
@@ -238,7 +247,11 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             <a href="#templates" className="text-sm text-[#283338] hover:text-[#1c5d5f]">목적 템플릿</a>
           </div>
           <div className="flex items-center gap-3.5">
-            <button type="button" className="text-sm text-[#283338] hover:text-[#1c5d5f]" onClick={start}>
+            <button
+              type="button"
+              className="text-sm text-[#283338] hover:text-[#1c5d5f]"
+              onClick={() => (user ? onEnterService() : openLogin('personal'))}
+            >
               {user ? '서비스로 이동' : '로그인'}
             </button>
             <button
@@ -628,22 +641,22 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             <div className="mb-4 pr-8">
               <p className="text-xs font-semibold uppercase tracking-wide text-[#0e4749]">SERVICE LOGIN</p>
               <h2 id="paperlens-login-title" className="mt-1 font-serif text-[26px] font-semibold">
-                {user ? '서비스 입장 준비 완료' : DEMO_AUTH_ENABLED ? '데모 계정으로 시작' : '로그인 후 서비스 시작'}
+                {user ? '서비스 입장 준비 완료' : demoPrefill && DEMO_AUTH_ENABLED ? '데모 계정으로 시작' : '로그인 후 서비스 시작'}
               </h2>
               <p className="mt-2 text-sm leading-6 text-[#556]">
                 {user
                   ? '계정 인증이 완료되었습니다. 저장된 논문과 리뷰 노트를 바로 이어서 확인할 수 있습니다.'
-                  : DEMO_AUTH_ENABLED
+                  : demoPrefill && DEMO_AUTH_ENABLED
                     ? '데모 계정 정보가 입력되어 있습니다. 로그인하면 샘플 PDF와 리뷰 노트 흐름을 확인할 수 있습니다.'
-                    : '인증이 완료되면 논문 리뷰 서비스 화면으로 이동합니다.'}
+                    : '가입한 계정으로 로그인하면 저장된 논문과 리뷰 노트를 이어서 확인할 수 있습니다.'}
               </p>
             </div>
             <AuthControls
               enabled={authEnabled}
               ready={authReady}
               user={user}
-              initialEmail={DEMO_EMAIL}
-              initialPassword={DEMO_PASSWORD}
+              initialEmail={demoPrefill ? DEMO_EMAIL : ''}
+              initialPassword={demoPrefill ? DEMO_PASSWORD : ''}
               onEnterService={onEnterService}
             />
             {import.meta.env.DEV && !authEnabled && (
