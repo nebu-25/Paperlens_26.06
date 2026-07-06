@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -19,6 +20,11 @@ from typing import Any
 
 DEFAULT_API_BASE_URL = "https://paperlens-backend-53ki.onrender.com"
 DEMO_NOTE_ID = "demo-paperlens-quickstart"
+# 빠른 체험용 샘플 PDF 노트. 프런트 "샘플 PDF" 버튼과 동일한 sourceKey를 써서
+# 중복 등록을 막고, 데모 계정에 항상 실제 PDF를 하나 남겨 둔다.
+SAMPLE_NOTE_ID = "demo-paperlens-sample-pdf"
+SAMPLE_SOURCE_KEY = "sample:paperlens"
+SAMPLE_PDF_FILENAME = "2604.04977v1.pdf"
 
 DEMO_TEXT = """Introduction
 PaperLens는 논문 원문 읽기, 하이라이트, 질문 정리, 리뷰 노트 작성을 한 화면에서 이어 주는 서비스입니다. 데모 계정은 처음 접속한 사용자가 업로드 없이도 저장된 라이브러리와 노트 복원 흐름을 확인할 수 있도록 구성되었습니다.
@@ -281,6 +287,158 @@ def _verify_demo_note(api_base: str, token: str) -> None:
             _fail(f"highlight offset mismatch: {highlight.get('id')}")
 
 
+def _download_sample_pdf(api_base: str) -> tuple[bytes, str]:
+    """백엔드가 제공하는 샘플 PDF를 내려받는다(무인증 GET)."""
+    url = f"{api_base}/api/papers/sample-pdf"
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as res:  # noqa: S310 - configured project URL
+            if res.status != 200:
+                _fail(f"download sample pdf failed: HTTP {res.status}")
+            content = res.read()
+            disposition = res.headers.get("Content-Disposition", "")
+    except urllib.error.HTTPError as exc:
+        _fail(f"download sample pdf failed: HTTP {exc.code}: {_response_message(Response(exc.code, exc.read()))}")
+    except (urllib.error.URLError, TimeoutError) as exc:
+        _fail(f"download sample pdf failed: {exc}")
+    if not content.startswith(b"%PDF"):
+        _fail("sample pdf endpoint did not return a PDF")
+    match = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', disposition)
+    filename = (match.group(1) if match else "").strip() or SAMPLE_PDF_FILENAME
+    return content, filename
+
+
+def _multipart_body(fields: dict[str, str], file_field: str, filename: str, file_bytes: bytes) -> tuple[bytes, str]:
+    boundary = f"----paperlensdemo{os.urandom(16).hex()}"
+    lines: list[bytes] = []
+    for name, value in fields.items():
+        lines.append(f"--{boundary}".encode())
+        lines.append(f'Content-Disposition: form-data; name="{name}"'.encode())
+        lines.append(b"")
+        lines.append(value.encode("utf-8"))
+    lines.append(f"--{boundary}".encode())
+    lines.append(
+        f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"'.encode()
+    )
+    lines.append(b"Content-Type: application/pdf")
+    lines.append(b"")
+    lines.append(file_bytes)
+    lines.append(f"--{boundary}--".encode())
+    lines.append(b"")
+    return b"\r\n".join(lines), boundary
+
+
+def _extract_sample(api_base: str, token: str, paper_id: str, content: bytes, filename: str) -> dict[str, Any]:
+    """샘플 PDF를 업로드해 본문·메타·pdfUrl을 추출한다. 콜드스타트 대비 1회 재시도."""
+    body, boundary = _multipart_body({"paper_id": paper_id}, "file", filename, content)
+    headers = {
+        **_auth_headers(token),
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+    }
+    last_message = ""
+    for attempt in range(2):
+        response = _request(
+            "POST",
+            f"{api_base}/api/papers/extract-text",
+            data=body,
+            headers=headers,
+            timeout=180,
+        )
+        if response.status == 200:
+            data = response.json()
+            if not isinstance(data, dict):
+                _fail("extract-text response was not an object")
+            return data
+        last_message = f"HTTP {response.status}: {_response_message(response)}"
+        if attempt == 0:
+            time.sleep(5)
+    _fail(f"extract sample pdf failed: {last_message}")
+    raise AssertionError("unreachable")
+
+
+def _normalized_metadata(extract: dict[str, Any], filename: str) -> tuple[str, str]:
+    title = str(extract.get("title") or "").strip()
+    authors = str(extract.get("authors") or "").strip()
+    if not title or title == "(제목 없음)":
+        title = filename.rsplit(".", 1)[0] or "PaperLens 샘플 PDF"
+    if not authors or authors == "저자 미상":
+        authors = ""
+    return title, authors
+
+
+def _sample_note_payload(extract: dict[str, Any], filename: str) -> dict[str, object]:
+    title, authors = _normalized_metadata(extract, filename)
+    paper = {
+        "title": title,
+        "authors": authors,
+        "link": str(extract.get("link") or ""),
+        "doi": str(extract.get("doi") or ""),
+        "sourceKey": SAMPLE_SOURCE_KEY,
+        "suggestedTags": extract.get("suggested_tags") or [],
+        "metadataSource": str(extract.get("metadata_source") or ""),
+        "metadataConfidence": str(extract.get("metadata_confidence") or ""),
+        "metadataWarnings": extract.get("metadata_warnings") or [],
+        "extractionQuality": extract.get("extraction_quality") or {},
+        # pdf_url은 `/api/papers/{id}/pdf` 상대경로. 프런트 resolveApiUrl이 오리진을 붙인다.
+        "pdfUrl": str(extract.get("pdf_url") or ""),
+        "pdfFilename": str(extract.get("pdf_filename") or filename),
+        "sections": extract.get("sections") or [],
+        "figureImages": extract.get("figure_images") or [],
+        "text": str(extract.get("text") or ""),
+    }
+    note = {
+        "oneLineSummary": "PaperLens 원문 뷰어·하이라이트·리뷰 노트를 바로 시험해 볼 수 있는 샘플 PDF입니다.",
+        "oneLineSource": "user",
+        "summaryMode": "section",
+        "tags": ["sample", "빠른체험"],
+        "sectionSummaries": [
+            {"id": "s-intro", "section": "Introduction", "content": "", "source": "user"},
+            {"id": "s-method", "section": "Method", "content": "", "source": "user"},
+            {"id": "s-result", "section": "Result", "content": "", "source": "user"},
+            {"id": "s-conclusion", "section": "Conclusion", "content": "", "source": "user"},
+        ],
+        "highlights": [],
+        "manualSummaries": [],
+        "terms": [],
+        "questions": [],
+        "template": {"q1": "", "q2": "", "q3": "", "q4": "", "q5": ""},
+        "memos": {},
+        "templateId": "t1_general",
+        "templateAnswers": {},
+        "figureNotes": {},
+    }
+    return {"paper": paper, "note": note}
+
+
+def _upsert_note(api_base: str, token: str, note_id: str, payload: dict[str, object]) -> None:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    response = _request(
+        "PUT",
+        f"{api_base}/api/notes/{note_id}",
+        data=body,
+        headers={**_auth_headers(token), "Content-Type": "application/json"},
+    )
+    if response.status != 200:
+        _fail(f"upsert note {note_id} failed: HTTP {response.status}: {_response_message(response)}")
+
+
+def _seed_sample_pdf(api_base: str, token: str) -> None:
+    content, filename = _download_sample_pdf(api_base)
+    extract = _extract_sample(api_base, token, SAMPLE_NOTE_ID, content, filename)
+    if not str(extract.get("pdf_url") or "").strip():
+        _fail("extract-text did not return a pdf_url; sample PDF was not stored")
+    if not str(extract.get("text") or "").strip():
+        _fail("extract-text returned empty text for the sample PDF")
+    _upsert_note(api_base, token, SAMPLE_NOTE_ID, _sample_note_payload(extract, filename))
+    # 저장 검증: pdfUrl과 본문이 실제로 복원되는지 확인
+    verify = _request("GET", f"{api_base}/api/notes/{SAMPLE_NOTE_ID}", headers=_auth_headers(token))
+    if verify.status != 200:
+        _fail(f"verify sample note failed: HTTP {verify.status}: {_response_message(verify)}")
+    paper = verify.json().get("paper", {})
+    if not str(paper.get("pdfUrl") or "").strip():
+        _fail("verify sample note: stored pdfUrl is empty")
+
+
 def main() -> int:
     api_base = os.environ.get("API_BASE_URL", DEFAULT_API_BASE_URL).strip().rstrip("/")
     supabase_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
@@ -307,8 +465,12 @@ def main() -> int:
     deleted = _delete_existing_notes(api_base, token)
     _upsert_demo_note(api_base, token)
     _verify_demo_note(api_base, token)
+    _seed_sample_pdf(api_base, token)
     elapsed = time.monotonic() - started
-    print(f"Demo account reset passed in {elapsed:.1f}s. Deleted {deleted} note(s), seeded {DEMO_NOTE_ID}.")
+    print(
+        f"Demo account reset passed in {elapsed:.1f}s. Deleted {deleted} note(s), "
+        f"seeded {DEMO_NOTE_ID} and {SAMPLE_NOTE_ID} (sample PDF)."
+    )
     return 0
 
 
