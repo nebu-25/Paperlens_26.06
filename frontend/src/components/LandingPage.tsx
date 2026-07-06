@@ -321,9 +321,9 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
 
       {/* ============ WHY IT EXISTS ============ */}
       <div id="why" className="mx-auto max-w-[1120px] px-8 pt-24">
-        <div className="mx-auto mb-12 max-w-[720px] text-center">
+        <div className="mx-auto mb-12 max-w-[820px] text-center">
           <Pill>WHY PAPERLENS · 왜 만들었나</Pill>
-          <h2 className="mb-[18px] font-serif text-[34px] font-normal leading-[1.18] sm:text-[40px]">
+          <h2 className="mb-[18px] break-keep font-serif text-[34px] font-normal leading-[1.18] sm:text-[40px]">
             AI가 대신 읽어 주는 도구는 이미 많습니다.
             <br />
             우리는 <span className="font-semibold">정확히 그 반대</span>를 만들었습니다.
@@ -437,9 +437,9 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
 
       {/* ============ HOW TO USE — 3 PASS ============ */}
       <div id="how" className="mx-auto max-w-[1120px] px-8 pt-24">
-        <div className="mx-auto mb-[52px] max-w-[720px] text-center">
+        <div className="mx-auto mb-[52px] max-w-[820px] text-center">
           <Pill>HOW IT WORKS · 사용 방법</Pill>
-          <h2 className="mb-[18px] font-serif text-[44px] font-normal leading-[1.18]">
+          <h2 className="mb-[18px] break-keep font-serif text-[44px] font-normal leading-[1.18]">
             논문을 처음부터 정독하지 마세요.
             <br />
             <span className="font-semibold italic">3-pass</span>로 읽으면 됩니다.
@@ -482,9 +482,9 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
 
       {/* ============ INTERACTIVE PURPOSE TEMPLATES ============ */}
       <div id="templates" className="mx-auto max-w-[1120px] px-8 pt-24">
-        <div className="mx-auto mb-11 max-w-[720px] text-center">
+        <div className="mx-auto mb-11 max-w-[820px] text-center">
           <Pill dot="#16325a">PURPOSE TEMPLATES · 목적 축</Pill>
-          <h2 className="mb-[18px] font-serif text-[44px] font-normal leading-[1.18]">
+          <h2 className="mb-[18px] break-keep font-serif text-[44px] font-normal leading-[1.18]">
             왜 읽느냐를 고르면,
             <br />
             <span className="font-semibold">물어야 할 질문</span>이 바뀝니다.
