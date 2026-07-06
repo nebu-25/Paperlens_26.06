@@ -4,6 +4,7 @@ import {
   FileText,
   Highlighter,
   Library,
+  Layers,
   PencilLine,
   Plus,
   Printer,
@@ -24,6 +25,7 @@ import { NoticeBanner } from '../NoticeBanner';
 import { QuestionsCard } from '../QuestionsCard';
 import { SectionCard } from '../SectionCard';
 import { TagEditor } from '../TagEditor';
+import { LibraryDigest } from './LibraryDigest';
 import { useWorkspace } from './WorkspaceContext';
 
 const EXPORT_OPTION_LABELS: { key: keyof ExportOptions; label: string }[] = [
@@ -63,6 +65,7 @@ export function ReviewNotePanel() {
   const [manualSummaryDraft, setManualSummaryDraft] = useState('');
   const [manualSummaryColor, setManualSummaryColor] = useState<HighlightColor>('yellow');
   const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
+  const [digestOpen, setDigestOpen] = useState(false);
   // FR-22: 질문 카드에서 관련 라벨 하이라이트를 펼쳐 본 질문 key 집합 (templateId.key)
   const [openRelatedKeys, setOpenRelatedKeys] = useState<Set<string>>(() => new Set());
   const toggleRelated = (key: string) =>
@@ -137,7 +140,19 @@ export function ReviewNotePanel() {
     >
       <div className="sticky top-0 z-10 shrink-0 border-b border-line bg-paper/95 p-5 pb-3 sm:p-6 sm:pb-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="min-w-0 text-base font-semibold">리뷰 노트</h2>
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="min-w-0 text-base font-semibold">리뷰 노트</h2>
+            <button
+              type="button"
+              className="inline-flex shrink-0 items-center gap-1 rounded border border-line bg-white px-2 py-1 text-xs font-semibold text-muted hover:border-action hover:text-action"
+              title="전체 논문의 라벨·인용 목적별 취합과 연구 질문 빌더를 엽니다"
+              onClick={() => setDigestOpen(true)}
+            >
+              <Layers size={13} />
+              <span className="hidden sm:inline">취합·연구 질문</span>
+              <span className="sm:hidden">취합</span>
+            </button>
+          </div>
           <div className="flex min-w-0 shrink-0 items-center gap-2">
             <span
               role="status"
@@ -841,6 +856,7 @@ export function ReviewNotePanel() {
           )}
         </SectionCard>
       </div>
+      {digestOpen && <LibraryDigest onClose={() => setDigestOpen(false)} />}
     </article>
   );
 }
