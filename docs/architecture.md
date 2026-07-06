@@ -75,7 +75,7 @@ GitHub Pages 배포의 경로 구성은 아래와 같습니다.
 - 50MB 초과, 200페이지 초과, 암호 PDF를 서버에서 거절합니다.
 - 원문 등록은 PDF 파일 업로드 또는 PDF로 바로 열리는 공용 인터넷 URL을 안정 경로로 사용합니다. 일반 웹페이지 URL은 원문 추출 대상으로 보지 않습니다.
 - PDF URL 등록은 SSRF 방어를 위해 `http/https`만 허용하고, credentials 포함 URL, `localhost`, loopback, 사설망, link-local, multicast/reserved/unspecified IP, private IP로 해석되는 도메인, redirect 대상이 비공용 주소인 경우를 거절합니다. 사용자 PC의 로컬 PDF는 URL이 아니라 파일 업로드로 등록합니다.
-- 텍스트가 없는 스캔 PDF는 등록은 허용하되 OCR/직접 작성 안내를 표시합니다.
+- 텍스트가 없는 스캔 PDF는 등록은 허용하되 NAVER CLOVA OCR 재추출/직접 작성 안내를 표시합니다.
 - PyMuPDF 추출 라인을 문단 단위로 재결합합니다.
 - 라틴어 줄바꿈과 하이픈을 보정하고, CJK 줄바꿈은 불필요한 공백을 줄입니다.
 - 페이지 번호, 반복 헤더/푸터, 측면 arXiv 스탬프를 노이즈로 제거합니다.

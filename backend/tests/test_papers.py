@@ -715,28 +715,113 @@ class TestCorruptedEncodingDetection:
 
 
 class TestOcrReflow:
-    """RapidOCR 박스 → line dict 변환과 읽기순서 재구성(엔진 비의존)."""
+    """CLOVA OCR fields → line dict 변환과 읽기순서 재구성(HTTP 비의존)."""
 
     def test_lines_sorted_and_cleaned(self):
-        result = [
-            [[[10, 40], [90, 40], [90, 60], [10, 60]], "둘째 줄", 0.9],
-            [[[10, 10], [80, 10], [80, 30], [10, 30]], " 첫째 줄 ", 0.9],
-        ]
-        lines = papers._ocr_lines_from_result(result)
+        response = {
+            "images": [
+                {
+                    "fields": [
+                        {
+                            "inferText": "둘째 줄",
+                            "boundingPoly": {
+                                "vertices": [
+                                    {"x": 10, "y": 40},
+                                    {"x": 90, "y": 40},
+                                    {"x": 90, "y": 60},
+                                    {"x": 10, "y": 60},
+                                ]
+                            },
+                        },
+                        {
+                            "inferText": " 첫째 줄 ",
+                            "boundingPoly": {
+                                "vertices": [
+                                    {"x": 10, "y": 10},
+                                    {"x": 80, "y": 10},
+                                    {"x": 80, "y": 30},
+                                    {"x": 10, "y": 30},
+                                ]
+                            },
+                        },
+                    ]
+                }
+            ]
+        }
+        lines = papers._clova_lines_from_response(response)
         assert [ln["text"] for ln in lines] == ["첫째 줄", "둘째 줄"]  # y0 오름차순
         assert lines[0]["y1"] > lines[0]["y0"]
 
     def test_two_column_reading_order(self):
         # 왼쪽 컬럼(작은 x)이 오른쪽 컬럼보다 먼저 읽혀야 한다.
-        result = []
+        fields = []
         for i in range(6):
             y = 10 + i * 20
-            result.append([[[10, y], [120, y], [120, y + 15], [10, y + 15]], f"왼쪽{i}", 0.9])
-            result.append([[[320, y], [430, y], [430, y + 15], [320, y + 15]], f"오른쪽{i}", 0.9])
-        lines = papers._ocr_lines_from_result(result)
+            fields.append(
+                {
+                    "inferText": f"왼쪽{i}",
+                    "boundingPoly": {
+                        "vertices": [
+                            {"x": 10, "y": y},
+                            {"x": 120, "y": y},
+                            {"x": 120, "y": y + 15},
+                            {"x": 10, "y": y + 15},
+                        ]
+                    },
+                }
+            )
+            fields.append(
+                {
+                    "inferText": f"오른쪽{i}",
+                    "boundingPoly": {
+                        "vertices": [
+                            {"x": 320, "y": y},
+                            {"x": 430, "y": y},
+                            {"x": 430, "y": y + 15},
+                            {"x": 320, "y": y + 15},
+                        ]
+                    },
+                }
+            )
+        lines = papers._clova_lines_from_response({"images": [{"fields": fields}]})
         groups = papers._split_page_columns(lines, 460.0)
         text = "\n".join(p for g in groups for p in papers._reflow_lines(g))
         assert text.index("왼쪽0") < text.index("오른쪽0")
+
+    def test_clova_word_fields_join_into_line(self):
+        response = {
+            "images": [
+                {
+                    "fields": [
+                        {
+                            "inferText": "PaperLens",
+                            "boundingPoly": {
+                                "vertices": [
+                                    {"x": 10, "y": 10},
+                                    {"x": 80, "y": 10},
+                                    {"x": 80, "y": 25},
+                                    {"x": 10, "y": 25},
+                                ]
+                            },
+                        },
+                        {
+                            "inferText": "OCR",
+                            "lineBreak": True,
+                            "boundingPoly": {
+                                "vertices": [
+                                    {"x": 90, "y": 10},
+                                    {"x": 130, "y": 10},
+                                    {"x": 130, "y": 25},
+                                    {"x": 90, "y": 25},
+                                ]
+                            },
+                        },
+                    ]
+                }
+            ]
+        }
+
+        assert papers._clova_lines_from_response(response)[0]["text"] == "PaperLens OCR"
 
     def test_ocr_returns_error_over_pagecount(self):
         class _Doc:

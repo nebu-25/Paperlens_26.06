@@ -1,6 +1,2 @@
-# OCR fallback (opt-in). OCR_ENABLED=true일 때만 설치한다.
-# 주의: rapidocr-onnxruntime는 opencv-python을 끌어오므로, libGL 없는 환경(Render 등)에서는
-# 설치 후 opencv-python 제거 → opencv-python-headless 교체가 필요하다(PR-C/docs 참조).
-rapidocr-onnxruntime==1.4.4
-onnxruntime>=1.17
-opencv-python-headless>=4.9
+# OCR fallback uses NAVER CLOVA OCR API over the Python standard library.
+# Keep this file for deployment scripts that still reference an optional OCR requirements file.

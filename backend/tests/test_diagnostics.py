@@ -66,3 +66,27 @@ def test_diagnostics_reports_ai_guardrails_ready(monkeypatch):
 
     assert data["ai"]["ready"] is True
     assert data["ai"]["warnings"] == []
+
+
+def test_diagnostics_reports_clova_ocr_configuration_warnings(monkeypatch):
+    monkeypatch.setattr(settings, "ocr_enabled", True)
+    monkeypatch.setattr(settings, "clova_ocr_invoke_url", "")
+    monkeypatch.setattr(settings, "clova_ocr_secret_key", "")
+
+    data = diagnostics()
+
+    assert data["ocr"]["enabled"] is True
+    assert data["ocr"]["provider"] == "naver_clova"
+    assert data["ocr"]["ready"] is False
+    assert data["ocr"]["warnings"]
+
+
+def test_diagnostics_reports_clova_ocr_ready(monkeypatch):
+    monkeypatch.setattr(settings, "ocr_enabled", True)
+    monkeypatch.setattr(settings, "clova_ocr_invoke_url", "https://example.com/ocr")
+    monkeypatch.setattr(settings, "clova_ocr_secret_key", "secret")
+
+    data = diagnostics()
+
+    assert data["ocr"]["ready"] is True
+    assert data["ocr"]["configured"] == {"invoke_url": True, "secret_key": True}

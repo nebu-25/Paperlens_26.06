@@ -1,9 +1,12 @@
+import base64
 import json
 import re
 import statistics
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
@@ -920,54 +923,161 @@ def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
     return int(ocr_stats["total"]) >= max(40, int(original_stats["total"]) * 0.35)
 
 
-# --- OCR fallback (opt-in, RapidOCR) ---------------------------------------
-_OCR_ENGINE = None  # 무거운 모델이라 프로세스당 1회만 로드하는 lazy 싱글턴
+# --- OCR fallback (opt-in, NAVER CLOVA OCR API) ---------------------------
+def _clova_request_payload(image_bytes: bytes, *, image_format: str, image_name: str) -> bytes:
+    payload = {
+        "version": "V2",
+        "requestId": str(uuid.uuid4()),
+        "timestamp": int(time.time() * 1000),
+        "images": [
+            {
+                "format": image_format,
+                "name": image_name,
+                "data": base64.b64encode(image_bytes).decode("ascii"),
+            }
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
-def _ensure_ocr_model() -> tuple[str, str]:
-    """한국어 rec ONNX 모델·dict 경로를 확보한다. 설정 경로 우선, 없으면 캐시에 다운로드."""
-    rec, keys = settings.ocr_rec_model_path.strip(), settings.ocr_rec_keys_path.strip()
-    if rec and keys and Path(rec).exists() and Path(keys).exists():
-        return rec, keys
-    cache = Path(settings.ocr_model_dir.strip() or (Path(__file__).resolve().parents[2] / ".ocr_models"))
-    cache.mkdir(parents=True, exist_ok=True)
-    targets = (
-        (cache / "korean_rec.onnx", settings.ocr_rec_model_url),
-        (cache / "korean_dict.txt", settings.ocr_rec_keys_url),
+def _call_clova_ocr(image_bytes: bytes, *, image_format: str, image_name: str) -> dict[str, object]:
+    invoke_url = settings.clova_ocr_invoke_url.strip()
+    secret_key = settings.clova_ocr_secret_key.strip()
+    if not invoke_url or not secret_key:
+        raise RuntimeError("CLOVA OCR Invoke URL 또는 Secret Key가 설정되지 않았습니다.")
+
+    request = urllib.request.Request(
+        invoke_url,
+        data=_clova_request_payload(
+            image_bytes, image_format=image_format, image_name=image_name
+        ),
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "X-OCR-SECRET": secret_key,
+        },
+        method="POST",
     )
-    for path, url in targets:
-        if not path.exists() or path.stat().st_size == 0:
-            req = urllib.request.Request(url, headers={"User-Agent": settings.crossref_user_agent})
-            with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310 - 신뢰된 모델 URL
-                path.write_bytes(resp.read())
-    return str(targets[0][0]), str(targets[1][0])
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - operator-provided CLOVA endpoint
+            request, timeout=max(1, settings.clova_ocr_timeout_sec)
+        ) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:300]
+        raise RuntimeError(f"CLOVA OCR API가 {exc.code} 응답을 반환했습니다. {detail}") from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeError(f"CLOVA OCR API에 연결하지 못했습니다. {exc}") from exc
+
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("CLOVA OCR API 응답을 JSON으로 해석하지 못했습니다.") from exc
 
 
-def _get_ocr_engine():
-    global _OCR_ENGINE
-    if _OCR_ENGINE is None:
-        from rapidocr_onnxruntime import RapidOCR  # lazy: 선택 의존성
-
-        rec, keys = _ensure_ocr_model()
-        _OCR_ENGINE = RapidOCR(rec_model_path=rec, rec_keys_path=keys)
-    return _OCR_ENGINE
+def _field_vertices(field: dict[str, object]) -> list[dict[str, object]]:
+    poly = field.get("boundingPoly")
+    if not isinstance(poly, dict):
+        return []
+    vertices = poly.get("vertices")
+    return vertices if isinstance(vertices, list) else []
 
 
-def _ocr_lines_from_result(result) -> list[dict[str, object]]:
-    """RapidOCR 박스 결과를 reflow 파이프라인이 쓰는 line dict로 변환한다."""
-    lines: list[dict[str, object]] = []
-    for box, text, _score in result or []:
-        cleaned = _clean_pdf_line(str(text))
-        if not cleaned:
+def _clova_token_from_field(field: dict[str, object]) -> dict[str, object] | None:
+    text = _clean_pdf_line(str(field.get("inferText") or ""))
+    vertices = _field_vertices(field)
+    if not text or len(vertices) < 2:
+        return None
+    xs = [float(v.get("x", 0)) for v in vertices if isinstance(v, dict)]
+    ys = [float(v.get("y", 0)) for v in vertices if isinstance(v, dict)]
+    if not xs or not ys:
+        return None
+    y0, y1 = min(ys), max(ys)
+    return {
+        "text": text,
+        "x0": min(xs),
+        "x1": max(xs),
+        "y0": y0,
+        "y1": y1,
+        "line_break": bool(field.get("lineBreak")),
+    }
+
+
+def _join_ocr_tokens(tokens: list[dict[str, object]]) -> str:
+    out = ""
+    for token in tokens:
+        text = str(token["text"]).strip()
+        if not text:
             continue
-        xs = [float(p[0]) for p in box]
-        ys = [float(p[1]) for p in box]
-        y0, y1 = min(ys), max(ys)
+        if not out:
+            out = text
+            continue
+        if _is_cjk(out[-1]) and _is_cjk(text[0]):
+            out += text
+        else:
+            out += f" {text}"
+    return _tidy_spacing(out)
+
+
+def _split_ocr_token_row(row: list[dict[str, object]], line_h: float) -> list[list[dict[str, object]]]:
+    sorted_row = sorted(row, key=lambda item: float(item["x0"]))
+    groups: list[list[dict[str, object]]] = []
+    current: list[dict[str, object]] = []
+    for token in sorted_row:
+        if current:
+            gap = float(token["x0"]) - max(float(item["x1"]) for item in current)
+            if gap > line_h * 4:
+                groups.append(current)
+                current = []
+        current.append(token)
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _tokens_to_lines(tokens: list[dict[str, object]]) -> list[dict[str, object]]:
+    if not tokens:
+        return []
+    heights = [
+        float(token["y1"]) - float(token["y0"])
+        for token in tokens
+        if float(token["y1"]) > float(token["y0"])
+    ]
+    line_h = statistics.median(heights) if heights else 12.0
+    tokens.sort(key=lambda token: (round(float(token["y0"])), float(token["x0"])))
+
+    grouped: list[list[dict[str, object]]] = []
+    current: list[dict[str, object]] = []
+    current_y = 0.0
+    for token in tokens:
+        center_y = (float(token["y0"]) + float(token["y1"])) / 2
+        if current and abs(center_y - current_y) > line_h * 0.75:
+            grouped.extend(_split_ocr_token_row(current, line_h))
+            current = []
+        current.append(token)
+        current_y = statistics.mean(
+            (float(item["y0"]) + float(item["y1"])) / 2 for item in current
+        )
+        if token.get("line_break"):
+            grouped.extend(_split_ocr_token_row(current, line_h))
+            current = []
+            current_y = 0.0
+    if current:
+        grouped.extend(_split_ocr_token_row(current, line_h))
+
+    lines: list[dict[str, object]] = []
+    for group in grouped:
+        text = _join_ocr_tokens(group)
+        if not text:
+            continue
+        x0 = min(float(item["x0"]) for item in group)
+        x1 = max(float(item["x1"]) for item in group)
+        y0 = min(float(item["y0"]) for item in group)
+        y1 = max(float(item["y1"]) for item in group)
         lines.append(
             {
-                "text": cleaned,
-                "x0": min(xs),
-                "x1": max(xs),
+                "text": text,
+                "x0": x0,
+                "x1": x1,
                 "y0": y0,
                 "y1": y1,
                 "size": max(1.0, y1 - y0),
@@ -977,31 +1087,52 @@ def _ocr_lines_from_result(result) -> list[dict[str, object]]:
     return lines
 
 
-def _ocr_document_text(document, *, dpi: int, max_pages: int) -> tuple[str, str | None]:
-    """RapidOCR로 렌더된 페이지 이미지를 재인식해 텍스트를 복구한다.
+def _clova_lines_from_response(response: dict[str, object]) -> list[dict[str, object]]:
+    """CLOVA OCR 응답 fields를 reflow 파이프라인이 쓰는 line dict로 변환한다."""
+    images = response.get("images")
+    if not isinstance(images, list):
+        return []
+    tokens: list[dict[str, object]] = []
+    for image in images:
+        if not isinstance(image, dict):
+            continue
+        fields = image.get("fields")
+        if not isinstance(fields, list):
+            continue
+        for field in fields:
+            if not isinstance(field, dict):
+                continue
+            token = _clova_token_from_field(field)
+            if token:
+                tokens.append(token)
+    return _tokens_to_lines(tokens)
 
-    폰트/인코딩 손상·스캔 PDF처럼 텍스트 레이어가 깨진 경우의 fallback. 무겁고 느려
-    opt-in(`OCR_ENABLED`)일 때만, 페이지 상한 안에서만 실행한다. 인식 박스는 좌표 기반
-    reflow(2단 컬럼 포함)로 재구성해 기존 추출 경로와 동일한 문단 형태로 만든다.
+
+def _ocr_document_text(document, *, dpi: int, max_pages: int) -> tuple[str, str | None]:
+    """CLOVA OCR API로 렌더된 페이지 이미지를 재인식해 텍스트를 복구한다.
+
+    폰트/인코딩 손상·스캔 PDF처럼 텍스트 레이어가 깨진 경우의 fallback. 외부 API 비용과
+    원문 이미지 전송이 있어 opt-in(`OCR_ENABLED`)일 때만, 페이지 상한 안에서만 실행한다.
+    인식 박스는 좌표 기반 reflow(2단 컬럼 포함)로 재구성한다.
     """
     if document.page_count > max_pages:
         return "", f"OCR은 {max_pages}페이지 이하 PDF에만 지원합니다(현재 {document.page_count}페이지)."
-    try:
-        engine = _get_ocr_engine()
-    except Exception as exc:  # pragma: no cover - 선택 의존성/모델 조달 실패
-        return "", f"서버에서 OCR 구성요소(RapidOCR/모델)를 사용할 수 없습니다. 환경 메시지: {exc}"
+    if not settings.ocr_ready:
+        return "", "서버에서 CLOVA OCR 설정을 찾을 수 없습니다. OCR 환경변수를 확인해 주세요."
 
     paragraphs: list[str] = []
     try:
-        for page in document:
+        for page_number, page in enumerate(document, start=1):
             pix = page.get_pixmap(dpi=dpi)
-            result, _ = engine(pix.tobytes("png"))  # PNG 바이트로 넘겨 cv2 채널순서 이슈 회피
-            lines = _ocr_lines_from_result(result)
+            response = _call_clova_ocr(
+                pix.tobytes("png"), image_format="png", image_name=f"page-{page_number}"
+            )
+            lines = _clova_lines_from_response(response)
             if not lines:
                 continue
             for group in _split_page_columns(lines, float(pix.width)):
                 paragraphs.extend(_reflow_lines(group))
-    except Exception as exc:  # pragma: no cover - 런타임 OCR 실패
+    except Exception as exc:  # pragma: no cover - 런타임 OCR/API 실패
         return "", f"OCR 처리 중 오류가 발생했습니다: {exc}"
     return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
 

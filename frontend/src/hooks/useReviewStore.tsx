@@ -187,7 +187,7 @@ export function useReviewStore({
     setLibrary((lib) => (lib[activeId] ? { ...lib, [activeId]: { ...lib[activeId], ...patch } } : lib));
   }
 
-  // 손상/스캔 PDF: 저장된 PDF 원본을 서버에서 렌더→OCR로 재인식해 원문을 복구한다.
+  // 손상/스캔 PDF: 저장된 PDF 원본을 서버에서 렌더→CLOVA OCR로 재인식해 원문을 복구한다.
   async function ocrPaper() {
     const target = paper;
     if (!target || ocrRunning) return;
@@ -203,7 +203,7 @@ export function useReviewStore({
     setSyncNotice({
       tone: 'info',
       title: 'OCR 재인식 중',
-      message: 'PDF를 이미지로 렌더해 텍스트를 다시 읽고 있습니다. 페이지 수에 따라 시간이 걸릴 수 있습니다.',
+      message: 'PDF를 이미지로 렌더해 CLOVA OCR로 텍스트를 다시 읽고 있습니다. 페이지 수에 따라 시간이 걸릴 수 있습니다.',
     });
     try {
       const res = await fetch(`${API_BASE}/papers/${target.id}/ocr`, {
