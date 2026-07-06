@@ -1,2 +1,6 @@
-# OCR fallback uses NAVER CLOVA OCR API over the Python standard library.
-# Keep this file for deployment scripts that still reference an optional OCR requirements file.
+# Optional OCR fallback for English/non-CLOVA recognition.
+# CLOVA OCR itself uses the Python standard library and does not need these packages.
+# Render처럼 시스템 libGL이 없는 환경에서는 opencv-python을 제거하고 headless만 남긴다.
+rapidocr-onnxruntime==1.4.4
+onnxruntime>=1.17
+opencv-python-headless>=4.9

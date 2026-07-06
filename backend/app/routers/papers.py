@@ -923,7 +923,29 @@ def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
     return int(ocr_stats["total"]) >= max(40, int(original_stats["total"]) * 0.35)
 
 
-# --- OCR fallback (opt-in, NAVER CLOVA OCR API) ---------------------------
+# --- OCR fallback (opt-in, NAVER CLOVA OCR API + RapidOCR) ----------------
+_RAPIDOCR_ENGINE = None
+
+
+def _ocr_line_dict(text: str, vertices: list[dict[str, object]]) -> dict[str, object] | None:
+    cleaned = _clean_pdf_line(text)
+    if not cleaned or len(vertices) < 2:
+        return None
+    xs = [float(v.get("x", 0)) for v in vertices if isinstance(v, dict)]
+    ys = [float(v.get("y", 0)) for v in vertices if isinstance(v, dict)]
+    if not xs or not ys:
+        return None
+    y0, y1 = min(ys), max(ys)
+    return {
+        "text": cleaned,
+        "x0": min(xs),
+        "x1": max(xs),
+        "y0": y0,
+        "y1": y1,
+        "size": max(1.0, y1 - y0),
+    }
+
+
 def _clova_request_payload(image_bytes: bytes, *, image_format: str, image_name: str) -> bytes:
     payload = {
         "version": "V2",
@@ -983,21 +1005,15 @@ def _field_vertices(field: dict[str, object]) -> list[dict[str, object]]:
 
 
 def _clova_token_from_field(field: dict[str, object]) -> dict[str, object] | None:
-    text = _clean_pdf_line(str(field.get("inferText") or ""))
-    vertices = _field_vertices(field)
-    if not text or len(vertices) < 2:
+    line = _ocr_line_dict(str(field.get("inferText") or ""), _field_vertices(field))
+    if not line:
         return None
-    xs = [float(v.get("x", 0)) for v in vertices if isinstance(v, dict)]
-    ys = [float(v.get("y", 0)) for v in vertices if isinstance(v, dict)]
-    if not xs or not ys:
-        return None
-    y0, y1 = min(ys), max(ys)
     return {
-        "text": text,
-        "x0": min(xs),
-        "x1": max(xs),
-        "y0": y0,
-        "y1": y1,
+        "text": line["text"],
+        "x0": line["x0"],
+        "x1": line["x1"],
+        "y0": line["y0"],
+        "y1": line["y1"],
         "line_break": bool(field.get("lineBreak")),
     }
 
@@ -1108,33 +1124,128 @@ def _clova_lines_from_response(response: dict[str, object]) -> list[dict[str, ob
     return _tokens_to_lines(tokens)
 
 
+def _get_rapidocr_engine():
+    global _RAPIDOCR_ENGINE
+    if _RAPIDOCR_ENGINE is None:
+        from rapidocr_onnxruntime import RapidOCR  # lazy: 선택 의존성
+
+        rec = settings.rapidocr_rec_model_path.strip()
+        keys = settings.rapidocr_rec_keys_path.strip()
+        if rec and keys:
+            _RAPIDOCR_ENGINE = RapidOCR(rec_model_path=rec, rec_keys_path=keys)
+        else:
+            _RAPIDOCR_ENGINE = RapidOCR()
+    return _RAPIDOCR_ENGINE
+
+
+def _rapidocr_lines_from_result(result) -> list[dict[str, object]]:
+    """RapidOCR 박스 결과를 reflow 파이프라인이 쓰는 line dict로 변환한다."""
+    lines: list[dict[str, object]] = []
+    for box, text, _score in result or []:
+        vertices = [{"x": point[0], "y": point[1]} for point in box]
+        line = _ocr_line_dict(str(text), vertices)
+        if line:
+            lines.append(line)
+    lines.sort(key=lambda it: (round(float(it["y0"])), float(it["x0"])))
+    return lines
+
+
+def _reflow_ocr_page_lines(lines: list[dict[str, object]], page_width: float) -> list[str]:
+    paragraphs: list[str] = []
+    for group in _split_page_columns(lines, page_width):
+        paragraphs.extend(_reflow_lines(group))
+    return paragraphs
+
+
+def _ocr_text_with_clova(document, *, dpi: int) -> tuple[str, str | None]:
+    if not settings.clova_ocr_ready:
+        return "", "CLOVA OCR 설정을 찾을 수 없습니다."
+    paragraphs: list[str] = []
+    for page_number, page in enumerate(document, start=1):
+        pix = page.get_pixmap(dpi=dpi)
+        response = _call_clova_ocr(
+            pix.tobytes("png"), image_format="png", image_name=f"page-{page_number}"
+        )
+        lines = _clova_lines_from_response(response)
+        if lines:
+            paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
+    return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
+
+
+def _ocr_text_with_rapidocr(document, *, dpi: int) -> tuple[str, str | None]:
+    try:
+        engine = _get_rapidocr_engine()
+    except Exception as exc:  # pragma: no cover - 선택 의존성/모델 로딩 실패
+        return "", f"RapidOCR를 사용할 수 없습니다. 환경 메시지: {exc}"
+    paragraphs: list[str] = []
+    for page in document:
+        pix = page.get_pixmap(dpi=dpi)
+        result, _ = engine(pix.tobytes("png"))
+        lines = _rapidocr_lines_from_result(result)
+        if lines:
+            paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
+    return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
+
+
+def _looks_latin_dominant_document(document) -> bool:
+    try:
+        text = "\n".join(document[i].get_text("text") for i in range(min(2, document.page_count)))
+    except Exception:
+        return False
+    stats = _text_quality_stats(text)
+    latin = int(stats["latin"])
+    hangul = int(stats["hangul"])
+    return latin >= 40 and latin >= max(20, hangul * 2)
+
+
+def _ocr_provider_order(document) -> list[str]:
+    provider = settings.ocr_provider_normalized
+    if provider in {"clova", "rapidocr"}:
+        return [provider]
+    if _looks_latin_dominant_document(document):
+        return ["rapidocr", "clova"]
+    return ["clova", "rapidocr"]
+
+
+def _ocr_text_quality_score(text: str, page_count: int) -> int:
+    return int(_extraction_quality(text, page_count).get("score") or 0)
+
+
 def _ocr_document_text(document, *, dpi: int, max_pages: int) -> tuple[str, str | None]:
-    """CLOVA OCR API로 렌더된 페이지 이미지를 재인식해 텍스트를 복구한다.
+    """설정된 OCR provider로 렌더된 페이지 이미지를 재인식해 텍스트를 복구한다.
 
     폰트/인코딩 손상·스캔 PDF처럼 텍스트 레이어가 깨진 경우의 fallback. 외부 API 비용과
-    원문 이미지 전송이 있어 opt-in(`OCR_ENABLED`)일 때만, 페이지 상한 안에서만 실행한다.
-    인식 박스는 좌표 기반 reflow(2단 컬럼 포함)로 재구성한다.
+    원문 이미지 전송이 있는 CLOVA OCR, 영문 fallback용 RapidOCR를 provider 설정에 따라
+    병행한다. 인식 박스는 좌표 기반 reflow(2단 컬럼 포함)로 재구성한다.
     """
     if document.page_count > max_pages:
         return "", f"OCR은 {max_pages}페이지 이하 PDF에만 지원합니다(현재 {document.page_count}페이지)."
     if not settings.ocr_ready:
-        return "", "서버에서 CLOVA OCR 설정을 찾을 수 없습니다. OCR 환경변수를 확인해 주세요."
+        return "", "서버에서 사용 가능한 OCR provider를 찾을 수 없습니다. OCR 환경변수를 확인해 주세요."
 
-    paragraphs: list[str] = []
-    try:
-        for page_number, page in enumerate(document, start=1):
-            pix = page.get_pixmap(dpi=dpi)
-            response = _call_clova_ocr(
-                pix.tobytes("png"), image_format="png", image_name=f"page-{page_number}"
-            )
-            lines = _clova_lines_from_response(response)
-            if not lines:
-                continue
-            for group in _split_page_columns(lines, float(pix.width)):
-                paragraphs.extend(_reflow_lines(group))
-    except Exception as exc:  # pragma: no cover - 런타임 OCR/API 실패
-        return "", f"OCR 처리 중 오류가 발생했습니다: {exc}"
-    return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
+    attempts: list[tuple[str, str, int]] = []
+    errors: list[str] = []
+    for provider in _ocr_provider_order(document):
+        try:
+            if provider == "clova":
+                text, error = _ocr_text_with_clova(document, dpi=dpi)
+            else:
+                text, error = _ocr_text_with_rapidocr(document, dpi=dpi)
+        except Exception as exc:  # pragma: no cover - 런타임 OCR/API 실패
+            text, error = "", str(exc)
+        if error:
+            errors.append(f"{provider}: {error}")
+        if not text.strip():
+            continue
+        score = _ocr_text_quality_score(text, document.page_count)
+        attempts.append((provider, text, score))
+        if score >= 55 or settings.ocr_provider_normalized != "auto":
+            return text, None
+
+    if attempts:
+        _provider, text, _score = max(attempts, key=lambda item: item[2])
+        return text, None
+    return "", " / ".join(errors) or "OCR로 텍스트를 추출하지 못했습니다."
 
 
 @router.api_route("/sample-pdf", methods=["GET", "HEAD"])

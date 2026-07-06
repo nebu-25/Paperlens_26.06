@@ -823,6 +823,17 @@ class TestOcrReflow:
 
         assert papers._clova_lines_from_response(response)[0]["text"] == "PaperLens OCR"
 
+    def test_rapidocr_lines_sorted_and_cleaned(self):
+        result = [
+            [[[10, 40], [90, 40], [90, 60], [10, 60]], "second line", 0.9],
+            [[[10, 10], [80, 10], [80, 30], [10, 30]], " first line ", 0.9],
+        ]
+
+        lines = papers._rapidocr_lines_from_result(result)
+
+        assert [ln["text"] for ln in lines] == ["first line", "second line"]
+        assert lines[0]["size"] == 20
+
     def test_ocr_returns_error_over_pagecount(self):
         class _Doc:
             page_count = 999

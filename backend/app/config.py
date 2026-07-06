@@ -1,3 +1,5 @@
+import importlib.util
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,14 +38,17 @@ class Settings(BaseSettings):
     # AI rate limit 상태를 공유할 Redis URL. 설정 시 다중 워커/다중 인스턴스에서 공유된다.
     # 비워두면 개발 편의를 위해 프로세스 메모리 저장소를 사용한다.
     redis_url: str = ""
-    # OCR fallback (opt-in). 손상/스캔 PDF를 렌더→NAVER CLOVA OCR API로 재인식한다.
-    # 외부 API 비용과 원문 이미지 전송이 발생하므로 기본 off.
+    # OCR fallback (opt-in). 손상/스캔 PDF를 렌더→OCR로 재인식한다.
+    # provider: auto(영문 힌트면 RapidOCR 우선, 그 외 CLOVA 우선), clova, rapidocr.
     ocr_enabled: bool = False
+    ocr_provider: str = "auto"
     ocr_max_pages: int = 20
     ocr_dpi: int = 200
     clova_ocr_invoke_url: str = ""
     clova_ocr_secret_key: str = ""
     clova_ocr_timeout_sec: int = 30
+    rapidocr_rec_model_path: str = ""
+    rapidocr_rec_keys_path: str = ""
     # 샘플 PDF 파일을 배포 서버에 커밋하지 않고 제공할 때 사용하는 원격 PDF URL.
     sample_pdf_url: str = ""
     # Supabase Auth. JWT secret이 있으면 보호 API에서 Bearer token을 검증해 user_id를 추출한다.
@@ -75,26 +80,59 @@ class Settings(BaseSettings):
 
     @property
     def ocr_ready(self) -> bool:
-        return bool(
-            self.ocr_enabled
-            and self.clova_ocr_invoke_url.strip()
-            and self.clova_ocr_secret_key.strip()
-        )
+        if not self.ocr_enabled:
+            return False
+        provider = self.ocr_provider_normalized
+        if provider == "rapidocr":
+            return self.rapidocr_ready
+        if provider == "clova":
+            return self.clova_ocr_ready
+        return self.clova_ocr_ready or self.rapidocr_ready
+
+    @property
+    def ocr_provider_normalized(self) -> str:
+        provider = self.ocr_provider.strip().casefold()
+        return provider if provider in {"auto", "clova", "rapidocr"} else "auto"
+
+    @property
+    def clova_ocr_ready(self) -> bool:
+        return bool(self.clova_ocr_invoke_url.strip() and self.clova_ocr_secret_key.strip())
+
+    @property
+    def rapidocr_ready(self) -> bool:
+        return importlib.util.find_spec("rapidocr_onnxruntime") is not None
 
     @property
     def ocr_diagnostics(self) -> dict[str, object]:
         configured = {
-            "invoke_url": bool(self.clova_ocr_invoke_url.strip()),
-            "secret_key": bool(self.clova_ocr_secret_key.strip()),
+            "clova_invoke_url": bool(self.clova_ocr_invoke_url.strip()),
+            "clova_secret_key": bool(self.clova_ocr_secret_key.strip()),
+            "rapidocr_custom_rec_model": bool(self.rapidocr_rec_model_path.strip()),
+            "rapidocr_custom_rec_keys": bool(self.rapidocr_rec_keys_path.strip()),
         }
         warnings: list[str] = []
-        if self.ocr_enabled and not all(configured.values()):
+        provider = self.ocr_provider_normalized
+        if self.ocr_enabled and provider == "clova" and not self.clova_ocr_ready:
             warnings.append(
                 "Set CLOVA_OCR_INVOKE_URL and CLOVA_OCR_SECRET_KEY when OCR_ENABLED=true."
             )
+        if self.ocr_enabled and provider == "auto" and not self.clova_ocr_ready:
+            warnings.append(
+                "CLOVA OCR is not configured. Auto OCR will only use RapidOCR if its optional dependency is installed."
+            )
+        if self.ocr_enabled and provider in {"auto", "rapidocr"} and not self.rapidocr_ready:
+            warnings.append(
+                "RapidOCR is not installed. Install requirements-ocr.txt to enable English OCR fallback."
+            )
+        if self.ocr_provider.strip().casefold() not in {"", "auto", "clova", "rapidocr"}:
+            warnings.append("Unknown OCR_PROVIDER. Falling back to auto.")
         return {
             "enabled": self.ocr_enabled,
-            "provider": "naver_clova",
+            "provider": provider,
+            "providers": {
+                "clova": self.clova_ocr_ready,
+                "rapidocr": self.rapidocr_ready,
+            },
             "ready": self.ocr_ready,
             "max_pages": self.ocr_max_pages,
             "dpi": self.ocr_dpi,

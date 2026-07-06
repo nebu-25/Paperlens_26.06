@@ -113,7 +113,7 @@ FastAPI backend
 - 운영 저장소는 PostgreSQL을 권장합니다. Render 환경변수 `DATABASE_URL`을 설정하세요.
 - Supabase Auth를 쓰려면 프론트 빌드 변수 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`와 백엔드 변수 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`을 설정하세요.
 - AI 용어 설명을 켜려면 Render 환경변수 `AI_API_KEY`를 설정합니다. 운영에서는 Redis rate limit, DB 비용 한도, provider 결제 한도/알림 설정도 함께 완료해야 합니다.
-- OCR 재추출(손상/스캔 PDF 원문 복구)을 켜려면 Render에 `OCR_ENABLED=true`, `CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`를 설정합니다. PDF 페이지 이미지가 NAVER CLOVA OCR API로 전송되며 외부 API 비용이 발생할 수 있습니다.
+- OCR 재추출(손상/스캔 PDF 원문 복구)을 켜려면 Render에 `OCR_ENABLED=true`, `OCR_PROVIDER=auto`, `CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`를 설정합니다. 한국어는 NAVER CLOVA OCR, 영어 fallback은 선택 의존성 RapidOCR로 병행할 수 있습니다.
 
 상세 환경변수, CORS, PostgreSQL, smoke 절차는 [docs/deployment.md](docs/deployment.md)를 참고하세요.
 
