@@ -240,6 +240,9 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
               <div className="absolute left-1.5 top-4 size-2 rounded-full border-2 border-[#65b8a2]" />
             </div>
             <span className="font-serif text-[21px] font-semibold tracking-[-0.01em]">PaperLens</span>
+            <span className="rounded-full border border-[#a2cbcd] bg-[#e4f0f1] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[#0e4749]">
+              Beta
+            </span>
           </div>
           <div className="hidden items-center gap-8 md:flex">
             <a href="#why" className="text-sm text-[#283338] hover:text-[#1c5d5f]">왜 만들었나</a>
@@ -299,7 +302,9 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
                 사용 방법 보기 →
               </a>
             </div>
-            <div className="mt-5 text-[12px] tracking-[0.04em] text-[#0e4749]">한국어 논문(KCI 포함)도 자동으로 정리됩니다</div>
+            <div className="mt-5 text-[12px] tracking-[0.04em] text-[#0e4749]">
+              한국어 논문(KCI 포함)도 자동으로 정리됩니다 · <span className="font-semibold">현재 베타 테스트 중</span>
+            </div>
           </div>
           <ProductMockup />
         </div>
@@ -614,7 +619,7 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
             <div className="size-[22px] rounded-md bg-[#1c5d5f]" />
             <span className="font-serif text-lg font-semibold">PaperLens</span>
           </div>
-          <div className="text-xs tracking-[0.03em] text-[#8aa0a1]">논문 리뷰·정리 워크스페이스 · v4.0</div>
+          <div className="text-xs tracking-[0.03em] text-[#8aa0a1]">논문 리뷰·정리 워크스페이스 · v4.0 · 베타 테스트 중</div>
         </div>
       </footer>
 
