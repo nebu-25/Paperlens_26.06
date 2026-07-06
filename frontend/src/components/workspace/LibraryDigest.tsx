@@ -161,7 +161,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
     }));
 
   const chip = (active: boolean) =>
-    `rounded-full px-2 py-0.5 text-[11px] ${
+    `rounded-full px-2 py-0.5 text-xs ${
       active ? 'bg-action text-white' : 'border border-line text-muted hover:border-action hover:text-action'
     }`;
 
@@ -173,7 +173,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4"
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded border border-line bg-paper shadow-xl">
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded border border-line bg-paper shadow-xl">
         <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel px-4 py-3">
           <Layers size={16} className="text-action" />
           <div className="flex gap-1" role="tablist" aria-label="취합/빌더 전환">
@@ -181,7 +181,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
               type="button"
               role="tab"
               aria-selected={tab === 'aggregate'}
-              className={`rounded px-3 py-1.5 text-sm font-semibold ${
+              className={`rounded px-3 py-1.5 text-base font-semibold ${
                 tab === 'aggregate' ? 'bg-action text-white' : 'text-muted hover:bg-paper'
               }`}
               onClick={() => setTab('aggregate')}
@@ -192,7 +192,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
               type="button"
               role="tab"
               aria-selected={tab === 'builder'}
-              className={`rounded px-3 py-1.5 text-sm font-semibold ${
+              className={`rounded px-3 py-1.5 text-base font-semibold ${
                 tab === 'builder' ? 'bg-action text-white' : 'text-muted hover:bg-paper'
               }`}
               onClick={() => setTab('builder')}
@@ -211,15 +211,15 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
           {tab === 'aggregate' ? (
             <div className="space-y-4">
-              <p className="text-xs leading-relaxed text-muted">
+              <p className="text-sm leading-relaxed text-muted">
                 내 라이브러리 전체에서 라벨·인용 목적별로 문장을 회수합니다. 사용자가 분류해 둔
                 것의 집계이며, 아래 연구 질문 빌더의 재료가 됩니다.
               </p>
               <div className="flex flex-wrap items-center gap-1">
-                <span className="mr-1 text-[11px] font-semibold text-muted">라벨</span>
+                <span className="mr-1 text-xs font-semibold text-muted">라벨</span>
                 <button type="button" className={chip(filter.color === 'all')} onClick={() => setFilter((f) => ({ ...f, color: 'all' }))}>
                   전체
                 </button>
@@ -235,7 +235,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
               <div className="flex flex-wrap items-center gap-1">
-                <span className="mr-1 text-[11px] font-semibold text-muted">인용 목적</span>
+                <span className="mr-1 text-xs font-semibold text-muted">인용 목적</span>
                 <button type="button" className={chip(filter.use === 'all')} onClick={() => setFilter((f) => ({ ...f, use: 'all' }))}>
                   전체
                 </button>
@@ -251,10 +251,10 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-muted">{items.length}건 · 논문 {paperGroups.length}편</span>
+                <span className="text-sm text-muted">{items.length}건 · 논문 {paperGroups.length}편</span>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 rounded bg-action px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded bg-action px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
                   disabled={items.length === 0}
                   onClick={() =>
                     downloadMarkdown(`${safeFilename('라이브러리 취합')}.md`, buildAggregateMarkdown(items, filter))
@@ -264,17 +264,17 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                 </button>
               </div>
               {paperGroups.length === 0 ? (
-                <p className="rounded border border-line bg-white p-4 text-xs text-muted">
+                <p className="rounded border border-line bg-white p-4 text-sm text-muted">
                   조건에 맞는 항목이 없습니다. 논문을 읽으며 하이라이트에 라벨과 인용 목적을
                   남기면 여기에 모입니다.
                 </p>
               ) : (
                 paperGroups.map((group) => (
                   <section key={group[0].paperId} className="rounded border border-line bg-white p-3">
-                    <h3 className="mb-2 text-sm font-semibold text-ink">
+                    <h3 className="mb-2 text-base font-semibold text-ink">
                       {group[0].paperTitle}
                       {group[0].paperAuthors && (
-                        <span className="ml-2 text-xs font-normal text-muted">{group[0].paperAuthors}</span>
+                        <span className="ml-2 text-sm font-normal text-muted">{group[0].paperAuthors}</span>
                       )}
                     </h3>
                     <ul className="space-y-2">
@@ -282,20 +282,20 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                         const style = highlightStyle(item.color);
                         const use = CITATION_USE_OPTIONS.find((o) => o.value === item.citationUse);
                         return (
-                          <li key={`${item.paperId}-${item.source}-${index}`} className={`rounded p-2 text-sm ${style.listClass}`}>
+                          <li key={`${item.paperId}-${item.source}-${index}`} className={`rounded p-2 text-base ${style.listClass}`}>
                             <span className="mb-1 flex flex-wrap items-center gap-1">
-                              <span className="inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
+                              <span className="inline-flex rounded bg-white/70 px-1.5 py-0.5 text-xs font-semibold text-muted">
                                 {style.meaning}
                               </span>
                               {use && (
-                                <span className="inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] text-muted">
+                                <span className="inline-flex rounded bg-white/70 px-1.5 py-0.5 text-xs text-muted">
                                   {use.label}
                                   {item.citationSuggested ? ' (제안)' : ''}
                                 </span>
                               )}
                               <button
                                 type="button"
-                                className="ml-auto inline-flex shrink-0 rounded border border-line bg-white/80 px-1.5 py-0.5 text-[11px] text-muted hover:border-action hover:text-action"
+                                className="ml-auto inline-flex shrink-0 rounded border border-line bg-white/80 px-1.5 py-0.5 text-xs text-muted hover:border-action hover:text-action"
                                 title={
                                   item.source === 'highlight'
                                     ? '해당 논문을 열고 원문의 하이라이트 위치로 이동합니다'
@@ -317,14 +317,14 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-xs leading-relaxed text-muted">
+              <p className="text-sm leading-relaxed text-muted">
                 여러 논문에서 취합된 키워드·관점·한계·비판을 재료로 연구 공백과 내 연구 질문을
                 직접 잡습니다. 프레임과 질문은 도구가 제공하고, 답과 판단은 사용자가 채웁니다.
               </p>
               <section className="rounded border border-line bg-white p-3">
-                <h3 className="mb-2 text-sm font-semibold">취합 재료</h3>
+                <h3 className="mb-2 text-base font-semibold">취합 재료</h3>
                 {materials.keywords.length > 0 && (
-                  <p className="mb-2 text-xs text-muted">
+                  <p className="mb-2 text-sm text-muted">
                     <b className="text-ink">키워드({materials.keywords.length})</b>{' '}
                     {materials.keywords.slice(0, 15).join(' · ')}
                   </p>
@@ -335,7 +335,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                   ['비판·질문', materials.critiques],
                 ] as const).map(([label, list]) =>
                   list.length > 0 ? (
-                    <details key={label} className="mb-1 text-xs text-muted">
+                    <details key={label} className="mb-1 text-sm text-muted">
                       <summary className="cursor-pointer font-semibold text-ink">
                         {label} {list.length}건
                       </summary>
@@ -361,18 +361,18 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                   && materials.perspectives.length === 0
                   && materials.limitations.length === 0
                   && materials.critiques.length === 0 && (
-                  <p className="text-xs text-muted">
+                  <p className="text-sm text-muted">
                     아직 취합 재료가 없습니다. 재료 없이 빈 프레임으로 시작해도 됩니다.
                   </p>
                 )}
               </section>
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-ink">연구 공백 메모</span>
+                <span className="mb-1 block text-base font-semibold text-ink">연구 공백 메모</span>
                 <textarea
                   name="research-gap"
                   aria-label="연구 공백 메모"
                   title="반복되는 관점, 미해결 한계에서 발견한 공백을 적으세요"
-                  className="min-h-16 w-full resize-y rounded border border-line p-2 text-sm outline-none focus:border-action"
+                  className="min-h-16 w-full resize-y rounded border border-line p-2 text-base outline-none focus:border-action"
                   placeholder="반복되는 관점, 미해결 한계에서 발견한 공백을 적으세요."
                   value={doc.gapNote}
                   onChange={(e) => updateDoc((c) => ({ ...c, gapNote: e.target.value }))}
@@ -386,7 +386,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                     role="radio"
                     aria-checked={f.id === frame.id}
                     title={f.tagline}
-                    className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    className={`rounded-full px-2.5 py-1 text-sm font-semibold ${
                       f.id === frame.id
                         ? 'bg-action text-white'
                         : 'border border-line text-muted hover:border-action hover:text-action'
@@ -400,13 +400,13 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
               <ul className="space-y-3">
                 {frame.slots.map((slot) => (
                   <li key={slot.key} className="rounded border border-line bg-white p-3">
-                    <div className="mb-1 text-sm font-semibold text-ink">{slot.label}</div>
-                    <p className="mb-2 text-xs text-muted">{slot.helper}</p>
+                    <div className="mb-1 text-base font-semibold text-ink">{slot.label}</div>
+                    <p className="mb-2 text-sm text-muted">{slot.helper}</p>
                     <textarea
                       name={`frame-${frame.id}-${slot.key}`}
                       aria-label={slot.label}
                       title={slot.label}
-                      className="min-h-12 w-full resize-y rounded border border-line p-2 text-sm outline-none focus:border-action"
+                      className="min-h-12 w-full resize-y rounded border border-line p-2 text-base outline-none focus:border-action"
                       placeholder="직접 작성하세요."
                       value={frameAnswers[slot.key] ?? ''}
                       onChange={(e) => setSlotAnswer(slot.key, e.target.value)}
@@ -417,25 +417,25 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
               <section className="rounded border border-dashed border-line bg-white p-3">
                 <button
                   type="button"
-                  className="text-sm font-semibold text-ink hover:text-action"
+                  className="text-base font-semibold text-ink hover:text-action"
                   aria-expanded={expansionOpen}
                   onClick={() => setExpansionOpen((v) => !v)}
                 >
                   질의 확장 질문 {expansionOpen ? '접기' : '펼치기'}
                 </button>
-                <p className="mt-1 text-xs text-muted">
+                <p className="mt-1 text-sm text-muted">
                   질문 생성이 막힐 때 펼쳐 보세요. (FINER의 Interesting/Novel/Relevant 렌즈)
                 </p>
                 {expansionOpen && (
                   <ul className="mt-2 space-y-3">
                     {EXPANSION_QUESTIONS.map((q) => (
                       <li key={q.key}>
-                        <div className="mb-1 text-xs font-semibold text-ink">{q.label}</div>
+                        <div className="mb-1 text-sm font-semibold text-ink">{q.label}</div>
                         <textarea
                           name={`expansion-${q.key}`}
                           aria-label={q.label}
                           title={q.label}
-                          className="min-h-12 w-full resize-y rounded border border-line p-2 text-sm outline-none focus:border-action"
+                          className="min-h-12 w-full resize-y rounded border border-line p-2 text-base outline-none focus:border-action"
                           placeholder="직접 작성하세요."
                           value={doc.expansion[q.key] ?? ''}
                           onChange={(e) =>
@@ -451,14 +451,14 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                 {syncState !== 'idle' && (
                   <span
                     role="status"
-                    className={`text-[11px] ${syncState === 'local' ? 'text-amber-700' : 'text-muted'}`}
+                    className={`text-xs ${syncState === 'local' ? 'text-amber-700' : 'text-muted'}`}
                   >
                     {SYNC_LABEL[syncState]}
                   </span>
                 )}
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 rounded bg-action px-3 py-1.5 text-xs font-semibold text-white"
+                  className="inline-flex items-center gap-1 rounded bg-action px-3 py-1.5 text-sm font-semibold text-white"
                   onClick={() => downloadMarkdown(`${safeFilename('연구 질문 문서')}.md`, buildResearchMarkdown(doc))}
                 >
                   <Download size={13} /> 연구 질문 문서 내보내기
