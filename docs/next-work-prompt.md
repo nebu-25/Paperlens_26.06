@@ -10,16 +10,22 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 시작 URL은 https://nebu-25.github.io/Paperlens_26.06/ 입니다.
 - 로그인/사용설명서 랜딩 페이지가 시작 화면이고, 로그인 후 서비스 워크스페이스는 /Paperlens_26.06/service_home/ 입니다.
 - GitHub Pages 빌드는 service_home/index.html, 404.html, favicon.svg를 생성합니다.
+- GitHub Pages 배포는 `actions/deploy-pages@v5`를 사용합니다. `actions/deploy-pages@v4`에서 빌드 후 Pages 배포 단계가 `Deployment failed, try again later.`로 실패하던 문제를 `v5` 갱신으로 해결했습니다.
 - 백엔드는 Render의 https://paperlens-backend-53ki.onrender.com 입니다.
 - 랜딩 페이지는 PaperLens.html 시안과 동일한 디자인(sticky nav, 제품 목업 히어로, 트러스트 스탯 스트립, 경쟁 분석 밴드, 3-pass·목적 템플릿·기능 카드)을 React로 이식했습니다. 요금 섹션은 과금 범위 밖이라 제외했습니다.
 - 랜딩의 "무료로 리뷰 노트 만들기" 등 CTA는 로그인 모달을 엽니다. 모달은 데모 계정을 미리 채우고 이메일 입력에 focus하며 Esc/배경 클릭으로 닫힙니다. 로그인 상태면 CTA에서 바로 서비스로 이동합니다.
 - GitHub Pages 빌드에 `VITE_DEMO_EMAIL`/`VITE_DEMO_PASSWORD`가 있으면 데모 계정이 로그인 폼에 미리 입력됩니다. 이 값은 공개 번들에 포함되므로 데모 전용 계정만 사용합니다.
+- 데모 설문 링크는 https://forms.gle/WrYxvAt6RQqxVia29 입니다.
+- 데모 설문 모달은 리뷰 노트 Markdown/PDF, 라이브러리 취합 Markdown, 연구 질문 문서 Markdown 내보내기 후 먼저 표시합니다.
+- 내보내기 설문 모달을 보지 않은 사용자는 로그아웃 완료 후 설문 모달을 한 번 볼 수 있습니다. 로그아웃 자체는 막지 않습니다.
+- 설문 참여 완료는 `localStorage`, 세션 내 숨김/이미 표시 상태는 `sessionStorage`로 저장해 같은 세션에서 반복 노출하지 않습니다.
 - 랜딩 페이지는 로드 즉시 백그라운드에서 `/api/health`를 호출해 Render 무료 플랜 콜드스타트를 미리 깨웁니다. 요청 실패는 UI에 표시하지 않습니다.
 - Supabase Auth가 켜져 있고, 프론트는 Supabase access token을 Authorization: Bearer로 FastAPI에 보냅니다.
 - 백엔드는 HS256 토큰을 SUPABASE_JWT_SECRET으로 검증하고, 다른 알고리즘이면 Supabase /auth/v1/user fallback으로 사용자 id를 확인합니다.
 - Supabase /auth/v1/user fallback 결과는 token hash 기준으로 최대 5분, token exp 이내에서 캐시합니다.
 - /api/diagnostics는 비밀값 없이 Auth/DB/AI 설정 상태를 반환합니다.
 - Pages workflow는 VITE_API_BASE_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY 형식을 검증합니다.
+- Pages workflow는 `frontend/**` 또는 `.github/workflows/deploy-pages.yml` 변경 때 자동 실행되며, 문서만 변경한 push에서는 자동 Pages 배포를 건너뜁니다.
 - 샘플 PDF 버튼은 먼저 /api/health로 Render 백엔드를 깨운 뒤 sample-pdf를 호출하고, 진행 단계/취소/재시도를 표시합니다.
 - 샘플 PDF는 `sample:paperlens` sourceKey로 중복 등록을 막고, 실제 샘플 파일명은 `2604.04977v1.pdf`로 맞춥니다.
 - DOI 입력은 메타데이터 등록용이고, 원문/뷰어 연결은 PDF 업로드 또는 PDF 원문 URL 입력으로 처리합니다.
@@ -58,6 +64,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - `/api/diagnostics`는 `ocr.provider`, `ocr.providers`, `ocr.ready`, `ocr.configured`, `ocr.warnings`를 반환합니다. 현재 운영 확인 기준은 `ocr.enabled: true`, `provider: auto`, `providers.clova: true`, `providers.rapidocr: true`, `ready: true`, `warnings: []`입니다.
 
 최근 확인된 배포/설정 주의점:
+- 2026-07-06에 모달 크기/폰트 변경 이후 최신 배포가 반영되지 않던 원인은 코드 빌드 실패가 아니라 GitHub Pages deploy job 실패였습니다. `actions/deploy-pages@v5` 갱신 커밋 `e1b886e` 이후 Pages 배포가 성공했고, 설문 프롬프트 커밋 `c1393d5`도 Pages 배포 성공을 확인했습니다.
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
 - VITE_SUPABASE_URL은 https://<project-ref>.supabase.co 형식입니다.
 - VITE_SUPABASE_ANON_KEY는 sb_publishable_... 값입니다.
@@ -87,6 +94,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 
 2. 배포 후 운영 수동 smoke test
    - GitHub Pages가 최신 JS 번들을 가리키는지 확인
+   - Pages deploy job이 `actions/deploy-pages@v5`로 성공하는지 확인
    - Render가 최신 백엔드로 재배포됐는지 확인
    - /api/diagnostics 운영 응답에서 `auth.mode: supabase`, `auth.ready: true`, `auth.warnings: []` 확인
    - 실제 로그인 후 /api/notes 200 여부 확인
@@ -98,6 +106,10 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - PDF 원문 URL 예: https://arxiv.org/pdf/2604.04977v1 등록 시 원문 추출과 PDF 원본 보기가 연결되는지 확인
    - 일반 웹페이지 URL 입력 시 PDF 원문 URL이 필요하다는 안내가 뜨고 노트가 생성되지 않는지 확인
    - 로그아웃 후 /service_home 접근 시 랜딩으로 되돌아가는지 확인
+   - 리뷰 노트 Markdown/PDF 내보내기 후 데모 설문 모달이 뜨고 설문 링크가 새 탭으로 열리는지 확인
+   - 라이브러리 취합/연구 질문 문서 내보내기 후 데모 설문 모달이 뜨는지 확인
+   - 같은 세션에서 설문 모달이 반복 노출되지 않는지, `이 데모 세션에서는 다시 보지 않기`가 동작하는지 확인
+   - 설문 참여 클릭 후 다음 세션에서도 설문 모달이 다시 뜨지 않는지 확인
    - 결과를 docs/testing.md의 운영 체크리스트에 반영
 
 3. 랜딩 페이지 polish
@@ -109,6 +121,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 4. 문서와 배포 자동화
    - docs/deployment.md의 환경변수 표를 실제 운영값 기준으로 재확인
    - Pages workflow는 프론트엔드/워크플로 변경시에만 자동 실행되도록 path 필터가 설정되어 있다
+   - Pages deploy action은 `actions/deploy-pages@v5`를 유지한다
    - `backend/scripts/smoke_deployment.py`와 GitHub Actions `Production smoke` 워크플로로 공개 운영 endpoint 자동 확인을 수행한다
    - Render 배포 완료 시점은 GitHub Actions가 직접 알 수 없으므로 Render 배포 후 `Production smoke`를 수동 실행한다
 
