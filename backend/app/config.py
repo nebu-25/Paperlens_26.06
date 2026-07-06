@@ -42,8 +42,8 @@ class Settings(BaseSettings):
     # provider: auto(영문 힌트면 RapidOCR 우선, 그 외 CLOVA 우선), clova, rapidocr.
     ocr_enabled: bool = False
     ocr_provider: str = "auto"
-    ocr_max_pages: int = 20
-    ocr_dpi: int = 200
+    ocr_max_pages: int = 10
+    ocr_dpi: int = 150
     clova_ocr_invoke_url: str = ""
     clova_ocr_secret_key: str = ""
     clova_ocr_timeout_sec: int = 30

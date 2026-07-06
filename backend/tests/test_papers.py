@@ -863,6 +863,27 @@ class TestOcrReflow:
 
         assert papers._clova_request_timeout_sec() == 30
 
+    def test_ocr_render_dpi_is_capped_for_large_pages(self):
+        class _Rect:
+            width = 1440
+            height = 1440
+
+        class _Page:
+            rect = _Rect()
+
+        assert papers._ocr_page_render_dpi(_Page(), 200) < 200
+        assert papers._ocr_page_render_dpi(_Page(), 200) >= papers.MIN_OCR_RENDER_DPI
+
+    def test_ocr_render_dpi_keeps_small_pages(self):
+        class _Rect:
+            width = 612
+            height = 792
+
+        class _Page:
+            rect = _Rect()
+
+        assert papers._ocr_page_render_dpi(_Page(), 150) == 150
+
     def test_ocr_skips_unavailable_rapidocr_in_auto_mode(self, monkeypatch):
         class _Doc:
             page_count = 1

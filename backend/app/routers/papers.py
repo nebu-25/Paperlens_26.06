@@ -1,5 +1,7 @@
 import base64
+import gc
 import json
+import math
 import re
 import statistics
 import time
@@ -924,7 +926,8 @@ def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
 
 
 # --- OCR fallback (opt-in, NAVER CLOVA OCR API + RapidOCR) ----------------
-_RAPIDOCR_ENGINE = None
+MAX_OCR_RENDER_PIXELS = 3_000_000
+MIN_OCR_RENDER_DPI = 100
 
 
 def _ocr_line_dict(text: str, vertices: list[dict[str, object]]) -> dict[str, object] | None:
@@ -967,6 +970,24 @@ def _clova_request_timeout_sec() -> int:
     if settings.ocr_provider_normalized == "auto" and settings.rapidocr_ready:
         return min(timeout, 10)
     return timeout
+
+
+def _ocr_page_render_dpi(page, requested_dpi: int) -> int:
+    dpi = max(72, int(requested_dpi))
+    try:
+        width_pt = max(1.0, float(page.rect.width))
+        height_pt = max(1.0, float(page.rect.height))
+    except Exception:
+        return dpi
+    estimated_pixels = (width_pt / 72 * dpi) * (height_pt / 72 * dpi)
+    if estimated_pixels <= MAX_OCR_RENDER_PIXELS:
+        return dpi
+    scaled = int(dpi * math.sqrt(MAX_OCR_RENDER_PIXELS / estimated_pixels))
+    return max(MIN_OCR_RENDER_DPI, min(dpi, scaled))
+
+
+def _ocr_page_pixmap(page, *, dpi: int):
+    return page.get_pixmap(dpi=_ocr_page_render_dpi(page, dpi))
 
 
 def _call_clova_ocr(image_bytes: bytes, *, image_format: str, image_name: str) -> dict[str, object]:
@@ -1131,20 +1152,16 @@ def _clova_lines_from_response(response: dict[str, object]) -> list[dict[str, ob
     return _tokens_to_lines(tokens)
 
 
-def _get_rapidocr_engine():
-    global _RAPIDOCR_ENGINE
+def _create_rapidocr_engine():
     if not settings.rapidocr_ready:
         raise RuntimeError(settings.rapidocr_unavailable_reason)
-    if _RAPIDOCR_ENGINE is None:
-        from rapidocr_onnxruntime import RapidOCR  # lazy: 선택 의존성
+    from rapidocr_onnxruntime import RapidOCR  # lazy: 선택 의존성
 
-        rec = settings.rapidocr_rec_model_path.strip()
-        keys = settings.rapidocr_rec_keys_path.strip()
-        if rec and keys:
-            _RAPIDOCR_ENGINE = RapidOCR(rec_model_path=rec, rec_keys_path=keys)
-        else:
-            _RAPIDOCR_ENGINE = RapidOCR()
-    return _RAPIDOCR_ENGINE
+    rec = settings.rapidocr_rec_model_path.strip()
+    keys = settings.rapidocr_rec_keys_path.strip()
+    if rec and keys:
+        return RapidOCR(rec_model_path=rec, rec_keys_path=keys)
+    return RapidOCR()
 
 
 def _rapidocr_lines_from_result(result) -> list[dict[str, object]]:
@@ -1171,29 +1188,39 @@ def _ocr_text_with_clova(document, *, dpi: int) -> tuple[str, str | None]:
         return "", "CLOVA OCR 설정을 찾을 수 없습니다."
     paragraphs: list[str] = []
     for page_number, page in enumerate(document, start=1):
-        pix = page.get_pixmap(dpi=dpi)
-        response = _call_clova_ocr(
-            pix.tobytes("png"), image_format="png", image_name=f"page-{page_number}"
-        )
-        lines = _clova_lines_from_response(response)
-        if lines:
-            paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
+        pix = _ocr_page_pixmap(page, dpi=dpi)
+        try:
+            response = _call_clova_ocr(
+                pix.tobytes("png"), image_format="png", image_name=f"page-{page_number}"
+            )
+            lines = _clova_lines_from_response(response)
+            if lines:
+                paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
+        finally:
+            pix = None
     return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
 
 
 def _ocr_text_with_rapidocr(document, *, dpi: int) -> tuple[str, str | None]:
     try:
-        engine = _get_rapidocr_engine()
+        engine = _create_rapidocr_engine()
     except Exception as exc:  # pragma: no cover - 선택 의존성/모델 로딩 실패
         return "", f"RapidOCR를 사용할 수 없습니다. 환경 메시지: {exc}"
     paragraphs: list[str] = []
-    for page in document:
-        pix = page.get_pixmap(dpi=dpi)
-        result, _ = engine(pix.tobytes("png"))
-        lines = _rapidocr_lines_from_result(result)
-        if lines:
-            paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
-    return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
+    try:
+        for page in document:
+            pix = _ocr_page_pixmap(page, dpi=dpi)
+            try:
+                result, _ = engine(pix.tobytes("png"))
+                lines = _rapidocr_lines_from_result(result)
+                if lines:
+                    paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
+            finally:
+                pix = None
+        return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
+    finally:
+        engine = None
+        gc.collect()
 
 
 def _looks_latin_dominant_document(document) -> bool:
