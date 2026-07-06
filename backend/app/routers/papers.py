@@ -1183,15 +1183,24 @@ def _reflow_ocr_page_lines(lines: list[dict[str, object]], page_width: float) ->
     return paragraphs
 
 
-def _ocr_text_with_clova(document, *, dpi: int) -> tuple[str, str | None]:
+def _ocr_page_indexes(document, *, start_page: int = 1, page_count: int | None = None) -> list[int]:
+    start_index = max(0, start_page - 1)
+    end_index = document.page_count if page_count is None else min(document.page_count, start_index + page_count)
+    if start_index >= document.page_count or end_index <= start_index:
+        return []
+    return list(range(start_index, end_index))
+
+
+def _ocr_text_with_clova(document, *, dpi: int, page_indexes: list[int]) -> tuple[str, str | None]:
     if not settings.clova_ocr_ready:
         return "", "CLOVA OCR 설정을 찾을 수 없습니다."
     paragraphs: list[str] = []
-    for page_number, page in enumerate(document, start=1):
+    for page_index in page_indexes:
+        page = document[page_index]
         pix = _ocr_page_pixmap(page, dpi=dpi)
         try:
             response = _call_clova_ocr(
-                pix.tobytes("png"), image_format="png", image_name=f"page-{page_number}"
+                pix.tobytes("png"), image_format="png", image_name=f"page-{page_index + 1}"
             )
             lines = _clova_lines_from_response(response)
             if lines:
@@ -1201,14 +1210,15 @@ def _ocr_text_with_clova(document, *, dpi: int) -> tuple[str, str | None]:
     return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
 
 
-def _ocr_text_with_rapidocr(document, *, dpi: int) -> tuple[str, str | None]:
+def _ocr_text_with_rapidocr(document, *, dpi: int, page_indexes: list[int]) -> tuple[str, str | None]:
     try:
         engine = _create_rapidocr_engine()
     except Exception as exc:  # pragma: no cover - 선택 의존성/모델 로딩 실패
         return "", f"RapidOCR를 사용할 수 없습니다. 환경 메시지: {exc}"
     paragraphs: list[str] = []
     try:
-        for page in document:
+        for page_index in page_indexes:
+            page = document[page_index]
             pix = _ocr_page_pixmap(page, dpi=dpi)
             try:
                 result, _ = engine(pix.tobytes("png"))
@@ -1261,15 +1271,30 @@ def _ocr_text_quality_score(text: str, page_count: int) -> int:
     return int(_extraction_quality(text, page_count).get("score") or 0)
 
 
-def _ocr_document_text(document, *, dpi: int, max_pages: int) -> tuple[str, str | None]:
+def _ocr_document_text(
+    document,
+    *,
+    dpi: int,
+    max_pages: int,
+    start_page: int = 1,
+    page_count: int | None = None,
+) -> tuple[str, str | None]:
     """설정된 OCR provider로 렌더된 페이지 이미지를 재인식해 텍스트를 복구한다.
 
     폰트/인코딩 손상·스캔 PDF처럼 텍스트 레이어가 깨진 경우의 fallback. 외부 API 비용과
     원문 이미지 전송이 있는 CLOVA OCR, 영문 fallback용 RapidOCR를 provider 설정에 따라
     병행한다. 인식 박스는 좌표 기반 reflow(2단 컬럼 포함)로 재구성한다.
     """
-    if document.page_count > max_pages:
-        return "", f"OCR은 {max_pages}페이지 이하 PDF에만 지원합니다(현재 {document.page_count}페이지)."
+    if start_page < 1:
+        return "", "OCR 시작 페이지는 1 이상이어야 합니다."
+    if start_page > max_pages:
+        return "", f"OCR은 앞 {max_pages}페이지까지만 지원합니다(요청 시작 페이지: {start_page})."
+    effective_total = min(document.page_count, max_pages)
+    requested_count = 1 if page_count is None else max(1, page_count)
+    requested_count = min(requested_count, max(0, effective_total - start_page + 1))
+    page_indexes = _ocr_page_indexes(document, start_page=start_page, page_count=requested_count)
+    if not page_indexes:
+        return "", f"OCR할 페이지가 없습니다. 앞 {effective_total}페이지 범위에서 다시 시도해 주세요."
     if not settings.ocr_ready:
         errors = [
             f"{provider}: {reason}"
@@ -1287,16 +1312,16 @@ def _ocr_document_text(document, *, dpi: int, max_pages: int) -> tuple[str, str 
             continue
         try:
             if provider == "clova":
-                text, error = _ocr_text_with_clova(document, dpi=dpi)
+                text, error = _ocr_text_with_clova(document, dpi=dpi, page_indexes=page_indexes)
             else:
-                text, error = _ocr_text_with_rapidocr(document, dpi=dpi)
+                text, error = _ocr_text_with_rapidocr(document, dpi=dpi, page_indexes=page_indexes)
         except Exception as exc:  # pragma: no cover - 런타임 OCR/API 실패
             text, error = "", str(exc)
         if error:
             errors.append(f"{provider}: {error}")
         if not text.strip():
             continue
-        score = _ocr_text_quality_score(text, document.page_count)
+        score = _ocr_text_quality_score(text, len(page_indexes))
         attempts.append((provider, text, score))
         if score >= 55 or settings.ocr_provider_normalized != "auto":
             return text, None
@@ -1551,7 +1576,12 @@ def get_pdf(paper_id: str, user_id: str = Depends(current_user_id)) -> Response:
 
 
 @router.post("/{paper_id}/ocr")
-def ocr_paper(paper_id: str, user_id: str = Depends(current_user_id)) -> dict[str, object]:
+def ocr_paper(
+    paper_id: str,
+    start_page: int = 1,
+    page_count: int = 1,
+    user_id: str = Depends(current_user_id),
+) -> dict[str, object]:
     """저장된 PDF를 렌더→OCR로 재인식해 원문 텍스트를 복구한다(손상/스캔 PDF용, opt-in)."""
     if not settings.ocr_enabled:
         raise HTTPException(status_code=503, detail="이 서버에서는 OCR 재추출이 비활성화되어 있습니다.")
@@ -1572,18 +1602,27 @@ def ocr_paper(paper_id: str, user_id: str = Depends(current_user_id)) -> dict[st
 
     try:
         ocr_text, error = _ocr_document_text(
-            document, dpi=settings.ocr_dpi, max_pages=settings.ocr_max_pages
+            document,
+            dpi=settings.ocr_dpi,
+            max_pages=settings.ocr_max_pages,
+            start_page=start_page,
+            page_count=page_count,
         )
         if not ocr_text.strip():
             raise HTTPException(status_code=422, detail=error or "OCR로 텍스트를 추출하지 못했습니다.")
 
-        page_count = document.page_count
-        warnings = _extraction_quality_warnings(ocr_text, page_count)
-        quality = _extraction_quality(ocr_text, page_count, warnings)
+        total_pages = document.page_count
+        processed_pages = len(_ocr_page_indexes(document, start_page=start_page, page_count=page_count))
+        warnings = _extraction_quality_warnings(ocr_text, max(1, processed_pages))
+        quality = _extraction_quality(ocr_text, max(1, processed_pages), warnings)
         quality["source"] = "ocr"
         return {
             "text": ocr_text,
-            "page_count": page_count,
+            "page_count": total_pages,
+            "start_page": start_page,
+            "processed_pages": processed_pages,
+            "max_pages": settings.ocr_max_pages,
+            "has_more": start_page + processed_pages <= min(total_pages, settings.ocr_max_pages),
             "sections": _detect_sections(ocr_text),
             "extraction_quality": quality,
             "metadata_warnings": warnings,

@@ -224,7 +224,7 @@ DATABASE_URL=postgresql://paperlens:paperlens_dev@127.0.0.1:5432/paperlens pytho
 
 - 활성화: `OCR_ENABLED=true`, `OCR_PROVIDER=auto`, `CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`.
 - 엔진: `auto` 모드는 영문 텍스트 힌트가 있으면 RapidOCR을 먼저 시도하고, 그 외에는 NAVER CLOVA OCR API만 사용합니다. 한국어/스캔 PDF에서 RapidOCR 모델 로드로 Render 메모리 한도를 넘는 일을 피하기 위한 운영 정책입니다. `/api/diagnostics`의 `ocr.providers`와 `ocr.configured`로 provider 준비 상태를 확인합니다.
-- CLOVA OCR: 서버는 저장된 PDF를 페이지별 PNG로 렌더링해 General 도메인 API Gateway Invoke URL로 전송하고, 응답의 OCR 좌표를 기존 1단/2단 reflow 파이프라인으로 재구성합니다. CLOVA가 단일 언어 중심이라 한국어 문서 우선 provider로 사용합니다. 표 인식 옵션은 별도 과금 때문에 요청하지 않습니다.
+- CLOVA OCR: 서버는 저장된 PDF를 페이지별 PNG로 렌더링해 General 도메인 API Gateway Invoke URL로 전송하고, 응답의 OCR 좌표를 기존 1단/2단 reflow 파이프라인으로 재구성합니다. CLOVA가 단일 언어 중심이라 한국어 문서 우선 provider로 사용합니다. 표 인식 옵션은 별도 과금 때문에 요청하지 않습니다. 프론트는 OCR을 한 번의 긴 요청으로 보내지 않고 `start_page`/`page_count=1` 단위로 순차 호출해 Render 인스턴스 메모리 사용량을 낮춥니다.
 - RapidOCR: 영어 fallback까지 운영하려면 OCR 활성화 배포에서 `requirements-ocr.txt`를 추가 설치해야 합니다. Render buildCommand 예: `pip install -r requirements.txt && pip install -r requirements-ocr.txt && pip uninstall -y opencv-python && pip install --force-reinstall --no-deps "opencv-python-headless>=4.9"`. 무료/소형 Render 인스턴스의 메모리 초과를 줄이기 위해 기본 OCR 한도는 10페이지·150dpi이며, 큰 페이지는 서버가 픽셀 수 기준으로 렌더 DPI를 자동으로 낮춥니다. RapidOCR 엔진은 요청 후 전역 캐시에 남기지 않습니다.
 - 프론트: 추출 품질이 낮고 PDF가 연결된 경우 원문 패널에 "OCR로 다시 시도" 버튼이 뜹니다.
 - 운영 주의: 논문 원문 이미지가 외부 API로 전송됩니다. 사용자 고지, API 키 비밀 관리, Naver Cloud 콘솔의 과금/호출량 제한을 운영 전에 확인하세요.

@@ -41,6 +41,7 @@ export interface Paper {
   metadataConfidence?: string;
   metadataWarnings?: string[];
   extractionQuality?: ExtractionQuality;
+  pageCount?: number;
   pdfUrl?: string;
   pdfFilename?: string;
   sections?: DetectedSection[];

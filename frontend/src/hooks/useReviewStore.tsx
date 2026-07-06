@@ -52,6 +52,7 @@ const SIGNAL_PROMOTE_COLOR: Record<SignalType, HighlightColor> = {
 };
 
 const OCR_REQUEST_TIMEOUT_MS = 120_000;
+const OCR_BATCH_PAGE_COUNT = 1;
 
 function ocrRequestFailureNotice(error: unknown): Pick<AppNotice, 'title' | 'message'> {
   const apiError = classifyApiException(error, 'OCR 재인식 요청을 완료하지 못했습니다.');
@@ -230,43 +231,80 @@ export function useReviewStore({
     setSyncNotice({
       tone: 'info',
       title: 'OCR 재인식 중',
-      message: 'PDF를 이미지로 렌더해 텍스트를 다시 읽고 있습니다. 페이지 수에 따라 시간이 걸릴 수 있습니다.',
+      message: 'PDF를 페이지 단위로 렌더해 텍스트를 다시 읽고 있습니다.',
     });
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), OCR_REQUEST_TIMEOUT_MS);
+    const chunks: string[] = [];
+    let nextPage = 1;
+    let totalPages = target.pageCount ?? 0;
+    let maxPages = target.pageCount ?? 10;
+    let lastQuality: ExtractionQualityResponse | undefined;
+    let stoppedByError: Pick<AppNotice, 'title' | 'message'> | null = null;
     try {
-      const res = await fetch(`${API_BASE}/papers/${target.id}/ocr`, {
-        method: 'POST',
-        headers: authHeaders,
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        const apiError = await apiErrorFromResponse(res, 'OCR 재인식에 실패했습니다.');
+      for (;;) {
         setSyncNotice({
-          tone: res.status === 503 ? 'info' : 'error',
-          title: res.status === 503 ? 'OCR 미지원 서버' : apiError.title,
-          message:
+          tone: 'info',
+          title: 'OCR 재인식 중',
+          message: `PDF ${nextPage}페이지를 OCR로 읽고 있습니다. 한 번에 한 페이지씩 처리해 서버 메모리 사용을 줄입니다.`,
+        });
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), OCR_REQUEST_TIMEOUT_MS);
+        let res: Response;
+        try {
+          const params = new URLSearchParams({
+            start_page: String(nextPage),
+            page_count: String(OCR_BATCH_PAGE_COUNT),
+          });
+          res = await fetch(`${API_BASE}/papers/${target.id}/ocr?${params.toString()}`, {
+            method: 'POST',
+            headers: authHeaders,
+            signal: controller.signal,
+          });
+        } catch (error) {
+          stoppedByError = ocrRequestFailureNotice(error);
+          break;
+        } finally {
+          window.clearTimeout(timer);
+        }
+        if (!res.ok) {
+          const apiError = await apiErrorFromResponse(res, 'OCR 재인식에 실패했습니다.');
+          stoppedByError =
             res.status === 503
-              ? 'OCR 재인식이 비활성화된 서버입니다. 대신 PDF 원본을 보며 원문 텍스트를 직접 입력할 수 있습니다.'
-              : apiError.message,
-        });
-        return;
+              ? {
+                  title: 'OCR 미지원 서버',
+                  message:
+                    'OCR 재인식이 비활성화된 서버입니다. 대신 PDF 원본을 보며 원문 텍스트를 직접 입력할 수 있습니다.',
+                }
+              : { title: apiError.title, message: apiError.message };
+          break;
+        }
+        const data: {
+          text?: string;
+          page_count?: number;
+          processed_pages?: number;
+          max_pages?: number;
+          has_more?: boolean;
+          extraction_quality?: ExtractionQualityResponse;
+        } = await res.json();
+        if (data.text?.trim()) chunks.push(data.text.trim());
+        if (typeof data.page_count === 'number') totalPages = data.page_count;
+        if (typeof data.max_pages === 'number') maxPages = data.max_pages;
+        lastQuality = data.extraction_quality;
+        const processed = Math.max(1, data.processed_pages ?? OCR_BATCH_PAGE_COUNT);
+        nextPage += processed;
+        if (!data.has_more) break;
       }
-      const data: {
-        text?: string;
-        sections?: DetectedSection[];
-        figure_images?: FigureImageRef[];
-        extraction_quality?: ExtractionQualityResponse;
-      } = await res.json();
-      if (!data.text || !data.text.trim()) {
+      const combinedText = chunks.join('\n\n').trim();
+      if (!combinedText) {
         setSyncNotice({
-          tone: 'warning',
-          title: 'OCR 결과 없음',
-          message: 'OCR로 읽어낸 텍스트가 없습니다. PDF 원본을 보며 직접 입력해 주세요.',
+          tone: stoppedByError ? 'error' : 'warning',
+          title: stoppedByError?.title ?? 'OCR 결과 없음',
+          message:
+            stoppedByError?.message ??
+            'OCR로 읽어낸 텍스트가 없습니다. PDF 원본을 보며 직접 입력해 주세요.',
         });
         return;
       }
-      const extractionQuality = normalizeExtractionQuality(data.extraction_quality);
+      const extractionQuality = normalizeExtractionQuality(lastQuality);
       // OCR이 오래 걸려 그 사이 다른 논문으로 전환됐을 수 있으므로 id 기준으로 반영한다.
       setLibrary((lib) =>
         lib[target.id]
@@ -274,9 +312,9 @@ export function useReviewStore({
               ...lib,
               [target.id]: {
                 ...lib[target.id],
-                text: data.text!,
-                sections: data.sections ?? [],
-                figureImages: data.figure_images ?? lib[target.id].figureImages,
+                text: combinedText,
+                sections: [],
+                pageCount: totalPages || lib[target.id].pageCount,
                 extractionQuality,
               },
             }
@@ -284,10 +322,12 @@ export function useReviewStore({
       );
       markDirty(target.id, { includeText: true });
       setSyncNotice({
-        tone: 'success',
-        title: 'OCR 재인식 완료',
+        tone: stoppedByError ? 'warning' : 'success',
+        title: stoppedByError ? 'OCR 일부 반영' : 'OCR 재인식 완료',
         message: withExtractionQualityMessage(
-          'OCR로 복구한 원문을 반영했습니다. 인식 오류가 있을 수 있으니 PDF 원본과 대조해 필요하면 편집하세요.',
+          stoppedByError
+            ? `앞 ${chunks.length}페이지 OCR 결과를 먼저 반영했습니다. ${stoppedByError.message}`
+            : `OCR로 복구한 원문을 반영했습니다. 최대 ${Math.min(totalPages || maxPages, maxPages)}페이지까지 페이지 단위로 처리했습니다. 인식 오류가 있을 수 있으니 PDF 원본과 대조해 필요하면 편집하세요.`,
           extractionQuality,
         ),
       });
@@ -299,7 +339,6 @@ export function useReviewStore({
         message: failure.message,
       });
     } finally {
-      window.clearTimeout(timer);
       setOcrRunning(false);
     }
   }
@@ -477,6 +516,7 @@ export function useReviewStore({
         extraction_quality?: ExtractionQualityResponse;
         pdf_url?: string;
         pdf_filename?: string;
+        page_count?: number;
         scanned?: boolean;
         notice?: string | null;
       } = await res.json();
@@ -510,6 +550,7 @@ export function useReviewStore({
               extractionQuality,
               pdfUrl: pdfUrl || current.pdfUrl || '',
               pdfFilename: data.pdf_filename || current.pdfFilename || '',
+              pageCount: data.page_count ?? current.pageCount,
               sections: data.sections ?? current.sections,
               figureImages: data.figure_images ?? current.figureImages,
               text: data.text || current.text,
@@ -551,6 +592,7 @@ export function useReviewStore({
           extractionQuality,
           pdfUrl,
           pdfFilename: data.pdf_filename || '',
+          pageCount: data.page_count,
           sections: data.sections ?? [],
           figureImages: data.figure_images ?? [],
           text: data.text || '',
@@ -771,6 +813,7 @@ export function useReviewStore({
           extraction_quality?: ExtractionQualityResponse;
           pdf_url?: string;
           pdf_filename?: string;
+          page_count?: number;
           scanned?: boolean;
           notice?: string | null;
         } = await pdfRes.json();
@@ -795,6 +838,7 @@ export function useReviewStore({
           extractionQuality,
           pdfUrl: data.pdf_url ? resolveApiUrl(data.pdf_url) : '',
           pdfFilename: data.pdf_filename || data.filename || '',
+          pageCount: data.page_count,
           sections: data.sections ?? [],
           figureImages: data.figure_images ?? [],
           text: data.text || '',
