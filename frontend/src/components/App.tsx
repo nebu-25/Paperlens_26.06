@@ -79,7 +79,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
         <WorkspaceHeader authEnabled={authEnabled} authReady={authReady} user={user} />
         <UploadBar />
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_1fr]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[264px_1fr]">
           {/* ── 사이드바 ── */}
           <PaperSidebar />
 
@@ -108,7 +108,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken }: ReviewWo
                   리뷰
                 </button>
               </div>
-              <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.9fr)]">
+              <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.8fr)]">
                 <SourcePanel />
                 <ReviewNotePanel />
               </div>
