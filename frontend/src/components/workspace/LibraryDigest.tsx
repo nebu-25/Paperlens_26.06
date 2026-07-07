@@ -375,9 +375,9 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                 <textarea
                   name="research-gap"
                   aria-label="연구 공백 메모"
-                  title="반복되는 관점, 미해결 한계에서 발견한 공백을 적으세요"
+                  title="반복되는 관점, 미해결 한계에서 발견한 공백을 적어보세요"
                   className="min-h-16 w-full resize-y rounded border border-line p-2 text-base outline-none focus:border-action"
-                  placeholder="반복되는 관점, 미해결 한계에서 발견한 공백을 적으세요."
+                  placeholder="취합된 관점·한계·비판을 비교해, 아직 설명되지 않았거나 내 연구가 채울 수 있는 빈틈을 적어보세요."
                   value={doc.gapNote}
                   onChange={(e) => updateDoc((c) => ({ ...c, gapNote: e.target.value }))}
                 />
@@ -411,7 +411,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                       aria-label={slot.label}
                       title={slot.label}
                       className="min-h-12 w-full resize-y rounded border border-line p-2 text-base outline-none focus:border-action"
-                      placeholder="직접 작성하세요."
+                      placeholder={slot.placeholder}
                       value={frameAnswers[slot.key] ?? ''}
                       onChange={(e) => setSlotAnswer(slot.key, e.target.value)}
                     />
@@ -440,7 +440,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
                           aria-label={q.label}
                           title={q.label}
                           className="min-h-12 w-full resize-y rounded border border-line p-2 text-base outline-none focus:border-action"
-                          placeholder="직접 작성하세요."
+                          placeholder={q.placeholder}
                           value={doc.expansion[q.key] ?? ''}
                           onChange={(e) =>
                             updateDoc((c) => ({ ...c, expansion: { ...c.expansion, [q.key]: e.target.value } }))
