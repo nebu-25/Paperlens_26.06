@@ -183,8 +183,12 @@ function App() {
     previousAccessTokenRef.current = accessToken;
     if (!previousAccessToken && accessToken && route === 'landing') {
       navigate('service', 'push');
+      return;
     }
-  }, [accessToken, authReady, navigate, route]);
+    if (previousAccessToken && !accessToken) {
+      requestSurveyPrompt('sign-out');
+    }
+  }, [accessToken, authReady, navigate, requestSurveyPrompt, route]);
 
   if (route === 'landing' || (!accessToken && !devLocalMode)) {
     return (
