@@ -391,9 +391,9 @@ export function useReviewPersistence({
 
       try {
         if (!restoredLocal) setSavedAt('서버 연결 확인 중');
-        await fetchWithTimeout(`${API_BASE}/health`, {}, 5000).catch(() => undefined);
+        void fetchWithTimeout(`${API_BASE}/health`, {}, 3000).catch(() => undefined);
         if (!restoredLocal) setSavedAt('목록 동기화 중');
-        const res = await fetchWithTimeout(`${API_BASE}/notes`, { headers: authHeaders() }, 15000);
+        const res = await fetchWithTimeout(`${API_BASE}/notes`, { headers: authHeaders() }, 30000);
         if (!res.ok) await throwApiResponseError(res, '저장된 노트를 불러오지 못했습니다.');
         const data = (await res.json()) as {
           library?: Record<string, Paper>;

@@ -428,6 +428,55 @@ class PostgreSQLNotesRepository:
             "estimated_cost_cents": int(row["estimated_cost_cents"] or 0),
         }
 
+    def copy_notes_for_demo_session(
+        self, source_user_id: str, target_user_id: str, session_key: str
+    ) -> int:
+        """Copy demo notes with set-based SQL, excluding PDF binaries."""
+        now = _now()
+        id_prefix = f"demo-{session_key[:12]}-"
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO paper_metadata (
+                  id, user_id, title, authors, link, doi, source_key, suggested_tags,
+                  metadata_source, metadata_confidence, metadata_warnings, extraction_quality,
+                  pdf_filename, created_at, updated_at
+                )
+                SELECT
+                  %s || id, %s, title, authors, link, doi, 'demo-session:' || id, suggested_tags,
+                  metadata_source, metadata_confidence, metadata_warnings, extraction_quality,
+                  '', %s, %s
+                FROM paper_metadata
+                WHERE user_id = %s
+                ON CONFLICT (id) DO NOTHING
+                """,
+                (id_prefix, target_user_id, now, now, source_user_id),
+            )
+            copied = cursor.rowcount if cursor.rowcount is not None and cursor.rowcount >= 0 else 0
+            conn.execute(
+                """
+                INSERT INTO paper_texts (
+                  paper_id, user_id, text, sections, figure_images, updated_at
+                )
+                SELECT %s || paper_id, %s, text, sections, figure_images, %s
+                FROM paper_texts
+                WHERE user_id = %s
+                ON CONFLICT (paper_id) DO NOTHING
+                """,
+                (id_prefix, target_user_id, now, source_user_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO review_notes (paper_id, user_id, note, updated_at)
+                SELECT %s || paper_id, %s, note, %s
+                FROM review_notes
+                WHERE user_id = %s
+                ON CONFLICT (paper_id) DO NOTHING
+                """,
+                (id_prefix, target_user_id, now, source_user_id),
+            )
+        return copied
+
     def list_demo_session_users(self) -> list[dict[str, str]]:
         with self.connect() as conn:
             rows = conn.execute("SELECT user_id, doc FROM research_docs").fetchall()

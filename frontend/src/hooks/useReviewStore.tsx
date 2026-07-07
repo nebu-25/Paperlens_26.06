@@ -54,6 +54,35 @@ const SIGNAL_PROMOTE_COLOR: Record<SignalType, HighlightColor> = {
 
 const OCR_REQUEST_TIMEOUT_MS = 120_000;
 const OCR_BATCH_PAGE_COUNT = 1;
+const SAMPLE_HEALTH_TIMEOUT_MS = 10_000;
+const SAMPLE_DOWNLOAD_TIMEOUT_MS = 30_000;
+const PDF_EXTRACT_TIMEOUT_MS = 90_000;
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<Response> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const externalSignal = init.signal;
+  const abortFromExternal = () => controller.abort();
+  externalSignal?.addEventListener('abort', abortFromExternal, { once: true });
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) throw new Error(timeoutMessage);
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+    externalSignal?.removeEventListener('abort', abortFromExternal);
+  }
+}
 
 function ocrRequestFailureNotice(error: unknown): Pick<AppNotice, 'title' | 'message'> {
   const apiError = classifyApiException(error, 'OCR 재인식 요청을 완료하지 못했습니다.');
@@ -484,12 +513,12 @@ export function useReviewStore({
       form.append('paper_id', uploadPaperId);
       setUploadPhase('extracting');
       options.onPhase?.('extracting');
-      const res = await fetch(`${API_BASE}/papers/extract-text`, {
+      const res = await fetchWithTimeout(`${API_BASE}/papers/extract-text`, {
         method: 'POST',
         headers: authHeaders,
         body: form,
         signal: options.signal,
-      });
+      }, PDF_EXTRACT_TIMEOUT_MS, 'PDF 텍스트 추출이 오래 걸려 중단했습니다. 잠시 후 다시 시도하거나 다른 PDF로 확인해 주세요.');
       if (!res.ok) {
         // 입력 가드 위반(크기/암호/페이지 등): 서버 메시지를 표시하고 등록하지 않는다
         const apiError = await apiErrorFromResponse(res, '업로드를 처리할 수 없습니다.');
@@ -684,7 +713,12 @@ export function useReviewStore({
     try {
       attachTargetRef.current = null;
       try {
-        const health = await fetch(`${API_BASE}/health`, { signal: controller.signal });
+        const health = await fetchWithTimeout(
+          `${API_BASE}/health`,
+          { signal: controller.signal },
+          SAMPLE_HEALTH_TIMEOUT_MS,
+          '백엔드 상태 확인이 오래 걸리고 있습니다.',
+        );
         if (!health.ok) await throwApiResponseError(health, '백엔드 상태를 확인하지 못했습니다.');
         if (controller.signal.aborted) return;
         setUploadNotice({
@@ -702,7 +736,12 @@ export function useReviewStore({
         });
       }
       setSamplePhase('downloading');
-      const res = await fetch(`${API_BASE}/papers/sample-pdf`, { signal: controller.signal });
+      const res = await fetchWithTimeout(
+        `${API_BASE}/papers/sample-pdf`,
+        { signal: controller.signal },
+        SAMPLE_DOWNLOAD_TIMEOUT_MS,
+        '샘플 PDF 다운로드가 오래 걸려 중단했습니다.',
+      );
       if (!res.ok) {
         await throwApiResponseError(res, '샘플 PDF를 불러오지 못했습니다.');
       }

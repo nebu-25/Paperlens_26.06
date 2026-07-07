@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -8,6 +9,8 @@ from app.auth import UserContext, current_user_context, current_user_id
 from app.config import settings
 
 router = APIRouter(prefix="/notes", tags=["notes"])
+DEMO_SESSION_CLEANUP_INTERVAL_SECONDS = 600
+_last_demo_session_cleanup_at = 0.0
 
 
 class PaperIn(BaseModel):
@@ -36,9 +39,13 @@ class NoteIn(BaseModel):
 
 
 def _ensure_demo_session_seeded(context: UserContext) -> None:
+    global _last_demo_session_cleanup_at
     if not context.is_demo_session or not context.demo_session_id:
         return
-    db.delete_expired_demo_sessions()
+    now_ts = time.monotonic()
+    if now_ts - _last_demo_session_cleanup_at >= DEMO_SESSION_CLEANUP_INTERVAL_SECONDS:
+        db.delete_expired_demo_sessions()
+        _last_demo_session_cleanup_at = now_ts
     marker = db.get_research_doc(context.user_id)
     doc = marker.get("doc") if marker else None
     if isinstance(doc, dict) and doc.get("demoSessionInitialized"):

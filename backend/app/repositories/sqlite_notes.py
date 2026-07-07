@@ -494,6 +494,56 @@ class SQLiteNotesRepository:
             "estimated_cost_cents": int(row["estimated_cost_cents"] or 0),
         }
 
+    def copy_notes_for_demo_session(
+        self, source_user_id: str, target_user_id: str, session_key: str
+    ) -> int:
+        """Copy demo notes with set-based SQL, excluding PDF binaries."""
+        now = _now()
+        id_prefix = f"demo-{session_key[:12]}-"
+        conn = self.connect()
+        try:
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO paper_metadata (
+                  id, user_id, title, authors, link, doi, source_key, suggested_tags,
+                  metadata_source, metadata_confidence, metadata_warnings, extraction_quality,
+                  pdf_filename, created_at, updated_at
+                )
+                SELECT
+                  ? || id, ?, title, authors, link, doi, 'demo-session:' || id, suggested_tags,
+                  metadata_source, metadata_confidence, metadata_warnings, extraction_quality,
+                  '', ?, ?
+                FROM paper_metadata
+                WHERE user_id = ?
+                """,
+                (id_prefix, target_user_id, now, now, source_user_id),
+            )
+            copied = cursor.rowcount if cursor.rowcount is not None and cursor.rowcount >= 0 else 0
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO paper_texts (
+                  paper_id, user_id, text, sections, figure_images, updated_at
+                )
+                SELECT ? || paper_id, ?, text, sections, figure_images, ?
+                FROM paper_texts
+                WHERE user_id = ?
+                """,
+                (id_prefix, target_user_id, now, source_user_id),
+            )
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO review_notes (paper_id, user_id, note, updated_at)
+                SELECT ? || paper_id, ?, note, ?
+                FROM review_notes
+                WHERE user_id = ?
+                """,
+                (id_prefix, target_user_id, now, source_user_id),
+            )
+            conn.commit()
+            return copied
+        finally:
+            conn.close()
+
     def list_demo_session_users(self) -> list[dict[str, str]]:
         conn = self.connect()
         try:

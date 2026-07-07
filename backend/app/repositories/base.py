@@ -41,6 +41,11 @@ class NotesRepository(Protocol):
     def get_ai_usage_totals(self, user_id: str, since: str) -> dict[str, int]:
         ...
 
+    def copy_notes_for_demo_session(
+        self, source_user_id: str, target_user_id: str, session_key: str
+    ) -> int:
+        ...
+
     def list_demo_session_users(self) -> list[dict[str, str]]:
         ...
 

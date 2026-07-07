@@ -125,6 +125,7 @@ class TestRoundTrip:
         assert copied_note["paper"]["sourceKey"] == "demo-session:demo-paperlens-quickstart"
         assert copied_note["paper"]["pdfUrl"] == ""
         assert copied_note["paper"]["pdfFilename"] == ""
+        assert copied_note["paper"]["text"] == "body"
         assert db.get_pdf("session-user", copied_id) is None
 
     def test_notes_are_scoped_by_user(self, db):
