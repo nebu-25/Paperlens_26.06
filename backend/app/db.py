@@ -84,11 +84,9 @@ def copy_notes_for_demo_session(source_user_id: str, target_user_id: str, sessio
         paper = dict(source_note.get("paper") or {})
         note = dict(source_note.get("note") or {})
         paper["sourceKey"] = f"demo-session:{source_id}"
+        paper["pdfUrl"] = ""
+        paper["pdfFilename"] = ""
         upsert_note(target_user_id, target_note_id, paper, note)
-        pdf = get_pdf(source_user_id, source_id)
-        if pdf is not None:
-            filename, content = pdf
-            store_pdf(target_user_id, target_note_id, filename, content)
         copied += 1
     return copied
 

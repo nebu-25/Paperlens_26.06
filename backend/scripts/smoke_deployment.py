@@ -27,6 +27,7 @@ from typing import Any
 DEFAULT_FRONTEND_BASE_URL = "https://nebu-25.github.io/Paperlens_26.06"
 DEFAULT_API_BASE_URL = "https://paperlens-backend-53ki.onrender.com"
 DEMO_QUICKSTART_NOTE_ID = "demo-paperlens-quickstart"
+DEMO_QUICKSTART_SOURCE_KEY = f"demo-session:{DEMO_QUICKSTART_NOTE_ID}"
 
 
 @dataclass(frozen=True)
@@ -215,9 +216,14 @@ def _check_demo_session_api(api_base: str, access_token: str) -> None:
     notes_map = notes_body.get("notes")
     _assert(isinstance(library, dict), "demo session notes missing library object")
     _assert(isinstance(notes_map, dict), "demo session notes missing notes object")
+    quickstart_ids = [
+        note_id
+        for note_id, paper in library.items()
+        if isinstance(paper, dict) and paper.get("sourceKey") == DEMO_QUICKSTART_SOURCE_KEY
+    ]
     _assert(
-        DEMO_QUICKSTART_NOTE_ID in library and DEMO_QUICKSTART_NOTE_ID in notes_map,
-        f"demo session missing quickstart note {DEMO_QUICKSTART_NOTE_ID}",
+        any(note_id in notes_map for note_id in quickstart_ids),
+        f"demo session missing quickstart note with sourceKey {DEMO_QUICKSTART_SOURCE_KEY}",
     )
 
 

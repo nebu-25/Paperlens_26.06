@@ -100,6 +100,33 @@ class TestRoundTrip:
         assert note["paper"]["pdfFilename"] == "paper.pdf"
         assert note["paper"]["pdfUrl"] == "/api/papers/n1/pdf"
 
+    def test_demo_session_copy_skips_pdf_binary(self, db):
+        db.upsert_note(
+            "demo-user",
+            "demo-paperlens-quickstart",
+            {
+                "title": "Quickstart",
+                "sourceKey": "demo:paperlens-quickstart",
+                "text": "body",
+                "pdfUrl": "/api/papers/demo-paperlens-quickstart/pdf",
+                "pdfFilename": "sample.pdf",
+            },
+            {"tags": ["demo"]},
+        )
+        db.store_pdf("demo-user", "demo-paperlens-quickstart", "sample.pdf", b"%PDF-1.4\nbody")
+
+        copied = db.copy_notes_for_demo_session("demo-user", "session-user", "session-token-123456")
+
+        assert copied == 1
+        library = db.list_notes("session-user")["library"]
+        copied_id = next(iter(library))
+        copied_note = db.get_note("session-user", copied_id)
+        assert copied_note is not None
+        assert copied_note["paper"]["sourceKey"] == "demo-session:demo-paperlens-quickstart"
+        assert copied_note["paper"]["pdfUrl"] == ""
+        assert copied_note["paper"]["pdfFilename"] == ""
+        assert db.get_pdf("session-user", copied_id) is None
+
     def test_notes_are_scoped_by_user(self, db):
         db.upsert_note("u1", "n1", {"title": "Mine"}, {})
         assert db.get_note("u2", "n1") is None
