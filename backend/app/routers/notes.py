@@ -10,6 +10,7 @@ from app.config import settings
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 DEMO_SESSION_CLEANUP_INTERVAL_SECONDS = 600
+DEMO_SESSION_SEED_VERSION = 2
 _last_demo_session_cleanup_at = 0.0
 
 
@@ -38,6 +39,13 @@ class NoteIn(BaseModel):
     note: dict = Field(default_factory=dict)
 
 
+def _demo_session_seed_version(doc: dict[str, object]) -> int:
+    try:
+        return int(doc.get("demoSessionSeedVersion") or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
 def _ensure_demo_session_seeded(context: UserContext) -> None:
     global _last_demo_session_cleanup_at
     if not context.is_demo_session or not context.demo_session_id:
@@ -48,7 +56,11 @@ def _ensure_demo_session_seeded(context: UserContext) -> None:
         _last_demo_session_cleanup_at = now_ts
     marker = db.get_research_doc(context.user_id)
     doc = marker.get("doc") if marker else None
-    if isinstance(doc, dict) and doc.get("demoSessionInitialized"):
+    if (
+        isinstance(doc, dict)
+        and doc.get("demoSessionInitialized")
+        and _demo_session_seed_version(doc) >= DEMO_SESSION_SEED_VERSION
+    ):
         return
     now = datetime.now(timezone.utc)
     ttl_hours = max(1, settings.demo_session_ttl_hours)
@@ -57,10 +69,13 @@ def _ensure_demo_session_seeded(context: UserContext) -> None:
         context.user_id,
         context.demo_session_id,
     )
+    current_doc = doc if isinstance(doc, dict) else {}
     db.put_research_doc(
         context.user_id,
         {
+            **current_doc,
             "demoSessionInitialized": True,
+            "demoSessionSeedVersion": DEMO_SESSION_SEED_VERSION,
             "demoBaseUserId": context.base_user_id,
             "demoSessionId": context.demo_session_id,
             "demoCreatedAt": now.isoformat(),

@@ -100,7 +100,7 @@ class TestRoundTrip:
         assert note["paper"]["pdfFilename"] == "paper.pdf"
         assert note["paper"]["pdfUrl"] == "/api/papers/n1/pdf"
 
-    def test_demo_session_copy_skips_pdf_binary(self, db):
+    def test_demo_session_copy_includes_pdf_for_viewer(self, db):
         db.upsert_note(
             "demo-user",
             "demo-paperlens-quickstart",
@@ -123,10 +123,48 @@ class TestRoundTrip:
         copied_note = db.get_note("session-user", copied_id)
         assert copied_note is not None
         assert copied_note["paper"]["sourceKey"] == "demo-session:demo-paperlens-quickstart"
-        assert copied_note["paper"]["pdfUrl"] == ""
-        assert copied_note["paper"]["pdfFilename"] == ""
+        assert copied_note["paper"]["pdfUrl"] == f"/api/papers/{copied_id}/pdf"
+        assert copied_note["paper"]["pdfFilename"] == "sample.pdf"
         assert copied_note["paper"]["text"] == "body"
-        assert db.get_pdf("session-user", copied_id) is None
+        assert db.get_pdf("session-user", copied_id) == ("sample.pdf", b"%PDF-1.4\nbody")
+
+    def test_demo_session_copy_backfills_existing_seed_pdf(self, db):
+        session_key = "session-token-123456"
+        copied_id = "demo-session-toke-demo-paperlens-quickstart"
+        db.upsert_note(
+            "demo-user",
+            "demo-paperlens-quickstart",
+            {
+                "title": "Quickstart",
+                "sourceKey": "demo:paperlens-quickstart",
+                "text": "body",
+                "pdfUrl": "/api/papers/demo-paperlens-quickstart/pdf",
+                "pdfFilename": "sample.pdf",
+            },
+            {"tags": ["demo"]},
+        )
+        db.upsert_note(
+            "session-user",
+            copied_id,
+            {
+                "title": "Quickstart",
+                "sourceKey": "demo-session:demo-paperlens-quickstart",
+                "text": "body",
+                "pdfUrl": "",
+                "pdfFilename": "",
+            },
+            {"tags": ["demo"]},
+        )
+        db.store_pdf("demo-user", "demo-paperlens-quickstart", "sample.pdf", b"%PDF-1.4\nbody")
+
+        copied = db.copy_notes_for_demo_session("demo-user", "session-user", session_key)
+
+        assert copied == 0
+        copied_note = db.get_note("session-user", copied_id)
+        assert copied_note is not None
+        assert copied_note["paper"]["pdfUrl"] == f"/api/papers/{copied_id}/pdf"
+        assert copied_note["paper"]["pdfFilename"] == "sample.pdf"
+        assert db.get_pdf("session-user", copied_id) == ("sample.pdf", b"%PDF-1.4\nbody")
 
     def test_notes_are_scoped_by_user(self, db):
         db.upsert_note("u1", "n1", {"title": "Mine"}, {})

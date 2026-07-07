@@ -431,7 +431,7 @@ class PostgreSQLNotesRepository:
     def copy_notes_for_demo_session(
         self, source_user_id: str, target_user_id: str, session_key: str
     ) -> int:
-        """Copy demo notes with set-based SQL, excluding PDF binaries."""
+        """Copy demo notes with set-based SQL, including stored PDF binaries for viewer demos."""
         now = _now()
         id_prefix = f"demo-{session_key[:12]}-"
         with self.connect() as conn:
@@ -474,6 +474,28 @@ class PostgreSQLNotesRepository:
                 ON CONFLICT (paper_id) DO NOTHING
                 """,
                 (id_prefix, target_user_id, now, source_user_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO paper_files (paper_id, user_id, filename, content, updated_at)
+                SELECT %s || paper_id, %s, filename, content, %s
+                FROM paper_files
+                WHERE user_id = %s
+                ON CONFLICT (paper_id) DO NOTHING
+                """,
+                (id_prefix, target_user_id, now, source_user_id),
+            )
+            conn.execute(
+                """
+                UPDATE paper_metadata AS m
+                SET pdf_filename = f.filename, updated_at = %s
+                FROM paper_files AS f
+                WHERE m.user_id = %s
+                  AND m.id LIKE %s
+                  AND f.paper_id = m.id
+                  AND f.user_id = m.user_id
+                """,
+                (now, target_user_id, f"{id_prefix}%"),
             )
         return copied
 
