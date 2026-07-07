@@ -57,6 +57,7 @@ const OCR_BATCH_PAGE_COUNT = 1;
 const SAMPLE_HEALTH_TIMEOUT_MS = 10_000;
 const SAMPLE_DOWNLOAD_TIMEOUT_MS = 30_000;
 const PDF_EXTRACT_TIMEOUT_MS = 90_000;
+const SAMPLE_SOURCE_KEYS = new Set(['sample:paperlens', 'demo-session:demo-paperlens-sample-pdf']);
 
 async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -695,7 +696,7 @@ export function useReviewStore({
 
   async function handleSamplePdf() {
     if (sampleLoading) return;
-    const existingSample = Object.values(libraryRef.current).find((p) => p.sourceKey === 'sample:paperlens');
+    const existingSample = Object.values(libraryRef.current).find((p) => SAMPLE_SOURCE_KEYS.has(p.sourceKey ?? ''));
     if (existingSample) {
       setActiveId(existingSample.id);
       setMobilePanel('paper');

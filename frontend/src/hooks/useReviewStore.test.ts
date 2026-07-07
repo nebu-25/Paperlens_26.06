@@ -220,4 +220,41 @@ describe('useReviewStore', () => {
     expect(result.current.uploadNotice?.message).toContain('PDF 업로드');
     expect(result.current.library).toEqual({});
   });
+
+  it('데모 세션에 샘플 PDF seed가 있으면 새 샘플 노트를 만들지 않고 기존 노트를 연다', async () => {
+    const { result } = await renderStore();
+    act(() =>
+      result.current.registerPaper(
+        paperInput({
+          title: 'Quickstart',
+          sourceKey: 'demo-session:demo-paperlens-quickstart',
+        }),
+        [],
+        'quickstart',
+      ),
+    );
+    act(() =>
+      result.current.registerPaper(
+        paperInput({
+          title: 'Sample PDF',
+          sourceKey: 'demo-session:demo-paperlens-sample-pdf',
+        }),
+        [],
+        'seeded-sample',
+      ),
+    );
+    act(() => result.current.openPaper('quickstart'));
+
+    await act(async () => {
+      await result.current.handleSamplePdf();
+    });
+
+    expect(result.current.activeId).toBe('seeded-sample');
+    expect(Object.keys(result.current.library).sort()).toEqual(['quickstart', 'seeded-sample']);
+    expect(result.current.uploadNotice).toMatchObject({
+      tone: 'info',
+      title: '이미 등록된 샘플 PDF',
+    });
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes('/papers/sample-pdf'))).toBe(false);
+  });
 });

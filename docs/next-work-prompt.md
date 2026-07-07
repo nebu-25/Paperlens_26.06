@@ -28,7 +28,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - Pages workflow는 `frontend/**` 또는 `.github/workflows/deploy-pages.yml` 변경 때 자동 실행되며, 문서만 변경한 push에서는 자동 Pages 배포를 건너뜁니다.
 - 샘플 PDF 버튼은 먼저 /api/health로 Render 백엔드를 깨운 뒤 sample-pdf를 호출하고, 진행 단계/취소/재시도를 표시합니다.
 - 샘플 PDF 흐름은 단계별 timeout을 둡니다. `/api/health` 10초, `/api/papers/sample-pdf` 30초, `/api/papers/extract-text` 90초이며, 사용자가 누른 취소와 서버 지연 실패를 구분해 안내합니다.
-- 샘플 PDF는 `sample:paperlens` sourceKey로 중복 등록을 막고, 실제 샘플 파일명은 `2604.04977v1.pdf`로 맞춥니다.
+- 샘플 PDF는 `sample:paperlens` sourceKey로 중복 등록을 막고, 데모 세션 seed의 `demo-session:demo-paperlens-sample-pdf`도 같은 샘플로 인식합니다. 실제 샘플 파일명은 `2604.04977v1.pdf`로 맞춥니다.
 - DOI 입력은 메타데이터 등록용이고, 원문/뷰어 연결은 PDF 업로드 또는 PDF 원문 URL 입력으로 처리합니다.
 - PDF 원문 URL은 `/api/papers/extract-url`로 다운로드한 뒤 기존 PDF 추출 파이프라인과 동일하게 저장/분석합니다.
 - /api/notes 저장/복원 실패는 401, 503, 네트워크 실패를 구분해 안내합니다.
@@ -70,8 +70,11 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - `/api/diagnostics`는 `ocr.provider`, `ocr.providers`, `ocr.ready`, `ocr.configured`, `ocr.warnings`를 반환합니다. 현재 운영 확인 기준은 `ocr.enabled: true`, `provider: auto`, `providers.clova: true`, `providers.rapidocr: true`, `ready: true`, `warnings: []`입니다.
 
 최근 확인된 배포/설정 주의점:
+- 2026-07-07에 GitHub Actions에서 최신 커밋 `b2b0242493b9726dfff37808e118c651431658f7`의 Pages deploy job `28858656545`가 성공했고, 이어진 Production smoke도 성공했습니다. `backend/scripts/smoke_deployment.py` 공개 endpoint smoke는 3.1초에 통과했습니다.
+- 2026-07-07 운영 Pages를 Playwright로 확인했습니다. 데모 계정은 로그인 폼에 prefill 되었고, 로그인 직후 skeleton 준비 화면과 사이드바 "리뷰 노트를 불러오는 중입니다" 문구가 보였습니다. `/api/notes`는 8.0초, lazy-load `/api/notes/<quickstart>`는 2.1초에 200으로 끝났고 빠른 체험 문서가 열렸습니다. 샘플 PDF 흐름은 `/api/health` 0.2초, `/api/papers/sample-pdf` 0.2초, `/api/papers/extract-text` 6.6초였습니다.
+- 같은 운영 확인에서 이미 데모 세션에 샘플 PDF seed가 있는데도 샘플 PDF 버튼이 새 샘플 노트를 하나 더 만드는 문제가 발견됐습니다. 프론트 중복 감지를 `sample:paperlens`와 `demo-session:demo-paperlens-sample-pdf` 모두 인식하도록 수정했으며, 다음 배포 후 샘플 PDF 버튼 재클릭 시 기존 샘플 리뷰 노트가 열리는지 확인해야 합니다.
 - 2026-07-07에 로그인 후 서비스 화면 공백기와 파일 로드 후 알림 과다 문제를 1차 개선했습니다. `loaded=false` 상태에서는 skeleton 준비 화면을 보여 주고, 업로드 info/success 알림은 자동 숨김 처리하며, 원문 PDF/추출 품질 안내는 접힌 상태 줄로 축소했습니다.
-- 2026-07-07에 데모 로그인 직후 빠른 테스트 문서 로드가 오래 걸리고 샘플 PDF가 이어서 실패하는 현상을 분석했습니다. 1차 개선으로 데모 seed bulk copy, 데모 cleanup rate limit, 초기 health 비차단화, `/notes` 30초 대기, 샘플 PDF 단계별 timeout을 적용했습니다. 배포 후 Network 탭에서 `/api/notes`, `/api/papers/sample-pdf`, `/api/papers/extract-text` 시간을 분리해 확인해야 합니다.
+- 2026-07-07에 데모 로그인 직후 빠른 테스트 문서 로드가 오래 걸리고 샘플 PDF가 이어서 실패하는 현상을 분석했습니다. 1차 개선으로 데모 seed bulk copy, 데모 cleanup rate limit, 초기 health 비차단화, `/notes` 30초 대기, 샘플 PDF 단계별 timeout을 적용했습니다. 배포 후 Network 탭에서 `/api/notes`, `/api/papers/sample-pdf`, `/api/papers/extract-text` 시간을 분리해 확인했습니다.
 - 2026-07-06에 모달 크기/폰트 변경 이후 최신 배포가 반영되지 않던 원인은 코드 빌드 실패가 아니라 GitHub Pages deploy job 실패였습니다. `actions/deploy-pages@v5` 갱신 커밋 `e1b886e` 이후 Pages 배포가 성공했고, 설문 프롬프트 커밋 `c1393d5`도 Pages 배포 성공을 확인했습니다.
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
 - VITE_SUPABASE_URL은 https://<project-ref>.supabase.co 형식입니다.
@@ -101,17 +104,17 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - 필요하면 실제 PDF 샘플을 테스트 fixture로 추가하는 방안 검토
 
 2. 배포 후 운영 수동 smoke test
-   - GitHub Pages가 최신 JS 번들을 가리키는지 확인
+   - 이번 로컬 수정(데모 seed 샘플 PDF 중복 방지)을 커밋/푸시한 뒤 GitHub Pages가 최신 JS 번들을 가리키는지 확인
    - Pages deploy job이 `actions/deploy-pages@v5`로 성공하는지 확인
    - Render가 최신 백엔드로 재배포됐는지 확인
    - /api/diagnostics 운영 응답에서 `auth.mode: supabase`, `auth.ready: true`, `auth.warnings: []` 확인
    - 실제 로그인 후 /api/notes 200 여부 확인
    - 로그인 직후 문서 복원 중 빈 화면이 아니라 skeleton 준비 화면이 보이는지 확인
-   - 데모 계정 로그인 직후 `/api/notes`가 30초 안에 끝나고 기본 빠른 테스트 문서가 열리는지 확인
+   - 데모 계정 로그인 직후 `/api/notes`가 30초 안에 끝나고 기본 빠른 테스트 문서가 열리는지 재확인
    - 로그인 후 저장된 논문이 추가 업로드 없이 바로 열리는지 확인
    - 파일이 열린 직후 큰 알림이 여러 개 쌓이지 않고, 원문 PDF/원문 상태 안내가 접힌 상태 줄로 보이는지 확인
-   - 샘플 PDF 버튼으로 PDF 다운로드, 텍스트 추출, 새 리뷰 노트 생성까지 확인하고 `/sample-pdf`와 `/extract-text` 시간을 따로 기록
-   - 샘플 PDF를 다시 눌렀을 때 기존 샘플 리뷰 노트를 여는지 확인
+   - 샘플 PDF 버튼으로 PDF 다운로드, 텍스트 추출, 리뷰 노트 열기까지 확인하고 `/sample-pdf`와 `/extract-text` 시간을 따로 기록
+   - 데모 세션 seed 샘플이 이미 있는 상태에서 샘플 PDF를 다시 눌렀을 때 새 노트를 만들지 않고 기존 샘플 리뷰 노트를 여는지 확인
    - PDF 원본 보기에서 401 콘솔 오류 없이 blob 미리보기가 뜨거나 fallback 안내가 뜨는지 확인
    - DOI 등록은 메타데이터/원문 별도 연결 안내가 뜨는지 확인
    - PDF 원문 URL 예: https://arxiv.org/pdf/2604.04977v1 등록 시 원문 추출과 PDF 원본 보기가 연결되는지 확인
