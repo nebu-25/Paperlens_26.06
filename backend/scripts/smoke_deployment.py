@@ -8,12 +8,14 @@ Run from repo root or backend/:
   python3 backend/scripts/smoke_deployment.py
   FRONTEND_BASE_URL=https://... API_BASE_URL=https://... python3 backend/scripts/smoke_deployment.py
   PAPERLENS_SMOKE_EMAIL=... PAPERLENS_SMOKE_PASSWORD=... python3 backend/scripts/smoke_deployment.py
+  PAPERLENS_DEMO_EMAIL=... PAPERLENS_DEMO_PASSWORD=... python3 backend/scripts/smoke_deployment.py
 """
 
 from __future__ import annotations
 
 import json
 import os
+import secrets
 import sys
 import time
 import urllib.error
@@ -24,6 +26,7 @@ from typing import Any
 
 DEFAULT_FRONTEND_BASE_URL = "https://nebu-25.github.io/Paperlens_26.06"
 DEFAULT_API_BASE_URL = "https://paperlens-backend-53ki.onrender.com"
+DEMO_QUICKSTART_NOTE_ID = "demo-paperlens-quickstart"
 
 
 @dataclass(frozen=True)
@@ -196,6 +199,28 @@ def _check_authenticated_api(api_base: str, access_token: str) -> None:
     _assert(isinstance(notes_body.get("notes"), dict), "authenticated notes missing notes object")
 
 
+def _check_demo_session_api(api_base: str, access_token: str) -> None:
+    demo_session_id = secrets.token_urlsafe(24)
+    notes = _request(
+        "GET",
+        f"{api_base}/api/notes",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "X-PaperLens-Demo-Session": demo_session_id,
+        },
+    )
+    _assert(notes.status == 200, f"demo session notes expected 200, got {notes.status}")
+    notes_body = notes.json()
+    library = notes_body.get("library")
+    notes_map = notes_body.get("notes")
+    _assert(isinstance(library, dict), "demo session notes missing library object")
+    _assert(isinstance(notes_map, dict), "demo session notes missing notes object")
+    _assert(
+        DEMO_QUICKSTART_NOTE_ID in library and DEMO_QUICKSTART_NOTE_ID in notes_map,
+        f"demo session missing quickstart note {DEMO_QUICKSTART_NOTE_ID}",
+    )
+
+
 def main() -> int:
     frontend_base = os.environ.get("FRONTEND_BASE_URL", DEFAULT_FRONTEND_BASE_URL).strip().rstrip("/")
     api_base = os.environ.get("API_BASE_URL", DEFAULT_API_BASE_URL).strip().rstrip("/")
@@ -203,14 +228,17 @@ def main() -> int:
     supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY", "").strip()
     smoke_email = os.environ.get("PAPERLENS_SMOKE_EMAIL", "").strip()
     smoke_password = os.environ.get("PAPERLENS_SMOKE_PASSWORD", "")
+    demo_email = os.environ.get("PAPERLENS_DEMO_EMAIL", "").strip()
+    demo_password = os.environ.get("PAPERLENS_DEMO_PASSWORD", "")
     if not frontend_base or not api_base:
         print("FRONTEND_BASE_URL and API_BASE_URL are required.", file=sys.stderr)
         return 2
     has_smoke_account = bool(smoke_email and smoke_password)
+    has_demo_account = bool(demo_email and demo_password)
     require_ai_ready = _env_flag("REQUIRE_AI_READY")
-    if has_smoke_account and (not supabase_url or not supabase_anon_key):
+    if (has_smoke_account or has_demo_account) and (not supabase_url or not supabase_anon_key):
         print(
-            "SUPABASE_URL and SUPABASE_ANON_KEY are required when PAPERLENS_SMOKE_EMAIL/PASSWORD are set.",
+            "SUPABASE_URL and SUPABASE_ANON_KEY are required when authenticated smoke accounts are set.",
             file=sys.stderr,
         )
         return 2
@@ -226,8 +254,21 @@ def main() -> int:
             smoke_password,
         )
         _check_authenticated_api(api_base, access_token)
+    if has_demo_account:
+        demo_access_token = _supabase_password_token(
+            supabase_url,
+            supabase_anon_key,
+            demo_email,
+            demo_password,
+        )
+        _check_demo_session_api(api_base, demo_access_token)
     elapsed = time.monotonic() - started
-    auth_label = "with authenticated notes check" if has_smoke_account else "public endpoints only"
+    auth_checks: list[str] = []
+    if has_smoke_account:
+        auth_checks.append("authenticated notes")
+    if has_demo_account:
+        auth_checks.append("demo session notes")
+    auth_label = f"with {', '.join(auth_checks)} check" if auth_checks else "public endpoints only"
     print(f"Production deployment smoke passed in {elapsed:.1f}s ({auth_label}).")
     return 0
 

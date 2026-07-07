@@ -42,4 +42,6 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           PAPERLENS_SMOKE_EMAIL: ${{ secrets.PAPERLENS_SMOKE_EMAIL }}
           PAPERLENS_SMOKE_PASSWORD: ${{ secrets.PAPERLENS_SMOKE_PASSWORD }}
+          PAPERLENS_DEMO_EMAIL: ${{ secrets.PAPERLENS_DEMO_EMAIL }}
+          PAPERLENS_DEMO_PASSWORD: ${{ secrets.PAPERLENS_DEMO_PASSWORD }}
         run: python3 backend/scripts/smoke_deployment.py
