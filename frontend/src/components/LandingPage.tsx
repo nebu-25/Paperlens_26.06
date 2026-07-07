@@ -10,6 +10,8 @@ interface LandingPageProps {
   authReady: boolean;
   user: User | null;
   onEnterService: () => void;
+  onSignOutStarted?: () => void;
+  onSignOutComplete?: () => void;
 }
 
 const steps = [
@@ -178,7 +180,14 @@ function ProductMockup() {
   );
 }
 
-export function LandingPage({ authEnabled, authReady, user, onEnterService }: LandingPageProps) {
+export function LandingPage({
+  authEnabled,
+  authReady,
+  user,
+  onEnterService,
+  onSignOutStarted,
+  onSignOutComplete,
+}: LandingPageProps) {
   const [active, setActive] = useState(3);
   const [loginOpen, setLoginOpen] = useState(false);
   const [serviceLinkCopied, setServiceLinkCopied] = useState(false);
@@ -691,6 +700,8 @@ export function LandingPage({ authEnabled, authReady, user, onEnterService }: La
               initialEmail={demoPrefill ? DEMO_EMAIL : ''}
               initialPassword={demoPrefill ? DEMO_PASSWORD : ''}
               onEnterService={onEnterService}
+              onSignOutStarted={onSignOutStarted}
+              onSignOutComplete={onSignOutComplete}
             />
             {import.meta.env.DEV && !authEnabled && (
               <div className="mt-4 rounded border border-dashed border-line bg-paper p-3">

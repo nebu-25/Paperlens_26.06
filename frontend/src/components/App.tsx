@@ -72,6 +72,8 @@ interface ReviewWorkspaceProps {
   accessToken: string;
   demoSessionId: string | null;
   requestSurveyPrompt: (reason: SurveyPromptReason) => void;
+  onSignOutStarted: () => void;
+  onSignOutComplete: () => void;
 }
 
 function ReviewWorkspace({
@@ -81,6 +83,8 @@ function ReviewWorkspace({
   accessToken,
   demoSessionId,
   requestSurveyPrompt,
+  onSignOutStarted,
+  onSignOutComplete,
 }: ReviewWorkspaceProps) {
   const store = useReviewStore({
     accessToken,
@@ -97,7 +101,13 @@ function ReviewWorkspace({
         className="flex h-screen flex-col overflow-hidden bg-paper text-ink"
         onMouseDown={() => setSelection(null)}
       >
-        <WorkspaceHeader authEnabled={authEnabled} authReady={authReady} user={user} />
+        <WorkspaceHeader
+          authEnabled={authEnabled}
+          authReady={authReady}
+          user={user}
+          onSignOutStarted={onSignOutStarted}
+          onSignOutComplete={onSignOutComplete}
+        />
         <UploadBar />
 
         <div
@@ -154,6 +164,7 @@ function App() {
   const [surveyPromptReason, setSurveyPromptReason] = useState<SurveyPromptReason | null>(null);
   const initialAuthResolvedRef = useRef(false);
   const previousAccessTokenRef = useRef<string | null>(null);
+  const signOutSurveyPendingRef = useRef(false);
 
   // 개발용 우회: Vite dev 서버 + Supabase 미설정일 때만 로그인 없이 워크스페이스 진입을 허용한다.
   // 백엔드도 동일 조건에서 'local' 단일 사용자로 동작하며, 프로덕션 빌드(DEV=false)에는 영향이 없다.
@@ -164,6 +175,16 @@ function App() {
     markSurveyPromptShown();
     setSurveyPromptReason(reason);
   }, []);
+
+  const queueSignOutSurveyPrompt = useCallback(() => {
+    signOutSurveyPendingRef.current = true;
+  }, []);
+
+  const showQueuedSignOutSurveyPrompt = useCallback(() => {
+    if (!signOutSurveyPendingRef.current) return;
+    signOutSurveyPendingRef.current = false;
+    requestSurveyPrompt('sign-out');
+  }, [requestSurveyPrompt]);
 
   useEffect(() => {
     if (!authReady) return;
@@ -186,9 +207,9 @@ function App() {
       return;
     }
     if (previousAccessToken && !accessToken) {
-      requestSurveyPrompt('sign-out');
+      showQueuedSignOutSurveyPrompt();
     }
-  }, [accessToken, authReady, navigate, requestSurveyPrompt, route]);
+  }, [accessToken, authReady, navigate, route, showQueuedSignOutSurveyPrompt]);
 
   if (route === 'landing' || (!accessToken && !devLocalMode)) {
     return (
@@ -198,6 +219,8 @@ function App() {
           authReady={authReady}
           user={user}
           onEnterService={() => navigate('service')}
+          onSignOutStarted={queueSignOutSurveyPrompt}
+          onSignOutComplete={showQueuedSignOutSurveyPrompt}
         />
         {surveyPromptReason && (
           <SurveyPrompt reason={surveyPromptReason} onClose={() => setSurveyPromptReason(null)} />
@@ -215,6 +238,8 @@ function App() {
         accessToken={accessToken ?? ''}
         demoSessionId={demoSessionId}
         requestSurveyPrompt={requestSurveyPrompt}
+        onSignOutStarted={queueSignOutSurveyPrompt}
+        onSignOutComplete={showQueuedSignOutSurveyPrompt}
       />
       {surveyPromptReason && (
         <SurveyPrompt reason={surveyPromptReason} onClose={() => setSurveyPromptReason(null)} />

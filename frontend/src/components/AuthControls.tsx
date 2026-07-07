@@ -17,6 +17,7 @@ interface AuthControlsProps {
   syncing?: boolean;
   savedAt?: string | null;
   onBeforeSignOut?: () => Promise<boolean>;
+  onSignOutStarted?: () => void;
   onSignOutComplete?: () => void;
 }
 
@@ -32,6 +33,7 @@ export function AuthControls({
   syncing = false,
   savedAt = null,
   onBeforeSignOut,
+  onSignOutStarted,
   onSignOutComplete,
 }: AuthControlsProps) {
   const [email, setEmail] = useState(initialEmail);
@@ -64,6 +66,7 @@ export function AuthControls({
           '서버 저장에 실패했습니다. 로그아웃하면 이 브라우저의 임시 저장본은 유지하고, 다음 로그인 때 다시 동기화합니다. 그래도 로그아웃할까요?',
         );
         if (!signOutWithoutClearing) return;
+        onSignOutStarted?.();
         await completeSignOut();
         return;
       }
@@ -83,6 +86,7 @@ export function AuthControls({
     }
     if (user?.id) await clearLocalReviewCache(`user:${user.id}`);
     clearLegacyLocalReviewCache();
+    onSignOutStarted?.();
     await completeSignOut();
   }
 

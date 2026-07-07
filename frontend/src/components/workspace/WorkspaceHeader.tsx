@@ -9,10 +9,18 @@ interface WorkspaceHeaderProps {
   authEnabled: boolean;
   authReady: boolean;
   user: User | null;
+  onSignOutStarted: () => void;
+  onSignOutComplete: () => void;
 }
 
-export function WorkspaceHeader({ authEnabled, authReady, user }: WorkspaceHeaderProps) {
-  const { store, requestSurveyPrompt } = useWorkspace();
+export function WorkspaceHeader({
+  authEnabled,
+  authReady,
+  user,
+  onSignOutStarted,
+  onSignOutComplete,
+}: WorkspaceHeaderProps) {
+  const { store } = useWorkspace();
   const { paper, aiEnabled, pending, syncing, savedAt, saveNow } = store;
   return (
     <header className={`shrink-0 border-b border-line bg-panel px-4 sm:px-6 ${paper ? 'py-2' : 'py-4'}`}>
@@ -55,7 +63,8 @@ export function WorkspaceHeader({ authEnabled, authReady, user }: WorkspaceHeade
           syncing={syncing}
           savedAt={savedAt}
           onBeforeSignOut={saveNow}
-          onSignOutComplete={() => requestSurveyPrompt('sign-out')}
+          onSignOutStarted={onSignOutStarted}
+          onSignOutComplete={onSignOutComplete}
         />
       </div>
     </header>
