@@ -57,7 +57,7 @@ export function SourcePanel() {
   };
   // PDF 그림 이미지 인덱스 (M5b): 페이지별로 묶어 PDF 탭 점프 칩으로 보여준다.
   const [requestedPdfPage, setRequestedPdfPage] = useState<number | null>(null);
-  // 캡션↔이미지 매칭(백엔드): 캡션 id -> 그 이미지가 있는 PDF 페이지. 캡션 행의 "PDF p.N" 버튼에 사용.
+  // 캡션↔이미지 매칭(백엔드): 캡션 id -> 그 이미지가 있는 PDF 페이지. 캡션 행의 "PDF 보기" 버튼에 사용.
   const captionImagePage = useMemo(() => {
     const map = new Map<string, number>();
     for (const image of paper?.figureImages ?? []) {
@@ -464,7 +464,7 @@ export function SourcePanel() {
                     </div>
                     {figurePages.length > 0 && (
                       <div className="mb-1 flex flex-wrap items-center gap-1">
-                        <span className="text-[11px] font-semibold text-muted">PDF 그림</span>
+                        <span className="text-[11px] font-semibold text-muted">PDF 그림 페이지</span>
                         {figurePages.map((entry) => (
                           <button
                             key={entry.page}
@@ -489,32 +489,41 @@ export function SourcePanel() {
                         const memo = note.figureNotes?.[caption.id] ?? '';
                         const memoOpen = openFigureMemos.has(caption.id) || memo.length > 0;
                         const mentions = figureMentionCounts[caption.id] ?? 0;
+                        const pdfPage = captionImagePage.get(caption.id);
+                        const canOpenPdfFigure = Boolean(paperPdfUrl && pdfPage !== undefined);
                         return (
                           <li key={caption.id} className="rounded bg-white/70 px-2 py-1">
                             <div className="flex flex-wrap items-center gap-2">
+                              <span className="inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-ink">
+                                {caption.label}
+                              </span>
                               <button
                                 type="button"
-                                className="inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-action hover:underline"
-                                title={`${caption.label} 캡션 위치로 이동`}
+                                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action"
+                                title={`${caption.label}의 문자 추출 원문 위치로 이동합니다`}
                                 onClick={() => jumpToTextOffset(caption.start)}
                               >
-                                {caption.label}
+                                <ScanText size={11} />
+                                원문 위치
                               </button>
-                              {captionImagePage.has(caption.id) && (
-                                <button
-                                  type="button"
-                                  className="shrink-0 rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
-                                  disabled={!paperPdfUrl}
-                                  title={
-                                    paperPdfUrl
-                                      ? `PDF ${captionImagePage.get(caption.id)}페이지에서 이 그림을 봅니다`
-                                      : 'PDF 원본이 연결되면 사용할 수 있습니다'
-                                  }
-                                  onClick={() => openPdfAtPage(captionImagePage.get(caption.id) as number)}
-                                >
-                                  PDF p.{captionImagePage.get(caption.id)}
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={!canOpenPdfFigure}
+                                title={
+                                  !paperPdfUrl
+                                    ? 'PDF 원본이 연결되면 사용할 수 있습니다'
+                                    : pdfPage
+                                      ? `PDF ${pdfPage}페이지에서 이 그림/표를 봅니다`
+                                      : '이 캡션과 매칭된 PDF 그림/표 위치가 없습니다. 원문 위치를 확인하거나 PDF 그림 페이지 칩을 사용하세요.'
+                                }
+                                onClick={() => {
+                                  if (pdfPage) openPdfAtPage(pdfPage);
+                                }}
+                              >
+                                <FileText size={11} />
+                                {pdfPage ? `PDF p.${pdfPage}` : 'PDF 보기'}
+                              </button>
                               <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
                                 {caption.preview}
                               </span>
