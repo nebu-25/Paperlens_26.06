@@ -93,7 +93,7 @@ function ReviewWorkspace({
     userId: user?.id ?? null,
     demoSessionId,
   });
-  const { paper, mobilePanel, setMobilePanel, setSelection, sidebarCollapsed } = store;
+  const { paper, mobilePanel, setMobilePanel, setSelection, sidebarCollapsed, loaded, savedAt } = store;
 
   return (
     <WorkspaceContext.Provider value={{ store, accessToken, demoSessionId, requestSurveyPrompt }}>
@@ -119,7 +119,9 @@ function ReviewWorkspace({
           <PaperSidebar />
 
           {/* ── 본문 ── */}
-          {!paper ? (
+          {!paper && !loaded ? (
+            <WorkspaceLoadingState demoSessionId={demoSessionId} savedAt={savedAt} />
+          ) : !paper ? (
             <EmptyState />
           ) : (
             <section className="flex min-h-0 flex-col">
@@ -155,6 +157,42 @@ function ReviewWorkspace({
         <SelectionToolbar />
       </main>
     </WorkspaceContext.Provider>
+  );
+}
+
+function WorkspaceLoadingState({
+  demoSessionId,
+  savedAt,
+}: {
+  demoSessionId: string | null;
+  savedAt: string | null;
+}) {
+  return (
+    <section className="min-h-0 overflow-y-auto bg-white/50 p-6 sm:p-10">
+      <div className="mx-auto grid min-h-full max-w-5xl place-items-center">
+        <div className="w-full max-w-2xl rounded border border-line bg-panel/95 p-6 shadow-sm">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-action">
+                {demoSessionId ? '데모 문서 준비 중' : '리뷰 노트 불러오는 중'}
+              </p>
+              <h2 className="text-xl font-bold leading-tight">
+                {demoSessionId ? '빠른 테스트 문서를 여는 중입니다' : '저장된 작업을 확인하고 있습니다'}
+              </h2>
+            </div>
+            <div className="size-9 shrink-0 animate-pulse rounded bg-action/15" aria-hidden="true" />
+          </div>
+          <div className="grid gap-3" aria-hidden="true">
+            <div className="h-4 w-3/4 animate-pulse rounded bg-paper" />
+            <div className="h-4 w-11/12 animate-pulse rounded bg-paper" />
+            <div className="h-4 w-2/3 animate-pulse rounded bg-paper" />
+          </div>
+          <p role="status" aria-live="polite" className="mt-5 text-sm leading-6 text-muted">
+            {savedAt || '서버와 로컬 캐시를 확인하고 있습니다.'}
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 

@@ -6,6 +6,7 @@ export function PaperSidebar() {
     library,
     notes,
     activeId,
+    loaded,
     visiblePapers,
     search,
     setSearch,
@@ -54,7 +55,9 @@ export function PaperSidebar() {
         </button>
       </div>
       {Object.keys(library).length === 0 ? (
-        <p className="text-xs text-muted">아직 등록된 논문이 없습니다.</p>
+        <p className="text-xs text-muted">
+          {loaded ? '아직 등록된 논문이 없습니다.' : '리뷰 노트를 불러오는 중입니다.'}
+        </p>
       ) : (
         <>
           <div className="relative mb-2">

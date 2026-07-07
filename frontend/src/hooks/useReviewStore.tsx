@@ -159,6 +159,7 @@ export function useReviewStore({
   const note = (activeId ? notes[activeId] : undefined) ?? EMPTY_NOTE;
 
   const {
+    loaded,
     savedAt,
     setSavedAt,
     online,
@@ -191,6 +192,12 @@ export function useReviewStore({
     });
 
   const authHeaders: Record<string, string> = buildAuthHeaders(accessToken, demoSessionId);
+
+  useEffect(() => {
+    if (!uploadNotice || (uploadNotice.tone !== 'success' && uploadNotice.tone !== 'info')) return;
+    const handle = window.setTimeout(() => setUploadNotice(null), uploadNotice.tone === 'success' ? 4000 : 6000);
+    return () => window.clearTimeout(handle);
+  }, [uploadNotice]);
 
   // ── 활성 논문의 노트만 갱신 ──
   function setNote(updater: (n: ReviewNote) => ReviewNote) {
@@ -1320,6 +1327,7 @@ export function useReviewStore({
     sampleRetryAvailable,
     uploadNotice,
     uploadOpen,
+    loaded,
     savedAt,
     online,
     pending,

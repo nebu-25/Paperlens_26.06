@@ -91,6 +91,7 @@ export function SourcePanel() {
       return next;
     });
   const [hiddenPaperNotices, setHiddenPaperNotices] = useState<Set<string>>(() => new Set());
+  const [expandedPaperNotices, setExpandedPaperNotices] = useState<Set<string>>(() => new Set());
 
   const missingPdfNoticeKey = paper ? `missing-pdf:${paper.id}:${needsPdfText(paper)}` : '';
   const metadataNoticeKey = paper
@@ -108,10 +109,23 @@ export function SourcePanel() {
       return next;
     });
   };
+  const togglePaperNotice = (key: string) => {
+    if (!key) return;
+    setExpandedPaperNotices((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   const missingPdfNoticeHidden = missingPdfNoticeKey
     ? hiddenPaperNotices.has(missingPdfNoticeKey)
     : false;
   const metadataNoticeHidden = metadataNoticeKey ? hiddenPaperNotices.has(metadataNoticeKey) : false;
+  const missingPdfNoticeExpanded = missingPdfNoticeKey
+    ? expandedPaperNotices.has(missingPdfNoticeKey)
+    : false;
+  const metadataNoticeExpanded = metadataNoticeKey ? expandedPaperNotices.has(metadataNoticeKey) : false;
   const extractionQuality = paper?.extractionQuality;
   const extractionQualityText = extractionQualityLabel(extractionQuality);
   const shouldShowTextStatusNotice = Boolean(
@@ -204,9 +218,18 @@ export function SourcePanel() {
           </div>
         </div>
         {needsPdfText(paper) && !missingPdfNoticeHidden && (
-          <div className="mt-3 rounded border border-sky-300 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
-            <div className="mb-2 flex items-start justify-between gap-2">
-              <div className="font-semibold">원문 PDF가 아직 연결되지 않았습니다</div>
+          <div className="mt-3 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-relaxed text-sky-800">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                className="min-w-0 text-left font-semibold hover:underline"
+                onClick={() => togglePaperNotice(missingPdfNoticeKey)}
+              >
+                원문 PDF 연결 필요
+                <span className="ml-2 font-normal text-sky-700">
+                  {missingPdfNoticeExpanded ? '상세 접기' : '상세 보기'}
+                </span>
+              </button>
               <button
                 type="button"
                 className="shrink-0 leading-none hover:text-ink"
@@ -217,23 +240,27 @@ export function SourcePanel() {
                 ×
               </button>
             </div>
-            <p>
-              DOI 등록만으로는 본문 텍스트가 없습니다. PDF를 연결하면 현재 리뷰 노트에
-              원문을 붙여 읽으며 하이라이트할 수 있습니다.
-            </p>
-            <button
-              type="button"
-              className="mt-3 inline-flex items-center gap-1 rounded bg-action px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-              disabled={uploading}
-              onClick={() => {
-                attachTargetRef.current = paper.id;
-                setUploadOpen(true);
-                fileInputRef.current?.click();
-              }}
-            >
-              <Upload size={13} />
-              PDF 본문 연결
-            </button>
+            {missingPdfNoticeExpanded && (
+              <>
+                <p className="mt-2">
+                  DOI 등록만으로는 본문 텍스트가 없습니다. PDF를 연결하면 현재 리뷰 노트에
+                  원문을 붙여 읽으며 하이라이트할 수 있습니다.
+                </p>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex items-center gap-1 rounded bg-action px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                  disabled={uploading}
+                  onClick={() => {
+                    attachTargetRef.current = paper.id;
+                    setUploadOpen(true);
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  <Upload size={13} />
+                  PDF 본문 연결
+                </button>
+              </>
+            )}
           </div>
         )}
         {needsPdfText(paper) && missingPdfNoticeHidden && (
@@ -246,9 +273,19 @@ export function SourcePanel() {
           </button>
         )}
         {shouldShowTextStatusNotice && !metadataNoticeHidden && (
-          <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
-            <div className="mb-1 flex items-start justify-between gap-2">
-              <div className="font-semibold">원문 텍스트 상태</div>
+          <div className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                className="min-w-0 text-left font-semibold hover:underline"
+                onClick={() => togglePaperNotice(metadataNoticeKey)}
+              >
+                원문 상태: {extractionQualityText}
+                {extractionQuality ? ` (${extractionQuality.score}/100)` : ''}
+                <span className="ml-2 font-normal text-amber-700">
+                  {metadataNoticeExpanded ? '상세 접기' : '상세 보기'}
+                </span>
+              </button>
               <button
                 type="button"
                 className="shrink-0 leading-none hover:text-ink"
@@ -259,15 +296,15 @@ export function SourcePanel() {
                 ×
               </button>
             </div>
-            {extractionQuality && (
-              <p>
+            {metadataNoticeExpanded && extractionQuality && (
+              <p className="mt-2">
                 추출 품질: {extractionQualityText} ({extractionQuality.score}/100)
                 {extractionQuality.source === 'user_edited'
                   ? ' · 사용자가 원문을 직접 보정했습니다.'
                   : ' · 필요하면 PDF 원본과 대조한 뒤 원문을 편집하세요.'}
               </p>
             )}
-            {(paper.metadataWarnings?.length ?? 0) > 0 && (
+            {metadataNoticeExpanded && (paper.metadataWarnings?.length ?? 0) > 0 && (
               <>
                 <p className="mt-2">
                   PDF에서 일부 수식이나 특수 문자가 텍스트로 정확히 변환되지 않았을 수 있습니다.
@@ -279,7 +316,7 @@ export function SourcePanel() {
                 </ul>
               </>
             )}
-            {paper.pdfUrl && ocrAvailable && (
+            {metadataNoticeExpanded && paper.pdfUrl && ocrAvailable && (
               <button
                 type="button"
                 className="mt-3 inline-flex items-center gap-1 rounded bg-action px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
