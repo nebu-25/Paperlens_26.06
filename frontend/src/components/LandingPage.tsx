@@ -699,6 +699,8 @@ export function LandingPage({
               user={user}
               initialEmail={demoPrefill ? DEMO_EMAIL : ''}
               initialPassword={demoPrefill ? DEMO_PASSWORD : ''}
+              demoEmail={DEMO_EMAIL}
+              demoPassword={DEMO_PASSWORD}
               onEnterService={onEnterService}
               onSignOutStarted={onSignOutStarted}
               onSignOutComplete={onSignOutComplete}

@@ -5,13 +5,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthControls } from './AuthControls';
 
 const signOutMock = vi.hoisted(() => vi.fn(async () => ({ error: null })));
+const signInWithPasswordMock = vi.hoisted(() => vi.fn(async () => ({ error: null })));
 const clearLocalReviewCacheMock = vi.hoisted(() => vi.fn(async () => undefined));
 const clearLegacyLocalReviewCacheMock = vi.hoisted(() => vi.fn());
+const createDemoSessionIdMock = vi.hoisted(() => vi.fn(() => 'demo-session-id'));
+const clearDemoSessionIdMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
     auth: {
       signOut: signOutMock,
+      signInWithPassword: signInWithPasswordMock,
     },
   },
 }));
@@ -19,6 +23,11 @@ vi.mock('../lib/supabase', () => ({
 vi.mock('../lib/localReviewCache', () => ({
   clearLocalReviewCache: clearLocalReviewCacheMock,
   clearLegacyLocalReviewCache: clearLegacyLocalReviewCacheMock,
+}));
+
+vi.mock('../lib/demoSession', () => ({
+  createDemoSessionId: createDemoSessionIdMock,
+  clearDemoSessionId: clearDemoSessionIdMock,
 }));
 
 const user = {
@@ -31,8 +40,11 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   signOutMock.mockClear();
+  signInWithPasswordMock.mockClear();
   clearLocalReviewCacheMock.mockClear();
   clearLegacyLocalReviewCacheMock.mockClear();
+  createDemoSessionIdMock.mockClear();
+  clearDemoSessionIdMock.mockClear();
   window.sessionStorage.clear();
 });
 
@@ -94,5 +106,33 @@ describe('AuthControls sign-out survey callbacks', () => {
     expect(signOutMock).not.toHaveBeenCalled();
     expect(onSignOutStarted).not.toHaveBeenCalled();
     expect(onSignOutComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthControls demo sign-in', () => {
+  it('creates a demo session when manually entered credentials match the demo account', async () => {
+    render(
+      <AuthControls
+        enabled
+        ready
+        user={null}
+        initialEmail=""
+        initialPassword=""
+        demoEmail="demo@example.com"
+        demoPassword="demo-password"
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('이메일'), {
+      target: { value: 'demo@example.com' },
+    });
+    fireEvent.change(screen.getByLabelText('비밀번호'), {
+      target: { value: 'demo-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '로그인' }));
+
+    await waitFor(() => expect(signInWithPasswordMock).toHaveBeenCalledTimes(1));
+    expect(createDemoSessionIdMock).toHaveBeenCalledTimes(1);
+    expect(clearDemoSessionIdMock).not.toHaveBeenCalled();
   });
 });

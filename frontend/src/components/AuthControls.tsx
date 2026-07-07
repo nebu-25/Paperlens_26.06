@@ -12,6 +12,8 @@ interface AuthControlsProps {
   variant?: 'panel' | 'compact';
   initialEmail?: string;
   initialPassword?: string;
+  demoEmail?: string;
+  demoPassword?: string;
   onEnterService?: () => void;
   pendingChanges?: number;
   syncing?: boolean;
@@ -28,6 +30,8 @@ export function AuthControls({
   variant = 'panel',
   initialEmail = '',
   initialPassword = '',
+  demoEmail = '',
+  demoPassword = '',
   onEnterService,
   pendingChanges = 0,
   syncing = false,
@@ -193,10 +197,10 @@ export function AuthControls({
     const credentials = { email: email.trim(), password };
     const shouldUseDemoSession =
       mode === 'sign-in' &&
-      initialEmail &&
-      initialPassword &&
-      credentials.email.toLowerCase() === initialEmail.trim().toLowerCase() &&
-      password === initialPassword;
+      demoEmail &&
+      demoPassword &&
+      credentials.email.toLowerCase() === demoEmail.trim().toLowerCase() &&
+      password === demoPassword;
     if (shouldUseDemoSession) createDemoSessionId();
     const { error } =
       mode === 'sign-in'
