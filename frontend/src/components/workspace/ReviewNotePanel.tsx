@@ -382,7 +382,7 @@ export function ReviewNotePanel() {
                     aria-label={q.label}
                     title={q.label}
                     className="min-h-16 w-full resize-y rounded border border-line p-2 text-sm outline-none focus:border-action"
-                    placeholder="직접 작성하세요."
+                    placeholder={q.placeholder ?? '직접 작성하세요.'}
                     value={purposeAnswers[q.key] ?? ''}
                     onChange={(e) => setPurposeAnswer(q.key, e.target.value)}
                   />

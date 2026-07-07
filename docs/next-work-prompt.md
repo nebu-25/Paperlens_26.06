@@ -45,6 +45,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 원문 패널의 PDF 연결 안내와 원문 텍스트 상태 경고는 기본 접힘 상태의 작은 상태 줄로 표시합니다. 상세 설명, PDF 연결 버튼, OCR 버튼은 사용자가 "상세 보기"를 눌렀을 때만 펼쳐 산만함을 줄입니다.
 - 리뷰 노트의 `읽기 목적과 3단계 읽기` 탭 영역은 접을 수 있게 했습니다. 목적 탭이 화면 상단에서 너무 많은 높이를 차지하지 않도록 정리했습니다.
 - 서비스 워크스페이스의 기본 화면 밀도를 낮추기 위해 업로드 바는 PDF 업로드/샘플 PDF를 먼저 노출하고 DOI/원문 URL 등록은 보조로 접었습니다. 원문 패널의 그림/표 네비게이터와 시그널 스캐너는 추가 탐색 도구로 분리했고, 리뷰 노트의 논문 메타정보/수동 요약/하이라이트/용어 사전은 기본 접힘으로 정리했습니다.
+- T2~T5 목적 질문 입력란은 `직접 작성하세요.` 대신 질문별 안내 placeholder를 표시합니다. T2는 발표 시연 캡처 기준의 문장형 안내를 넣었고, T3/T4/T5도 방법론·비판·결과 비교 목적에 맞춘 칸 안쪽 작성 가이드를 제공합니다.
 - 업로드/샘플 PDF의 성공·안내 알림은 자동으로 사라집니다. 오류·경고는 사용자가 확인할 수 있도록 유지합니다.
 - 브라우저 웹 번역은 React가 관리하는 원문/하이라이트 DOM과 충돌할 수 있어, 하이라이트 가능한 원문 영역은 `notranslate`/`translate="no"`로 보호합니다.
 - 웹 번역 DOM 충돌 방어용 DOM mutation guard와 화면 복구용 ErrorBoundary가 들어가 있습니다.
@@ -85,6 +86,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 2026-07-07에 빠른 노트/데모 세션 로딩 UX를 2차 개선했습니다. `useReviewPersistence`가 복원 단계와 누적 경과 시간을 store로 제공하고, `WorkspaceLoadingState`가 단계·초 단위 경과·10초 이상 지연 안내를 표시합니다. 운영 공개 smoke는 `python3 backend/scripts/smoke_deployment.py` 기준 2.6초에 통과했습니다(public endpoints only). 로컬에 demo secret이 없어 인증 demo 세션 실측은 GitHub Actions Production smoke에서 확인해야 합니다. `cd frontend && npm run build`, `cd frontend && npm run lint`를 통과했습니다.
 - 2026-07-07에 PDF 추출 품질 회귀 테스트를 확대했습니다. `backend/tests/test_pdf_extraction_regression.py`를 추가해 동적 PDF bytes 기반 통합 경로에서 상단 front matter+하단 2단 본문 읽기 순서, 글자 단위 front matter 보정, 빈 PDF failed 품질 상태를 검증합니다. `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q` 기준 113 passed입니다.
 - 2026-07-07에 리뷰 노트의 목적 탭 영역을 접을 수 있게 했습니다. `읽기 목적과 3단계 읽기` 카드가 `SectionCard` 접기 동작을 사용하도록 바꿨고, `frontend/src/components/SectionCard.test.tsx`로 헤더 클릭 시 children 토글을 검증합니다. `cd frontend && npm run build`, `cd frontend && npm run lint`, `cd frontend && npm test -- --run src/components/SectionCard.test.tsx`를 통과했습니다.
+- 2026-07-08에 T2~T5 목적 질문 작성란 placeholder를 질문별 안내 문구로 교체했습니다. `frontend/src/lib/templates.ts`의 `PurposeQuestion.placeholder`를 `ReviewNotePanel` textarea에 연결했고, `cd frontend && npm run build`, `cd frontend && npm run lint`를 통과했습니다.
 - 2026-07-07에 데모 로그인 직후 빠른 테스트 문서 로드가 오래 걸리고 샘플 PDF가 이어서 실패하는 현상을 분석했습니다. 1차 개선으로 데모 seed bulk copy, 데모 cleanup rate limit, 초기 health 비차단화, `/notes` 30초 대기, 샘플 PDF 단계별 timeout을 적용했습니다. 배포 후 Network 탭에서 `/api/notes`, `/api/papers/sample-pdf`, `/api/papers/extract-text` 시간을 분리해 확인했습니다.
 - 2026-07-06에 모달 크기/폰트 변경 이후 최신 배포가 반영되지 않던 원인은 코드 빌드 실패가 아니라 GitHub Pages deploy job 실패였습니다. `actions/deploy-pages@v5` 갱신 커밋 `e1b886e` 이후 Pages 배포가 성공했고, 설문 프롬프트 커밋 `c1393d5`도 Pages 배포 성공을 확인했습니다.
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.

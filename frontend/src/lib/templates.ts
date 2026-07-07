@@ -17,6 +17,7 @@ export interface PurposeQuestion {
   key: string;
   label: string;
   helper?: string;
+  placeholder?: string;
   // 이 질문과 관련된 하이라이트 라벨. M3의 질문 카드 ↔ 라벨 필터 연동에 사용.
   relatedColors?: HighlightColor[];
 }
@@ -88,23 +89,27 @@ const T2_RELATED: PurposeTemplateDef = {
       key: 'q1',
       label: '이 논문이 내 연구와 어떻게 연결되나?',
       helper: '주제·이론·방법 어느 축에서 내 연구와 만나는지.',
+      placeholder: '관련 하이라이트 버튼을 통해 관련 정보를 따로 모아 확인하며 정리할 수 있습니다.',
       relatedColors: ['yellow'],
     },
     {
       key: 'q2',
       label: '내 논문에서 이 논문을 한 문장으로 소개한다면?',
       helper: '서론에 그대로 옮길 수 있는 한 문장을 미리 써 두세요.',
+      placeholder: '전제 조건이나, 연구 주제 전반으로 존재하는 한계 등 서론에 적힐 적절한 내용을 정리하세요.',
     },
     {
       key: 'q3',
       label: '내 연구와의 차별점은?',
       helper: '이 논문이 하지 않은 것, 내 연구가 새로 하는 것.',
+      placeholder: '연구 대상, 조건, 접근 방식 가운데 내 연구가 새롭게 가져가는 지점을 분리해서 적어 보세요.',
       relatedColors: ['yellow', 'violet'],
     },
     {
       key: 'q4',
       label: '어떤 맥락(전제·비교·반론)에서 인용할 것인가?',
       helper: '하이라이트에 인용 목적을 붙이면 인용 후보 보드에 분류됩니다.',
+      placeholder: '배경 설명용인지, 결과 비교용인지, 반론 제시용인지처럼 실제 문장에 들어갈 인용 맥락을 정리하세요.',
       relatedColors: ['violet'],
     },
   ],
@@ -127,24 +132,28 @@ const T3_METHOD: PurposeTemplateDef = {
       key: 'q1',
       label: '연구 설계는? (대상·표본·조건)',
       helper: '누구/무엇을 대상으로, 어떤 조건에서 수행했는지.',
+      placeholder: '대상, 표본 수, 실험 조건처럼 연구 설계를 다시 재현할 때 먼저 필요한 정보를 정리하세요.',
       relatedColors: ['green'],
     },
     {
       key: 'q2',
       label: '핵심 절차·도구·지표는?',
       helper: '재현에 필요한 구체 절차와 측정 지표.',
+      placeholder: '실험 순서, 사용한 도구, 평가 지표를 단계별로 적어 두면 나중에 같은 흐름으로 옮기기 쉽습니다.',
       relatedColors: ['green'],
     },
     {
       key: 'q3',
       label: '내 상황에 적용 시 바꿔야 할 것은?',
       helper: '내 데이터·환경 기준으로 그대로 쓸 수 없는 부분.',
+      placeholder: '내 데이터, 장비, 참여자 조건에 맞추려면 무엇을 수정해야 하는지 적용 계획 중심으로 적어 보세요.',
       relatedColors: ['green'],
     },
     {
       key: 'q4',
       label: '이 방법의 전제 조건과 취약점은?',
       helper: '이 방법이 성립하기 위한 가정과 깨지기 쉬운 지점.',
+      placeholder: '이 방법이 잘 작동하려면 무엇이 전제되어야 하는지, 어디서 쉽게 흔들리는지 나눠서 적어 보세요.',
       relatedColors: ['green', 'pink'],
     },
   ],
@@ -166,30 +175,35 @@ const T4_CRITICAL: PurposeTemplateDef = {
       key: 'q1',
       label: '저자의 관점/전제는 무엇인가?',
       helper: '문제를 바라보는 프레임, 암묵적 가정을 적어 보세요.',
+      placeholder: '저자가 무엇을 당연하게 전제하는지, 어떤 관점으로 문제를 정의하는지 문장으로 풀어 적어 보세요.',
       relatedColors: ['yellow'],
     },
     {
       key: 'q2',
       label: '저자가 인정한 한계는?',
       helper: 'Discussion/Conclusion에서 저자가 직접 언급한 제한점.',
+      placeholder: 'Discussion이나 Conclusion에서 저자가 스스로 인정한 제한점을 그대로 요약해 두세요.',
       relatedColors: ['pink'],
     },
     {
       key: 'q3',
       label: '저자가 말하지 않은 한계는?',
       helper: '표본 규모, 가정, 일반화 범위 등 본문이 침묵하는 약점.',
+      placeholder: '표본, 데이터, 가정, 일반화 범위처럼 본문이 충분히 설명하지 않은 약점을 직접 적어 보세요.',
       relatedColors: ['pink', 'orange'],
     },
     {
       key: 'q4',
       label: '주장-근거 사슬에서 가장 약한 고리는?',
       helper: '어떤 근거가 무너지면 주장 전체가 흔들리는지.',
+      placeholder: '주장과 근거가 이어지는 흐름에서 가장 설득력이 약한 지점이 어디인지 짚어 보세요.',
       relatedColors: ['violet', 'yellow'],
     },
     {
       key: 'q5',
       label: '결과가 성립하지 않는 조건은?',
       helper: '다른 데이터·환경·전제에서도 같은 결과가 나올지.',
+      placeholder: '데이터나 환경이 바뀌면 이 결과가 유지되지 않을 조건이 무엇인지 가정해서 적어 보세요.',
       relatedColors: ['blue', 'orange'],
     },
   ],
@@ -212,18 +226,21 @@ const T5_RESULTS: PurposeTemplateDef = {
       key: 'q1',
       label: '비교 대상 지표와 값은?',
       helper: '표·그림에서 내 결과와 비교할 수치를 그대로 옮겨 적으세요.',
+      placeholder: '비교할 지표 이름과 수치를 표나 그림에서 바로 옮겨 적고, 어느 조건에서 나온 값인지 함께 남기세요.',
       relatedColors: ['blue'],
     },
     {
       key: 'q2',
       label: '실험 조건이 내 것과 같은가, 다른가?',
       helper: '데이터셋·표본·환경 차이를 기록하세요.',
+      placeholder: '데이터셋, 표본, 실험 환경이 내 연구와 어떻게 같은지 다른지 비교 기준 위주로 정리하세요.',
       relatedColors: ['green', 'blue'],
     },
     {
       key: 'q3',
       label: '직접 비교 가능한가, 보정이 필요한가?',
       helper: '조건 차이 때문에 수치를 그대로 비교할 수 없다면 보정 방법을 적으세요.',
+      placeholder: '조건이 달라 수치를 그대로 비교하기 어렵다면 어떤 보정이나 해석 주의가 필요한지 적어 두세요.',
       relatedColors: ['blue'],
     },
   ],
