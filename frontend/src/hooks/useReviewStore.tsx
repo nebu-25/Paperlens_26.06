@@ -6,6 +6,7 @@ import { apiErrorFromResponse, classifyApiException, throwApiResponseError } fro
 import { citationSuggestionFields } from '../lib/citationDefaults';
 import { buildMarkdown, buildPrintHtml, safeFilename } from '../lib/export';
 import type { ExportOptions } from '../lib/export';
+import { authHeaders as buildAuthHeaders } from '../lib/authHeaders';
 import { collectTags, filterPapers } from '../lib/library';
 import {
   EMPTY_NOTE,
@@ -81,11 +82,13 @@ export function useReviewStore({
   authReady,
   authEnabled,
   userId = null,
+  demoSessionId = null,
 }: {
   accessToken: string | null;
   authReady: boolean;
   authEnabled: boolean;
   userId?: string | null;
+  demoSessionId?: string | null;
 }) {
   // 논문별로 보관: library[id] = 논문, notes[id] = 그 논문의 리뷰 노트
   const [library, setLibrary] = useState<Record<string, Paper>>({});
@@ -155,11 +158,10 @@ export function useReviewStore({
       authReady,
       authEnabled,
       userId,
+      demoSessionId,
     });
 
-  const authHeaders: Record<string, string> = accessToken
-    ? { Authorization: `Bearer ${accessToken}` }
-    : {};
+  const authHeaders: Record<string, string> = buildAuthHeaders(accessToken, demoSessionId);
 
   // ── 활성 논문의 노트만 갱신 ──
   function setNote(updater: (n: ReviewNote) => ReviewNote) {

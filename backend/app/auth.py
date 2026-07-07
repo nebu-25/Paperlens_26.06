@@ -3,8 +3,11 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import time
+from dataclasses import dataclass
 from typing import Annotated
+from uuid import NAMESPACE_URL, UUID, uuid5
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -14,8 +17,21 @@ from app.config import settings
 
 LOCAL_USER_ID = "local"
 FALLBACK_CACHE_TTL_SECONDS = 300
+DEMO_SESSION_HEADER = "X-PaperLens-Demo-Session"
+_DEMO_SESSION_RE = re.compile(r"^[A-Za-z0-9_-]{16,96}$")
 logger = logging.getLogger(__name__)
 _fallback_user_cache: dict[str, tuple[float, dict[str, object]]] = {}
+
+
+@dataclass(frozen=True)
+class UserContext:
+    user_id: str
+    base_user_id: str
+    demo_session_id: str | None = None
+
+    @property
+    def is_demo_session(self) -> bool:
+        return self.demo_session_id is not None
 
 
 def _decode_base64url(value: str) -> bytes:
@@ -147,9 +163,36 @@ def _fetch_supabase_user(token: str) -> dict[str, object]:
     return payload
 
 
-def current_user_id(authorization: Annotated[str | None, Header()] = None) -> str:
+def _demo_user_id(base_user_id: str, demo_session_id: str) -> str:
+    try:
+        namespace = UUID(base_user_id)
+    except ValueError:
+        namespace = NAMESPACE_URL
+    return str(uuid5(namespace, f"paperlens-demo-session:{base_user_id}:{demo_session_id}"))
+
+
+def _validate_demo_session_id(value: str) -> str:
+    session_id = value.strip()
+    if not _DEMO_SESSION_RE.fullmatch(session_id):
+        raise HTTPException(status_code=400, detail="유효하지 않은 데모 세션입니다.")
+    return session_id
+
+
+def _require_demo_account(payload: dict[str, object]) -> None:
+    expected_email = settings.paperlens_demo_email.strip().casefold()
+    if not expected_email:
+        return
+    token_email = str(payload.get("email") or "").strip().casefold()
+    if token_email != expected_email:
+        raise HTTPException(status_code=403, detail="데모 세션은 데모 계정에서만 사용할 수 있습니다.")
+
+
+def current_user_context(
+    authorization: Annotated[str | None, Header()] = None,
+    x_paperlens_demo_session: Annotated[str | None, Header(alias=DEMO_SESSION_HEADER)] = None,
+) -> UserContext:
     if not settings.auth_enabled:
-        return LOCAL_USER_ID
+        return UserContext(user_id=LOCAL_USER_ID, base_user_id=LOCAL_USER_ID)
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
     token = authorization.split(" ", 1)[1].strip()
@@ -159,4 +202,20 @@ def current_user_id(authorization: Annotated[str | None, Header()] = None) -> st
         if exc.status_code != 401 or exc.detail != "지원하지 않는 인증 토큰입니다.":
             raise
         payload = _fetch_supabase_user(token)
-    return str(payload["sub"])
+    base_user_id = str(payload["sub"])
+    if not x_paperlens_demo_session:
+        return UserContext(user_id=base_user_id, base_user_id=base_user_id)
+    _require_demo_account(payload)
+    demo_session_id = _validate_demo_session_id(x_paperlens_demo_session)
+    return UserContext(
+        user_id=_demo_user_id(base_user_id, demo_session_id),
+        base_user_id=base_user_id,
+        demo_session_id=demo_session_id,
+    )
+
+
+def current_user_id(
+    authorization: Annotated[str | None, Header()] = None,
+    x_paperlens_demo_session: Annotated[str | None, Header(alias=DEMO_SESSION_HEADER)] = None,
+) -> str:
+    return current_user_context(authorization, x_paperlens_demo_session).user_id

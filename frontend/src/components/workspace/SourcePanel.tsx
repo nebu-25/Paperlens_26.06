@@ -11,7 +11,7 @@ import { useWorkspace } from './WorkspaceContext';
 type PaperViewMode = 'text' | 'pdf';
 
 export function SourcePanel() {
-  const { store, accessToken } = useWorkspace();
+  const { store, accessToken, demoSessionId } = useWorkspace();
   const {
     paper,
     note,
@@ -576,6 +576,7 @@ export function SourcePanel() {
               title={paper.pdfFilename || paper.title || '저장된 PDF'}
               url={paperPdfUrl}
               accessToken={accessToken}
+              demoSessionId={demoSessionId}
               highlights={note.highlights}
               highlightColor={highlightColor}
               onSelectHighlightColor={setHighlightColor}

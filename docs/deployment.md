@@ -108,6 +108,8 @@ Backend:
 | `SUPABASE_ANON_KEY` | Supabase anon/publishable key. 현재 운영은 `sb_publishable_...` 형식 |
 | `SUPABASE_JWT_SECRET` | FastAPI가 HS256 access token을 직접 검증할 때 쓰는 JWT secret |
 | `SUPABASE_JWT_AUD` | 선택. HS256 토큰 검증 시 요구할 audience(aud). 기본 `authenticated`. 빈 값으로 두면 aud 검사 비활성(비권장) |
+| `PAPERLENS_DEMO_EMAIL` | 선택. 설정하면 `X-PaperLens-Demo-Session` 헤더는 이 데모 계정 토큰에서만 허용 |
+| `DEMO_SESSION_TTL_HOURS` | 선택. 데모 세션 데이터 보관 시간. 기본 24시간 |
 
 Frontend build:
 
@@ -117,6 +119,8 @@ Frontend build:
 | `VITE_SUPABASE_URL` | Supabase 프로젝트 URL |
 | `VITE_SUPABASE_ANON_KEY` | Supabase publishable key. 현재 Supabase 콘솔의 `sb_publishable_...` 값을 사용 |
 | `VITE_DEMO_EMAIL` / `VITE_DEMO_PASSWORD` | 선택. 랜딩 로그인 폼에 데모 계정을 미리 입력. 공개 빌드에 포함되므로 데모 전용 계정만 사용 |
+
+데모 계정으로 로그인하면 프론트가 탭 단위 `demo_session_id`를 만들고, 백엔드는 해당 세션 전용 UUID 사용자 공간에 공용 데모 계정의 샘플 노트를 복사합니다. 따라서 여러 사용자가 같은 데모 계정으로 접속해도 노트·PDF·연구 질문 문서·AI 사용량은 세션별로 분리됩니다. 데모 API 진입 시 `DEMO_SESSION_TTL_HOURS`가 지난 세션 데이터는 자동 정리됩니다.
 
 현재 배포 값 예:
 

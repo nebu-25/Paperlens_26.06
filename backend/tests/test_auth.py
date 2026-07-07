@@ -64,6 +64,54 @@ def test_current_user_id_verifies_supabase_token(monkeypatch):
     assert auth.current_user_id(f"Bearer {token}") == "user-1"
 
 
+def test_current_user_context_derives_demo_session_user(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    monkeypatch.setattr(settings, "paperlens_demo_email", "demo@example.com")
+    token = _token(
+        {
+            "sub": "11111111-1111-1111-1111-111111111111",
+            "email": "demo@example.com",
+            "exp": int(time.time()) + 60,
+            "aud": "authenticated",
+        }
+    )
+    context = auth.current_user_context(f"Bearer {token}", "demo-session-abc123")
+    assert context.base_user_id == "11111111-1111-1111-1111-111111111111"
+    assert context.user_id != context.base_user_id
+    assert context.demo_session_id == "demo-session-abc123"
+    assert context.is_demo_session is True
+
+
+def test_current_user_context_rejects_demo_session_for_non_demo_account(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    monkeypatch.setattr(settings, "paperlens_demo_email", "demo@example.com")
+    token = _token(
+        {
+            "sub": "11111111-1111-1111-1111-111111111111",
+            "email": "person@example.com",
+            "exp": int(time.time()) + 60,
+            "aud": "authenticated",
+        }
+    )
+    with pytest.raises(HTTPException) as exc:
+        auth.current_user_context(f"Bearer {token}", "demo-session-abc123")
+    assert exc.value.status_code == 403
+
+
+def test_current_user_context_rejects_invalid_demo_session(monkeypatch):
+    monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
+    token = _token(
+        {
+            "sub": "11111111-1111-1111-1111-111111111111",
+            "exp": int(time.time()) + 60,
+            "aud": "authenticated",
+        }
+    )
+    with pytest.raises(HTTPException) as exc:
+        auth.current_user_context(f"Bearer {token}", "bad session")
+    assert exc.value.status_code == 400
+
+
 def test_current_user_id_rejects_wrong_audience(monkeypatch):
     monkeypatch.setattr(settings, "supabase_jwt_secret", "secret")
     token = _token({"sub": "user-1", "exp": int(time.time()) + 60, "aud": "anon"})

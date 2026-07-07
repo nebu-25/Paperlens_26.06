@@ -70,15 +70,29 @@ interface ReviewWorkspaceProps {
   authReady: boolean;
   user: User | null;
   accessToken: string;
+  demoSessionId: string | null;
   requestSurveyPrompt: (reason: SurveyPromptReason) => void;
 }
 
-function ReviewWorkspace({ authEnabled, authReady, user, accessToken, requestSurveyPrompt }: ReviewWorkspaceProps) {
-  const store = useReviewStore({ accessToken, authReady, authEnabled, userId: user?.id ?? null });
+function ReviewWorkspace({
+  authEnabled,
+  authReady,
+  user,
+  accessToken,
+  demoSessionId,
+  requestSurveyPrompt,
+}: ReviewWorkspaceProps) {
+  const store = useReviewStore({
+    accessToken,
+    authReady,
+    authEnabled,
+    userId: user?.id ?? null,
+    demoSessionId,
+  });
   const { paper, mobilePanel, setMobilePanel, setSelection, sidebarCollapsed } = store;
 
   return (
-    <WorkspaceContext.Provider value={{ store, accessToken, requestSurveyPrompt }}>
+    <WorkspaceContext.Provider value={{ store, accessToken, demoSessionId, requestSurveyPrompt }}>
       <main
         className="flex h-screen flex-col overflow-hidden bg-paper text-ink"
         onMouseDown={() => setSelection(null)}
@@ -135,7 +149,7 @@ function ReviewWorkspace({ authEnabled, authReady, user, accessToken, requestSur
 }
 
 function App() {
-  const { authEnabled, authReady, user, accessToken } = useAuthSession();
+  const { authEnabled, authReady, user, accessToken, demoSessionId } = useAuthSession();
   const { route, navigate } = useAppRoute();
   const [surveyPromptReason, setSurveyPromptReason] = useState<SurveyPromptReason | null>(null);
   const initialAuthResolvedRef = useRef(false);
@@ -195,6 +209,7 @@ function App() {
         authReady={authReady}
         user={user}
         accessToken={accessToken ?? ''}
+        demoSessionId={demoSessionId}
         requestSurveyPrompt={requestSurveyPrompt}
       />
       {surveyPromptReason && (

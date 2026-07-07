@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { API_BASE } from '../constants';
 import { classifyApiException, throwApiResponseError } from '../lib/apiErrors';
+import { authHeaders as buildAuthHeaders } from '../lib/authHeaders';
 import {
   clearLegacyLocalReviewCache,
   readLegacyLocalReviewCache,
@@ -23,6 +24,7 @@ interface UseReviewPersistenceArgs {
   authReady: boolean;
   authEnabled: boolean;
   userId: string | null;
+  demoSessionId: string | null;
 }
 
 const SAVE_DEBOUNCE_MS = 5000; // 편집 멈춘 뒤 저장까지 대기(trailing)
@@ -48,7 +50,8 @@ async function fetchWithTimeout(
   }
 }
 
-function localCacheAccountKey(authEnabled: boolean, userId: string | null): string {
+function localCacheAccountKey(authEnabled: boolean, userId: string | null, demoSessionId: string | null): string {
+  if (authEnabled && demoSessionId) return `demo:${userId ?? 'anonymous'}:${demoSessionId}`;
   return authEnabled ? `user:${userId ?? 'anonymous'}` : 'local';
 }
 
@@ -73,6 +76,7 @@ export function useReviewPersistence({
   authReady,
   authEnabled,
   userId,
+  demoSessionId,
 }: UseReviewPersistenceArgs) {
   const [loaded, setLoaded] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -90,7 +94,8 @@ export function useReviewPersistence({
   const textDirtyRef = useRef<Set<string>>(new Set());
   const deletedIdsRef = useRef<Set<string>>(new Set());
   const accessTokenRef = useRef(accessToken);
-  const accountKeyRef = useRef(localCacheAccountKey(authEnabled, userId));
+  const demoSessionIdRef = useRef(demoSessionId);
+  const accountKeyRef = useRef(localCacheAccountKey(authEnabled, userId, demoSessionId));
   const retryDelayMsRef = useRef(10000);
   const nextRetryAtRef = useRef(0);
   const flushInFlightRef = useRef(false);
@@ -102,11 +107,11 @@ export function useReviewPersistence({
   notesRef.current = notes;
   activeIdRef.current = activeId;
   accessTokenRef.current = accessToken;
-  accountKeyRef.current = localCacheAccountKey(authEnabled, userId);
+  demoSessionIdRef.current = demoSessionId;
+  accountKeyRef.current = localCacheAccountKey(authEnabled, userId, demoSessionId);
 
   const authHeaders = useCallback((): Record<string, string> => {
-    const token = accessTokenRef.current;
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return buildAuthHeaders(accessTokenRef.current, demoSessionIdRef.current);
   }, []);
 
   const updatePending = useCallback(() => {
@@ -427,6 +432,7 @@ export function useReviewPersistence({
     setNotes,
     updatePending,
     userId,
+    demoSessionId,
   ]);
 
   useEffect(() => {

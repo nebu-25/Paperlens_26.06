@@ -3,6 +3,7 @@ import { AlertCircle, ArrowRight, LogIn, LogOut, UserCircle } from 'lucide-react
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { clearLegacyLocalReviewCache, clearLocalReviewCache } from '../lib/localReviewCache';
+import { clearDemoSessionId, createDemoSessionId } from '../lib/demoSession';
 
 interface AuthControlsProps {
   enabled: boolean;
@@ -41,6 +42,7 @@ export function AuthControls({
 
   async function completeSignOut() {
     await supabase?.auth.signOut();
+    clearDemoSessionId();
     onSignOutComplete?.();
   }
 
@@ -185,12 +187,25 @@ export function AuthControls({
     setBusy(true);
     setMessage('');
     const credentials = { email: email.trim(), password };
+    const shouldUseDemoSession =
+      mode === 'sign-in' &&
+      initialEmail &&
+      initialPassword &&
+      credentials.email.toLowerCase() === initialEmail.trim().toLowerCase() &&
+      password === initialPassword;
+    if (shouldUseDemoSession) createDemoSessionId();
     const { error } =
       mode === 'sign-in'
         ? await supabase.auth.signInWithPassword(credentials)
         : await supabase.auth.signUp(credentials);
-    if (error) setMessage(error.message);
-    else if (mode === 'sign-up') setMessage('가입 확인 메일이 발송되었거나 계정이 생성되었습니다.');
+    if (error) {
+      if (shouldUseDemoSession) clearDemoSessionId();
+      setMessage(error.message);
+    } else if (mode === 'sign-up') {
+      setMessage('가입 확인 메일이 발송되었거나 계정이 생성되었습니다.');
+    } else if (!shouldUseDemoSession) {
+      clearDemoSessionId();
+    }
     setBusy(false);
   }
 

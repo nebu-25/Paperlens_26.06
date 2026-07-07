@@ -428,6 +428,31 @@ class PostgreSQLNotesRepository:
             "estimated_cost_cents": int(row["estimated_cost_cents"] or 0),
         }
 
+    def list_demo_session_users(self) -> list[dict[str, str]]:
+        with self.connect() as conn:
+            rows = conn.execute("SELECT user_id, doc FROM research_docs").fetchall()
+        result: list[dict[str, str]] = []
+        for row in rows:
+            doc = row.get("doc") or {}
+            if not isinstance(doc, dict) or not doc.get("demoSessionInitialized"):
+                continue
+            result.append(
+                {"user_id": str(row["user_id"]), "expires_at": str(doc.get("demoExpiresAt") or "")}
+            )
+        return result
+
+    def delete_user_data(self, user_id: str) -> None:
+        with self.connect() as conn:
+            for table in (
+                "paper_files",
+                "paper_texts",
+                "review_notes",
+                "paper_metadata",
+                "research_docs",
+                "ai_usage_events",
+            ):
+                conn.execute(f"DELETE FROM {table} WHERE user_id = %s", (user_id,))
+
     def _paper_params(self, user_id: str, note_id: str, paper: dict[str, object], now: str, jsonb) -> dict[str, object]:
         return {
             "id": note_id,

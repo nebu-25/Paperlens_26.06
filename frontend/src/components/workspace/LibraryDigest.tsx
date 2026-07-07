@@ -14,6 +14,7 @@ import {
 import type { AggregateFilter } from '../../lib/aggregate';
 import { safeFilename } from '../../lib/export';
 import { highlightStyle } from '../../lib/format';
+import { authHeaders as buildAuthHeaders } from '../../lib/authHeaders';
 import {
   EXPANSION_QUESTIONS,
   RESEARCH_FRAMES,
@@ -29,9 +30,9 @@ import { useWorkspace } from './WorkspaceContext';
 // 프로젝트 문서 저장 키 (MVP: localStorage, §13 데이터 모델)
 export const RESEARCH_DOC_STORAGE_KEY = 'paperlens:research:v1';
 
-function loadResearchDoc(): ResearchQuestionDoc {
+function loadResearchDoc(storageKey: string): ResearchQuestionDoc {
   try {
-    const raw = window.localStorage.getItem(RESEARCH_DOC_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     return normalizeResearchDoc(raw ? JSON.parse(raw) : null);
   } catch {
     return normalizeResearchDoc(null);
@@ -58,8 +59,11 @@ const SYNC_LABEL: Record<SyncState, string> = {
 };
 
 export function LibraryDigest({ onClose }: { onClose: () => void }) {
-  const { store, accessToken, requestSurveyPrompt } = useWorkspace();
+  const { store, accessToken, demoSessionId, requestSurveyPrompt } = useWorkspace();
   const { library, notes, openAggregatedItem } = store;
+  const storageKey = demoSessionId
+    ? `${RESEARCH_DOC_STORAGE_KEY}:demo:${demoSessionId}`
+    : RESEARCH_DOC_STORAGE_KEY;
   // 역링크: 오버레이를 닫고 해당 논문/하이라이트로 이동
   const jumpToItem = (paperId: string, itemId: string) => {
     openAggregatedItem(paperId, itemId);
@@ -67,16 +71,15 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
   };
   const [tab, setTab] = useState<DigestTab>('aggregate');
   const [filter, setFilter] = useState<AggregateFilter>(AGGREGATE_ALL);
-  const [doc, setDoc] = useState<ResearchQuestionDoc>(() => loadResearchDoc());
+  const [doc, setDoc] = useState<ResearchQuestionDoc>(() => loadResearchDoc(storageKey));
   const [expansionOpen, setExpansionOpen] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>('idle');
   // 사용자가 수정한 뒤에만 서버 PUT을 보낸다 (초기 로드/서버 복원은 dirty 아님)
   const dirtyRef = useRef(false);
-  const authHeaders = useMemo<Record<string, string>>(() => {
-    const headers: Record<string, string> = {};
-    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-    return headers;
-  }, [accessToken]);
+  const authHeaders = useMemo<Record<string, string>>(
+    () => buildAuthHeaders(accessToken, demoSessionId),
+    [accessToken, demoSessionId],
+  );
 
   // 사용자 수정 진입점: updatedAt 갱신 + dirty 표시 (last-write-wins 재료)
   const updateDoc = (mutate: (current: ResearchQuestionDoc) => ResearchQuestionDoc) => {
@@ -112,7 +115,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
   // 변경 시 localStorage 즉시 저장(오프라인 캐시) + 서버 PUT은 debounce.
   useEffect(() => {
     try {
-      window.localStorage.setItem(RESEARCH_DOC_STORAGE_KEY, JSON.stringify(doc));
+      window.localStorage.setItem(storageKey, JSON.stringify(doc));
     } catch {
       /* 저장 실패는 조용히 무시 — 다음 변경에서 재시도 */
     }
@@ -137,7 +140,7 @@ export function LibraryDigest({ onClose }: { onClose: () => void }) {
     }, 1200);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc]);
+  }, [doc, storageKey]);
 
   const allItems = useMemo(() => aggregateLibrary(library, notes), [library, notes]);
   const items = useMemo(() => filterAggregated(allItems, filter), [allItems, filter]);

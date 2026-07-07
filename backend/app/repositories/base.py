@@ -40,3 +40,9 @@ class NotesRepository(Protocol):
 
     def get_ai_usage_totals(self, user_id: str, since: str) -> dict[str, int]:
         ...
+
+    def list_demo_session_users(self) -> list[dict[str, str]]:
+        ...
+
+    def delete_user_data(self, user_id: str) -> None:
+        ...

@@ -168,7 +168,7 @@ python3 backend/scripts/smoke_deployment.py
 
 ## Demo Account Reset
 
-예비 사용자를 위한 공용 데모 계정은 세션 단위로 지우지 않고, 매일 04:00 KST에 기본 샘플 노트 상태로 되돌립니다. 리셋은 데모 계정의 모든 노트를 삭제한 뒤 `demo-paperlens-quickstart` 샘플 노트 1개를 다시 저장하고, 하이라이트 오프셋이 원문 텍스트와 일치하는지 검증합니다.
+예비 사용자를 위한 공용 데모 계정은 매일 04:00 KST에 기본 샘플 노트 상태로 되돌립니다. 사용자가 데모 계정으로 로그인하면 브라우저 탭 단위 `demo_session_id`가 생성되고, 백엔드는 공용 데모 계정의 현재 샘플 노트를 세션 전용 사용자 공간으로 복사합니다. 데모 API 진입 시 `DEMO_SESSION_TTL_HOURS`가 지난 세션 데이터는 자동 정리됩니다. 리셋은 원본 데모 계정의 모든 노트를 삭제한 뒤 `demo-paperlens-quickstart` 빠른 체험 노트와 `demo-paperlens-sample-pdf` 샘플 PDF 노트를 다시 저장하고, 빠른 체험 노트의 하이라이트 오프셋이 원문 텍스트와 일치하는지 검증합니다.
 
 필요한 GitHub repository secrets:
 

@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # 검증 시 요구할 audience(aud) 클레임. Supabase 로그인 토큰은 기본적으로 "authenticated".
     # 빈 값으로 두면 aud 검사를 비활성화한다(권장하지 않음).
     supabase_jwt_aud: str = "authenticated"
+    # 공용 데모 계정 이메일. 설정하면 데모 세션 헤더는 이 계정 토큰에서만 허용한다.
+    paperlens_demo_email: str = ""
+    # 데모 세션 데이터 보관 시간. 데모 API 진입 시 만료된 세션 데이터를 정리한다.
+    demo_session_ttl_hours: int = 24
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

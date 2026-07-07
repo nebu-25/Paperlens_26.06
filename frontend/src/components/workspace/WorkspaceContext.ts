@@ -6,6 +6,7 @@ import type { SurveyPromptReason } from '../../lib/surveyPrompt';
 export interface WorkspaceContextValue {
   store: ReviewStore;
   accessToken: string;
+  demoSessionId: string | null;
   requestSurveyPrompt: (reason: SurveyPromptReason) => void;
 }
 

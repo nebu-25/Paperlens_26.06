@@ -1,8 +1,11 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from app import db
-from app.auth import current_user_id
+from app.auth import UserContext, current_user_context, current_user_id
+from app.config import settings
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -32,10 +35,38 @@ class NoteIn(BaseModel):
     note: dict = Field(default_factory=dict)
 
 
+def _ensure_demo_session_seeded(context: UserContext) -> None:
+    if not context.is_demo_session or not context.demo_session_id:
+        return
+    db.delete_expired_demo_sessions()
+    marker = db.get_research_doc(context.user_id)
+    doc = marker.get("doc") if marker else None
+    if isinstance(doc, dict) and doc.get("demoSessionInitialized"):
+        return
+    now = datetime.now(timezone.utc)
+    ttl_hours = max(1, settings.demo_session_ttl_hours)
+    db.copy_notes_for_demo_session(
+        context.base_user_id,
+        context.user_id,
+        context.demo_session_id,
+    )
+    db.put_research_doc(
+        context.user_id,
+        {
+            "demoSessionInitialized": True,
+            "demoBaseUserId": context.base_user_id,
+            "demoSessionId": context.demo_session_id,
+            "demoCreatedAt": now.isoformat(),
+            "demoExpiresAt": (now + timedelta(hours=ttl_hours)).isoformat(),
+        },
+    )
+
+
 @router.get("")
-def list_notes(user_id: str = Depends(current_user_id)) -> dict[str, object]:
+def list_notes(context: UserContext = Depends(current_user_context)) -> dict[str, object]:
     """저장된 모든 노트를 { library, notes } 형태로 반환 (사이드바·복원용)."""
-    return db.list_notes(user_id)
+    _ensure_demo_session_seeded(context)
+    return db.list_notes(context.user_id)
 
 
 @router.get("/{note_id}")

@@ -19,6 +19,7 @@ import type {
 } from 'pdfjs-dist/types/src/display/api';
 import type { TextLayer } from 'pdfjs-dist/types/src/display/text_layer';
 import { HIGHLIGHT_COLORS } from '../../constants';
+import { authHeaders } from '../../lib/authHeaders';
 import { isChunkLoadError } from '../../lib/chunkLoad';
 import type { Highlight, HighlightColor } from '../../types';
 import { bandIndexOf, isHorizontalRect, mergeColumnBands, type XSpan } from './pdfHighlightColumns';
@@ -66,6 +67,7 @@ interface PdfViewerProps {
   title: string;
   url: string;
   accessToken: string | null;
+  demoSessionId: string | null;
   highlights: Highlight[];
   highlightColor: HighlightColor;
   onSelectHighlightColor: (color: HighlightColor) => void;
@@ -241,6 +243,7 @@ export function PdfViewer({
   title,
   url,
   accessToken,
+  demoSessionId,
   highlights,
   highlightColor,
   onSelectHighlightColor,
@@ -321,7 +324,7 @@ export function PdfViewer({
     (async () => {
       try {
         const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: authHeaders(accessToken, demoSessionId),
         });
         if (!res.ok) {
           if (!cancelled) {
@@ -364,7 +367,7 @@ export function PdfViewer({
         void loadingTask?.destroy();
       }
     };
-  }, [accessToken, reloadKey, url]);
+  }, [accessToken, demoSessionId, reloadKey, url]);
 
   useEffect(() => {
     if (!document || !canvasRef.current) return;

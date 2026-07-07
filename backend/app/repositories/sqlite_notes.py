@@ -494,6 +494,41 @@ class SQLiteNotesRepository:
             "estimated_cost_cents": int(row["estimated_cost_cents"] or 0),
         }
 
+    def list_demo_session_users(self) -> list[dict[str, str]]:
+        conn = self.connect()
+        try:
+            rows = conn.execute("SELECT user_id, doc FROM research_docs").fetchall()
+        finally:
+            conn.close()
+        result: list[dict[str, str]] = []
+        for row in rows:
+            try:
+                doc = json.loads(row["doc"] or "{}")
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(doc, dict) or not doc.get("demoSessionInitialized"):
+                continue
+            result.append(
+                {"user_id": str(row["user_id"]), "expires_at": str(doc.get("demoExpiresAt") or "")}
+            )
+        return result
+
+    def delete_user_data(self, user_id: str) -> None:
+        conn = self.connect()
+        try:
+            for table in (
+                "paper_files",
+                "paper_texts",
+                "review_notes",
+                "paper_metadata",
+                "research_docs",
+                "ai_usage_events",
+            ):
+                conn.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+            conn.commit()
+        finally:
+            conn.close()
+
     def _paper_params(
         self,
         user_id: str,
