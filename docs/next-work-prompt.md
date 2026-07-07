@@ -26,6 +26,8 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - /api/diagnostics는 비밀값 없이 Auth/DB/AI 설정 상태를 반환합니다.
 - Pages workflow는 VITE_API_BASE_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY 형식을 검증합니다.
 - Pages workflow는 `frontend/**` 또는 `.github/workflows/deploy-pages.yml` 변경 때 자동 실행되며, 문서만 변경한 push에서는 자동 Pages 배포를 건너뜁니다.
+- Production smoke는 Pages HTML이 참조하는 JS/CSS asset 200 여부까지 확인합니다.
+- Production smoke는 demo 계정 secret이 있을 때 demo session seed의 quickstart/sample PDF 노트 복원, 샘플 PDF 실제 다운로드, `/api/papers/extract-text` 인증 추출, `/api/papers/{id}/pdf` 저장 PDF 재조회까지 검증합니다. smoke가 만든 임시 샘플 노트는 삭제합니다.
 - 샘플 PDF 버튼은 먼저 /api/health로 Render 백엔드를 깨운 뒤 sample-pdf를 호출하고, 진행 단계/취소/재시도를 표시합니다.
 - 샘플 PDF 흐름은 단계별 timeout을 둡니다. `/api/health` 10초, `/api/papers/sample-pdf` 30초, `/api/papers/extract-text` 90초이며, 사용자가 누른 취소와 서버 지연 실패를 구분해 안내합니다.
 - 샘플 PDF는 `sample:paperlens` sourceKey로 중복 등록을 막고, 데모 세션 seed의 `demo-session:demo-paperlens-sample-pdf`도 같은 샘플로 인식합니다. 실제 샘플 파일명은 `2604.04977v1.pdf`로 맞춥니다.
@@ -76,6 +78,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 같은 운영 확인에서 이미 데모 세션에 샘플 PDF seed가 있는데도 샘플 PDF 버튼이 새 샘플 노트를 하나 더 만드는 문제가 발견됐습니다. 프론트 중복 감지를 `sample:paperlens`와 `demo-session:demo-paperlens-sample-pdf` 모두 인식하도록 수정했으며, 다음 배포 후 샘플 PDF 버튼 재클릭 시 기존 샘플 리뷰 노트가 열리는지 확인해야 합니다.
 - 2026-07-07에 로그인 후 서비스 화면 공백기와 파일 로드 후 알림 과다 문제를 1차 개선했습니다. `loaded=false` 상태에서는 skeleton 준비 화면을 보여 주고, 업로드 info/success 알림은 자동 숨김 처리하며, 원문 PDF/추출 품질 안내는 접힌 상태 줄로 축소했습니다.
 - 2026-07-07에 빠른 노트 불러오기 skeleton 화면의 본문 비율을 기존 워크스페이스와 맞췄습니다. 원문/리뷰 패널 skeleton을 실제 작업 화면과 같은 `xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.8fr)]`로 배치했고, `cd frontend && npm run build`, `cd frontend && npm run lint`를 통과했습니다.
+- 2026-07-07에 Production smoke 자동화 범위를 확장했습니다. Pages asset 200 확인, demo session quickstart/sample seed 확인, 샘플 PDF GET, 인증된 PDF 추출, 저장 PDF 재조회, smoke 임시 노트 삭제를 `backend/scripts/smoke_deployment.py`에 추가했고 workflow timeout을 10분으로 늘렸습니다.
 - 2026-07-07에 데모 로그인 직후 빠른 테스트 문서 로드가 오래 걸리고 샘플 PDF가 이어서 실패하는 현상을 분석했습니다. 1차 개선으로 데모 seed bulk copy, 데모 cleanup rate limit, 초기 health 비차단화, `/notes` 30초 대기, 샘플 PDF 단계별 timeout을 적용했습니다. 배포 후 Network 탭에서 `/api/notes`, `/api/papers/sample-pdf`, `/api/papers/extract-text` 시간을 분리해 확인했습니다.
 - 2026-07-06에 모달 크기/폰트 변경 이후 최신 배포가 반영되지 않던 원인은 코드 빌드 실패가 아니라 GitHub Pages deploy job 실패였습니다. `actions/deploy-pages@v5` 갱신 커밋 `e1b886e` 이후 Pages 배포가 성공했고, 설문 프롬프트 커밋 `c1393d5`도 Pages 배포 성공을 확인했습니다.
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
@@ -108,6 +111,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 2. 배포 후 운영 수동 smoke test
    - 이번 로컬 수정(데모 seed 샘플 PDF 중복 방지)을 커밋/푸시한 뒤 GitHub Pages가 최신 JS 번들을 가리키는지 확인
    - Pages deploy job이 `actions/deploy-pages@v5`로 성공하는지 확인
+   - Production smoke workflow가 확장된 demo 샘플 PDF 추출/PDF 재조회 단계까지 성공하는지 확인
    - Render가 최신 백엔드로 재배포됐는지 확인
    - /api/diagnostics 운영 응답에서 `auth.mode: supabase`, `auth.ready: true`, `auth.warnings: []` 확인
    - 실제 로그인 후 /api/notes 200 여부 확인

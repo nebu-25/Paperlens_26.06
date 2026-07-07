@@ -19,6 +19,7 @@ import secrets
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
@@ -27,7 +28,9 @@ from typing import Any
 DEFAULT_FRONTEND_BASE_URL = "https://nebu-25.github.io/Paperlens_26.06"
 DEFAULT_API_BASE_URL = "https://paperlens-backend-53ki.onrender.com"
 DEMO_QUICKSTART_NOTE_ID = "demo-paperlens-quickstart"
+DEMO_SAMPLE_NOTE_ID = "demo-paperlens-sample-pdf"
 DEMO_QUICKSTART_SOURCE_KEY = f"demo-session:{DEMO_QUICKSTART_NOTE_ID}"
+DEMO_SAMPLE_SOURCE_KEY = f"demo-session:{DEMO_SAMPLE_NOTE_ID}"
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,35 @@ def _request(
             body=exc.read(),
             url=url,
         )
+
+
+def _multipart_form_data(fields: dict[str, str], files: dict[str, tuple[str, bytes, str]]) -> tuple[bytes, str]:
+    boundary = f"----paperlens-smoke-{secrets.token_hex(12)}"
+    chunks: list[bytes] = []
+    for name, value in fields.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"),
+                value.encode("utf-8"),
+                b"\r\n",
+            ]
+        )
+    for name, (filename, content, content_type) in files.items():
+        chunks.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                (
+                    f'Content-Disposition: form-data; name="{name}"; '
+                    f'filename="{filename}"\r\n'
+                ).encode("utf-8"),
+                f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"),
+                content,
+                b"\r\n",
+            ]
+        )
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
 
 def _assert(condition: bool, message: str) -> None:
@@ -118,6 +150,30 @@ def _check_pages(frontend_base: str) -> None:
         "image/svg+xml" in favicon.headers.get("content-type", ""),
         f"favicon content-type expected image/svg+xml, got {favicon.headers.get('content-type', '')}",
     )
+
+    service_html = _request("GET", f"{frontend_base}/service_home/")
+    _assert(service_html.status == 200, f"service_home HTML expected 200, got {service_html.status}")
+    html = service_html.body.decode("utf-8", errors="replace")
+    asset_paths = set()
+    for marker in ('src="', 'href="'):
+        start = 0
+        while True:
+            index = html.find(marker, start)
+            if index == -1:
+                break
+            value_start = index + len(marker)
+            value_end = html.find('"', value_start)
+            if value_end == -1:
+                break
+            path = html[value_start:value_end]
+            if "/assets/" in path and (path.endswith(".js") or path.endswith(".css")):
+                asset_paths.add(path)
+            start = value_end + 1
+    _assert(asset_paths, "service_home HTML did not reference JS/CSS assets")
+    for path in sorted(asset_paths):
+        asset_url = urllib.parse.urljoin(f"{frontend_base}/service_home/", path)
+        asset = _request("HEAD", asset_url)
+        _assert(asset.status == 200, f"frontend asset expected 200 for {asset_url}, got {asset.status}")
 
 
 def _check_api(api_base: str, *, require_ai_ready: bool) -> None:
@@ -202,13 +258,14 @@ def _check_authenticated_api(api_base: str, access_token: str) -> None:
 
 def _check_demo_session_api(api_base: str, access_token: str) -> None:
     demo_session_id = secrets.token_urlsafe(24)
+    auth_headers = {
+        "Authorization": f"Bearer {access_token}",
+        "X-PaperLens-Demo-Session": demo_session_id,
+    }
     notes = _request(
         "GET",
         f"{api_base}/api/notes",
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "X-PaperLens-Demo-Session": demo_session_id,
-        },
+        headers=auth_headers,
     )
     _assert(notes.status == 200, f"demo session notes expected 200, got {notes.status}")
     notes_body = notes.json()
@@ -225,6 +282,63 @@ def _check_demo_session_api(api_base: str, access_token: str) -> None:
         any(note_id in notes_map for note_id in quickstart_ids),
         f"demo session missing quickstart note with sourceKey {DEMO_QUICKSTART_SOURCE_KEY}",
     )
+    sample_ids = [
+        note_id
+        for note_id, paper in library.items()
+        if isinstance(paper, dict) and paper.get("sourceKey") == DEMO_SAMPLE_SOURCE_KEY
+    ]
+    _assert(
+        any(note_id in notes_map for note_id in sample_ids),
+        f"demo session missing sample note with sourceKey {DEMO_SAMPLE_SOURCE_KEY}",
+    )
+    _check_sample_pdf_extract_flow(api_base, auth_headers)
+
+
+def _check_sample_pdf_extract_flow(api_base: str, auth_headers: dict[str, str]) -> None:
+    sample = _request("GET", f"{api_base}/api/papers/sample-pdf", timeout=45)
+    _assert(sample.status == 200, f"sample PDF GET expected 200, got {sample.status}")
+    _assert(sample.body.startswith(b"%PDF"), "sample PDF response did not start with %PDF")
+    _assert(len(sample.body) > 10_000, f"sample PDF expected >10KB, got {len(sample.body)} bytes")
+
+    smoke_paper_id = f"smoke-sample-{secrets.token_hex(8)}"
+    body, content_type = _multipart_form_data(
+        {"paper_id": smoke_paper_id},
+        {"file": ("2604.04977v1.pdf", sample.body, "application/pdf")},
+    )
+    extract = _request(
+        "POST",
+        f"{api_base}/api/papers/extract-text",
+        data=body,
+        headers={**auth_headers, "Content-Type": content_type},
+        timeout=120,
+    )
+    try:
+        _assert(
+            extract.status == 200,
+            f"sample PDF extract expected 200, got {extract.status}: {_response_message(extract)}",
+        )
+        extract_body = extract.json()
+        _assert(extract_body.get("pdf_url") == f"/api/papers/{smoke_paper_id}/pdf", "extract response missing pdf_url")
+        _assert(extract_body.get("pdf_filename") == "2604.04977v1.pdf", "extract response missing sample filename")
+        text = extract_body.get("text")
+        _assert(isinstance(text, str) and len(text) > 1000, "extract response text was unexpectedly short")
+        quality = extract_body.get("extraction_quality") or {}
+        _assert(isinstance(quality, dict), "extract response missing extraction_quality object")
+
+        stored_pdf = _request(
+            "GET",
+            f"{api_base}/api/papers/{smoke_paper_id}/pdf",
+            headers=auth_headers,
+            timeout=45,
+        )
+        _assert(stored_pdf.status == 200, f"stored sample PDF expected 200, got {stored_pdf.status}")
+        _assert(
+            "application/pdf" in stored_pdf.headers.get("content-type", ""),
+            f"stored sample PDF content-type expected application/pdf, got {stored_pdf.headers.get('content-type', '')}",
+        )
+        _assert(stored_pdf.body.startswith(b"%PDF"), "stored sample PDF did not start with %PDF")
+    finally:
+        _request("DELETE", f"{api_base}/api/notes/{smoke_paper_id}", headers=auth_headers)
 
 
 def main() -> int:

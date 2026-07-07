@@ -129,6 +129,7 @@ python3 backend/scripts/smoke_deployment.py
 - GitHub Pages 루트가 200을 반환한다.
 - `/service_home` 직접 접근이 `/service_home/`로 301 redirect된 뒤 200을 반환한다.
 - `/service_home/`가 200을 반환한다.
+- `/service_home/` HTML이 참조하는 JS/CSS asset이 200을 반환한다.
 - `favicon.svg`가 200과 `image/svg+xml`을 반환한다.
 - Render `/api/health`가 `{"status":"ok"}`를 반환한다.
 - Render `/api/diagnostics`가 비밀값 없이 Auth/DB/AI 설정 상태를 반환하고, 운영 Auth가 `mode: supabase`, `ready: true`로 표시된다.
@@ -136,6 +137,8 @@ python3 backend/scripts/smoke_deployment.py
 - 미인증 `/api/notes`가 401과 로그인 필요 메시지를 반환한다.
 - `/api/papers/sample-pdf` HEAD 요청이 200, `application/pdf`, PDF 파일명을 반환한다.
 - mock 계정 secret이 설정되어 있으면 Supabase password login이 성공하고 인증된 `/api/notes`가 200 및 `{ library, notes }` 객체를 반환한다.
+- demo 계정 secret이 설정되어 있으면 demo session seed 후 quickstart 노트와 sample PDF seed 노트가 모두 복원된다.
+- demo 계정 secret이 설정되어 있으면 샘플 PDF를 실제 GET으로 다운로드하고, 인증된 `/api/papers/extract-text`로 텍스트 추출과 PDF 저장을 확인한 뒤 `/api/papers/{id}/pdf`가 저장 PDF를 반환하는지 검증한다. smoke가 만든 임시 노트는 마지막에 삭제한다.
 
 로그인 세션 필요:
 
