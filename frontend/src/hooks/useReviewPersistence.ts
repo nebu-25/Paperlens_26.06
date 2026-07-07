@@ -30,6 +30,8 @@ interface UseReviewPersistenceArgs {
 const SAVE_DEBOUNCE_MS = 5000; // 편집 멈춘 뒤 저장까지 대기(trailing)
 const SAVE_MAX_WAIT_MS = 10000; // 연속 편집 중 강제 저장 상한(maxWait)
 
+export type RestorePhase = 'idle' | 'local-cache' | 'warming' | 'remote-notes' | 'ready' | 'offline';
+
 // 첫 미저장 변경 이후 경과 시간으로 다음 저장까지 대기 시간을 계산한다.
 // 편집이 멈추면 trailing(5초), 쉬지 않고 편집하면 maxWait(10초) 내 강제 저장.
 export function nextSaveWaitMs(elapsedSinceFirstDirty: number): number {
@@ -80,6 +82,8 @@ export function useReviewPersistence({
 }: UseReviewPersistenceArgs) {
   const [loaded, setLoaded] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [restorePhase, setRestorePhase] = useState<RestorePhase>('idle');
+  const [restoreElapsedSeconds, setRestoreElapsedSeconds] = useState(0);
   const [online, setOnline] = useState(false);
   const [pending, setPending] = useState(0);
   const [syncNotice, setSyncNotice] = useState<AppNotice | null>(null);
@@ -100,6 +104,7 @@ export function useReviewPersistence({
   const nextRetryAtRef = useRef(0);
   const flushInFlightRef = useRef(false);
   const flushPromiseRef = useRef<Promise<boolean> | null>(null);
+  const restoreStartedAtRef = useRef<number | null>(null);
   // 연속 편집 중 debounce가 계속 밀려도 저장을 보장하기 위한 maxWait 기준점.
   // 첫 미저장 변경 시각을 담고, flush 시 null로 초기화한다.
   const dirtySinceRef = useRef<number | null>(null);
@@ -324,6 +329,9 @@ export function useReviewPersistence({
     let activeHint: string | null = null;
     let restoredLocal = false;
     setLoaded(false);
+    restoreStartedAtRef.current = Date.now();
+    setRestorePhase('local-cache');
+    setRestoreElapsedSeconds(0);
 
     const apply = (lib: Record<string, Paper>, rawNotes: Record<string, ReviewNote>) => {
       const deletedIds = deletedIdsRef.current;
@@ -356,12 +364,15 @@ export function useReviewPersistence({
       setSavedAt('로그인 필요');
       setRetryAt(null);
       setRetryCountdown(null);
+      setRestorePhase('idle');
+      restoreStartedAtRef.current = null;
       setLoaded(false);
       return;
     }
 
     (async () => {
       try {
+        setRestorePhase('local-cache');
         const accountKey = accountKeyRef.current;
         const currentSnapshot = await readLocalReviewCache(accountKey);
         const data = currentSnapshot ?? readLegacyLocalReviewCache();
@@ -391,8 +402,10 @@ export function useReviewPersistence({
 
       try {
         if (!restoredLocal) setSavedAt('서버 연결 확인 중');
+        setRestorePhase('warming');
         void fetchWithTimeout(`${API_BASE}/health`, {}, 3000).catch(() => undefined);
         if (!restoredLocal) setSavedAt('목록 동기화 중');
+        setRestorePhase('remote-notes');
         const res = await fetchWithTimeout(`${API_BASE}/notes`, { headers: authHeaders() }, 30000);
         if (!res.ok) await throwApiResponseError(res, '저장된 노트를 불러오지 못했습니다.');
         const data = (await res.json()) as {
@@ -407,14 +420,22 @@ export function useReviewPersistence({
         setRetryAt(null);
         setRetryCountdown(null);
         if (Object.keys(data.library ?? {}).length > 0) setSavedAt('서버에서 불러옴');
+        setRestorePhase('ready');
       } catch (error) {
         if (!cancelled) {
           setOnline(false);
           if (!restoredLocal) setSavedAt('로컬 복원 대기');
+          setRestorePhase('offline');
           setSyncNotice(noticeForSyncError(error));
         }
       } finally {
-        if (!cancelled) setLoaded(true);
+        if (!cancelled) {
+          setLoaded(true);
+          restoreStartedAtRef.current = null;
+          window.setTimeout(() => {
+            if (!cancelled) setRestorePhase('idle');
+          }, 1200);
+        }
       }
     })();
 
@@ -434,6 +455,16 @@ export function useReviewPersistence({
     userId,
     demoSessionId,
   ]);
+
+  useEffect(() => {
+    if (loaded || restorePhase === 'idle') return;
+    const startedAt = restoreStartedAtRef.current ?? Date.now();
+    setRestoreElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    const interval = window.setInterval(() => {
+      setRestoreElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [loaded, restorePhase]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -519,6 +550,8 @@ export function useReviewPersistence({
     loaded,
     savedAt,
     setSavedAt,
+    restorePhase,
+    restoreElapsedSeconds,
     online,
     pending,
     syncing,

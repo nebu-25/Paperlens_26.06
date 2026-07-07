@@ -93,7 +93,17 @@ function ReviewWorkspace({
     userId: user?.id ?? null,
     demoSessionId,
   });
-  const { paper, mobilePanel, setMobilePanel, setSelection, sidebarCollapsed, loaded, savedAt } = store;
+  const {
+    paper,
+    mobilePanel,
+    setMobilePanel,
+    setSelection,
+    sidebarCollapsed,
+    loaded,
+    savedAt,
+    restorePhase,
+    restoreElapsedSeconds,
+  } = store;
 
   return (
     <WorkspaceContext.Provider value={{ store, accessToken, demoSessionId, requestSurveyPrompt }}>
@@ -120,7 +130,12 @@ function ReviewWorkspace({
 
           {/* ── 본문 ── */}
           {!paper && !loaded ? (
-            <WorkspaceLoadingState demoSessionId={demoSessionId} savedAt={savedAt} />
+            <WorkspaceLoadingState
+              demoSessionId={demoSessionId}
+              savedAt={savedAt}
+              restorePhase={restorePhase}
+              restoreElapsedSeconds={restoreElapsedSeconds}
+            />
           ) : !paper ? (
             <EmptyState />
           ) : (
@@ -163,13 +178,31 @@ function ReviewWorkspace({
 function WorkspaceLoadingState({
   demoSessionId,
   savedAt,
+  restorePhase,
+  restoreElapsedSeconds,
 }: {
   demoSessionId: string | null;
   savedAt: string | null;
+  restorePhase: string;
+  restoreElapsedSeconds: number;
 }) {
   const eyebrow = demoSessionId ? '데모 문서 준비 중' : '리뷰 노트 불러오는 중';
   const title = demoSessionId ? '빠른 테스트 문서를 여는 중입니다' : '저장된 작업을 확인하고 있습니다';
   const status = savedAt || '서버와 로컬 캐시를 확인하고 있습니다.';
+  const slowRestore = restoreElapsedSeconds >= 10;
+  const phaseLabel =
+    restorePhase === 'local-cache'
+      ? '브라우저 캐시 확인'
+      : restorePhase === 'warming'
+        ? '백엔드 준비 확인'
+        : restorePhase === 'remote-notes'
+          ? demoSessionId ? '데모 노트 복원' : '저장된 노트 동기화'
+          : restorePhase === 'offline'
+            ? '로컬 복원 대기'
+            : '작업 준비';
+  const slowMessage = demoSessionId
+    ? '데모 세션을 준비하는 중입니다. Render 무료 플랜 콜드스타트나 샘플 노트 seed 때문에 잠시 더 걸릴 수 있습니다.'
+    : '저장된 노트를 불러오는 중입니다. 서버가 시작 중이면 잠시 더 걸릴 수 있고, 로컬 캐시가 있으면 먼저 표시됩니다.';
 
   return (
     <section className="flex min-h-0 flex-col">
@@ -193,6 +226,19 @@ function WorkspaceLoadingState({
               <p role="status" aria-live="polite" className="mt-3 text-sm leading-6 text-muted">
                 {status}
               </p>
+              <div className="mt-4 grid gap-2 rounded border border-line bg-panel p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold text-ink">{phaseLabel}</span>
+                  <span className="notranslate rounded bg-white px-2 py-1 text-xs text-muted" translate="no">
+                    {restoreElapsedSeconds}s
+                  </span>
+                </div>
+                {slowRestore && (
+                  <p className="text-xs leading-5 text-muted">
+                    {slowMessage}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="space-y-4" aria-hidden="true">
               <div className="h-5 w-3/4 animate-pulse rounded bg-paper" />
