@@ -43,6 +43,7 @@ pytest
 테스트 범위:
 
 - `backend/tests/test_papers.py`: DOI 정규화, CrossRef/arXiv 파싱, 섹션 감지, PDF reflow, 깨진 텍스트 감지, OCR fallback, 한국 논문 저자/소속 휴리스틱, PDF URL SSRF 방어(사설 IP/DNS/redirect 차단)
+- `backend/tests/test_pdf_extraction_regression.py`: 작은 동적 PDF fixture로 실제 PDF bytes → 추출 helper 통합 경로를 검증. 상단 front matter+하단 2단 본문 읽기 순서, 글자 단위로 벌어진 front matter 보정, 빈 PDF의 failed 품질 상태를 확인
 - `backend/tests/test_ai.py`: AI 미설정 응답, 용어 설명 endpoint 503, OpenRouter 응답 파싱, 사용자별 레이트리밋(429/Retry-After·사용자 격리)
 - `backend/tests/test_auth.py`: Supabase JWT 검증(서명·exp·sub·`aud`·`iss`), `/auth/v1/user` fallback과 캐시
 - `backend/tests/test_diagnostics.py`: 진단 endpoint

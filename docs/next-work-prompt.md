@@ -81,6 +81,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 2026-07-07에 빠른 노트 불러오기 skeleton 화면의 본문 비율을 기존 워크스페이스와 맞췄습니다. 원문/리뷰 패널 skeleton을 실제 작업 화면과 같은 `xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.8fr)]`로 배치했고, `cd frontend && npm run build`, `cd frontend && npm run lint`를 통과했습니다.
 - 2026-07-07에 Production smoke 자동화 범위를 확장했습니다. Pages asset 200 확인, demo session quickstart/sample seed 확인, 샘플 PDF GET, 인증된 PDF 추출, 저장 PDF 재조회, smoke 임시 노트 삭제를 `backend/scripts/smoke_deployment.py`에 추가했고 workflow timeout을 10분으로 늘렸습니다.
 - 2026-07-07에 빠른 노트/데모 세션 로딩 UX를 2차 개선했습니다. `useReviewPersistence`가 복원 단계와 누적 경과 시간을 store로 제공하고, `WorkspaceLoadingState`가 단계·초 단위 경과·10초 이상 지연 안내를 표시합니다. 운영 공개 smoke는 `python3 backend/scripts/smoke_deployment.py` 기준 2.6초에 통과했습니다(public endpoints only). 로컬에 demo secret이 없어 인증 demo 세션 실측은 GitHub Actions Production smoke에서 확인해야 합니다. `cd frontend && npm run build`, `cd frontend && npm run lint`를 통과했습니다.
+- 2026-07-07에 PDF 추출 품질 회귀 테스트를 확대했습니다. `backend/tests/test_pdf_extraction_regression.py`를 추가해 동적 PDF bytes 기반 통합 경로에서 상단 front matter+하단 2단 본문 읽기 순서, 글자 단위 front matter 보정, 빈 PDF failed 품질 상태를 검증합니다. `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q` 기준 113 passed입니다.
 - 2026-07-07에 데모 로그인 직후 빠른 테스트 문서 로드가 오래 걸리고 샘플 PDF가 이어서 실패하는 현상을 분석했습니다. 1차 개선으로 데모 seed bulk copy, 데모 cleanup rate limit, 초기 health 비차단화, `/notes` 30초 대기, 샘플 PDF 단계별 timeout을 적용했습니다. 배포 후 Network 탭에서 `/api/notes`, `/api/papers/sample-pdf`, `/api/papers/extract-text` 시간을 분리해 확인했습니다.
 - 2026-07-06에 모달 크기/폰트 변경 이후 최신 배포가 반영되지 않던 원인은 코드 빌드 실패가 아니라 GitHub Pages deploy job 실패였습니다. `actions/deploy-pages@v5` 갱신 커밋 `e1b886e` 이후 Pages 배포가 성공했고, 설문 프롬프트 커밋 `c1393d5`도 Pages 배포 성공을 확인했습니다.
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
@@ -98,6 +99,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 
 우선순위 개선 작업:
 1. PDF 추출 개선 운영 확인
+   - 동적 PDF 회귀 테스트는 `backend/tests/test_pdf_extraction_regression.py`에 추가되어 있음. 실제 문제 PDF fixture 추가 여부는 계속 검토
    - 자료 01/02/03 유형 PDF를 다시 업로드해 추출 품질 경고가 표시되는지 확인
    - 업로드 노티와 원문 패널 상태 박스에 추출 품질 상태/점수/근거가 자연스럽게 표시되는지 확인
    - 추출 본문이 일부라도 있으면 원문 패널에 보존되는지 확인
