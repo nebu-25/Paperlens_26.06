@@ -82,6 +82,7 @@ GitHub Pages 배포의 경로 구성은 아래와 같습니다.
 - 라틴어 줄바꿈과 하이픈을 보정하고, CJK 줄바꿈은 불필요한 공백을 줄입니다.
 - 페이지 번호, 반복 헤더/푸터, 측면 arXiv 스탬프를 노이즈로 제거합니다.
 - 수식/특수기호 깨짐이 의심되면 경고와 샘플을 반환합니다.
+- 섹션 감지는 `backend/app/services/paper_sections.py`에서 수행합니다. 영문 `Abstract`/`Introduction`/`Conclusion`뿐 아니라 `요약`/`초록`, `서론`, `본론`/`고찰`, `결론`, `참고문헌`을 같은 canonical 섹션으로 정규화하며, `Ⅰ. 서론`, `1. 서론` 같은 번호 헤딩도 인식합니다. 프론트엔드 아웃라인, 섹션 요약 카드, 시그널 스캐너는 이 canonical 값을 공유합니다.
 
 ## Metadata Strategy
 

@@ -145,9 +145,13 @@ class TestPublicPdfUrlValidation:
 class TestCanonicalSection:
     def test_maps_known_keywords(self):
         assert papers._canonical_section("Introduction") == "Introduction"
+        assert papers._canonical_section("서론") == "Introduction"
+        assert papers._canonical_section("요약") == "Abstract"
+        assert papers._canonical_section("본론") == "Discussion"
         assert papers._canonical_section("Methods") == "Method"
         assert papers._canonical_section("Background") == "Related Work"
         assert papers._canonical_section("Conclusions") == "Conclusion"
+        assert papers._canonical_section("결론") == "Conclusion"
 
     def test_matches_prefix(self):
         assert papers._canonical_section("Model Architecture") == "Method"
@@ -190,6 +194,34 @@ class TestDetectSections:
             "Conclusion",
             "References",
         ]
+
+    def test_detects_korean_canonical_headings(self):
+        text = (
+            "한국어 논문 제목\n"
+            "요약\n"
+            "연구의 핵심 내용을 정리한다.\n"
+            "Ⅰ. 서론\n"
+            "문제의 배경을 설명한다.\n"
+            "Ⅱ. 본론\n"
+            "주요 논의를 전개한다.\n"
+            "Ⅲ. 결론\n"
+            "연구의 함의를 정리한다.\n"
+            "참고문헌\n"
+            "[1] foo bar\n"
+        )
+        sections = papers._detect_sections(text)
+        canon = [s["canonical"] for s in sections if s["canonical"]]
+        assert canon == ["Abstract", "Introduction", "Discussion", "Conclusion", "References"]
+        assert [s["title"] for s in sections] == [
+            "Abstract",
+            "Introduction",
+            "Discussion",
+            "Conclusion",
+            "References",
+        ]
+        for s in sections:
+            start = int(s["start"])
+            assert start == 0 or text[start - 1] == "\n"
 
     def test_numbered_arbitrary_heading_captured_without_canonical(self):
         sections = papers._detect_sections(self.SAMPLE)

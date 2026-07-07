@@ -9,8 +9,8 @@ def clean_text_line(value: str) -> str:
 
 # 섹션 헤딩 자동 분류 (#6). 표준 섹션명 → 정규화 카테고리. 별칭은 긴 것부터 매칭한다.
 SECTION_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Abstract", ("abstract",)),
-    ("Introduction", ("introduction",)),
+    ("Abstract", ("abstract", "요약", "초록", "논문요약", "국문초록")),
+    ("Introduction", ("introduction", "서론", "머리말")),
     ("Related Work", ("related work", "related works", "background", "prior work", "literature review")),
     (
         "Method",
@@ -28,15 +28,19 @@ SECTION_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Experiment", ("experimental setup", "experimental results", "experiments", "experiment", "evaluation")),
     ("Result", ("results", "result", "findings")),
     ("Analysis", ("ablation study", "ablation", "analysis")),
-    ("Discussion", ("discussion",)),
-    ("Conclusion", ("conclusions", "conclusion", "concluding remarks", "summary and conclusions", "summary")),
-    ("References", ("references", "bibliography")),
+    ("Discussion", ("discussion", "본론", "고찰", "논의")),
+    ("Conclusion", ("conclusions", "conclusion", "concluding remarks", "summary and conclusions", "summary", "결론", "맺음말")),
+    ("References", ("references", "bibliography", "참고문헌")),
     ("Acknowledgments", ("acknowledgments", "acknowledgements", "acknowledgment", "acknowledgement")),
     ("Appendix", ("appendix", "appendices")),
 )
 
 # 헤딩 후보 라인: (선택)섹션 번호 + 짧은 제목.
-HEADING_PATTERN = re.compile(r"^(?P<num>\d+(?:\.\d+)*\.?)?\s*(?P<name>[A-Za-z][A-Za-z0-9 \-&:/,]{2,70})$")
+HEADING_PATTERN = re.compile(
+    r"^(?P<num>(?:\d+(?:\.\d+)*|[IVXLC]+|[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+)\.?)?\s*"
+    r"(?P<name>[A-Za-z가-힣][A-Za-z0-9가-힣 \-&:/,·]{1,70})$",
+    re.IGNORECASE,
+)
 
 
 def canonical_section(name: str) -> str:
@@ -58,7 +62,7 @@ def detect_sections(text: str) -> list[dict[str, object]]:
         line_start = offset
         offset += len(raw_line) + 1
         stripped = raw_line.strip()
-        if not 4 <= len(stripped) <= 80:
+        if not 2 <= len(stripped) <= 80:
             continue
         match = HEADING_PATTERN.match(stripped)
         if not match:

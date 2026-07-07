@@ -45,6 +45,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 원문 패널의 PDF 연결 안내와 원문 텍스트 상태 경고는 기본 접힘 상태의 작은 상태 줄로 표시합니다. 상세 설명, PDF 연결 버튼, OCR 버튼은 사용자가 "상세 보기"를 눌렀을 때만 펼쳐 산만함을 줄입니다.
 - 리뷰 노트의 `읽기 목적과 3단계 읽기` 탭 영역은 접을 수 있게 했습니다. 목적 탭이 화면 상단에서 너무 많은 높이를 차지하지 않도록 정리했습니다.
 - 서비스 워크스페이스의 기본 화면 밀도를 낮추기 위해 업로드 바는 PDF 업로드/샘플 PDF를 먼저 노출하고 DOI/원문 URL 등록은 보조로 접었습니다. 원문 패널의 그림/표 네비게이터와 시그널 스캐너는 추가 탐색 도구로 분리했고, 리뷰 노트의 논문 메타정보/수동 요약/하이라이트/용어 사전은 기본 접힘으로 정리했습니다.
+- 그림/표 네비게이터는 캡션 라벨 클릭에 원문 이동을 숨기지 않고, 각 항목에 `원문 위치`와 `PDF p.N`/`PDF 보기` 버튼을 명시적으로 분리했습니다. PDF 이미지 매칭이 없는 항목은 비활성 `PDF 보기` 버튼과 안내 tooltip을 보여 주며, 매칭되지 않은 이미지 페이지는 `PDF 그림 페이지` 칩으로 접근합니다.
 - T2~T5 목적 질문 입력란은 `직접 작성하세요.` 대신 질문별 안내 placeholder를 표시합니다. T2는 발표 시연 캡처 기준의 문장형 안내를 넣었고, T3/T4/T5도 방법론·비판·결과 비교 목적에 맞춘 칸 안쪽 작성 가이드를 제공합니다.
 - 업로드/샘플 PDF의 성공·안내 알림은 자동으로 사라집니다. 오류·경고는 사용자가 확인할 수 있도록 유지합니다.
 - 브라우저 웹 번역은 React가 관리하는 원문/하이라이트 DOM과 충돌할 수 있어, 하이라이트 가능한 원문 영역은 `notranslate`/`translate="no"`로 보호합니다.
@@ -69,6 +70,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - `Ⅰ. 서론` 같은 로마숫자 섹션 헤더도 컬럼 시작 신호로 인식합니다. reflow 결과가 `요약`/`ABSTRACT`/`키워드` 같은 상단 front matter를 누락하고 raw 추출 결과에는 남아 있으면 raw 결과를 선택하며, 품질 점수에도 누락 경고를 반영합니다.
 - PDF 추출 경로는 `국 문 초 록`, `A B S T R A C T`처럼 글자 단위로 벌어진 줄을 보정합니다. 일반 문장은 과보정하지 않도록 줄 대부분이 한 글자 토큰일 때만 적용합니다.
 - 좌표 기반 reflow가 비어 있거나 본문 보존량이 크게 부족하면 PyMuPDF 기본 추출 결과를 fallback으로 선택합니다.
+- 섹션 감지는 영문 canonical 섹션과 같은 경로로 한국어 헤딩을 처리합니다. `요약`/`초록`은 Abstract, `서론`/`머리말`은 Introduction, `본론`/`고찰`/`논의`는 Discussion, `결론`/`맺음말`은 Conclusion, `참고문헌`은 References로 정규화합니다. `Ⅰ. 서론`, `Ⅱ. 본론`, `1. 서론` 같은 번호/로마숫자 접두 섹션도 감지합니다.
 - 원문 패널에는 `텍스트 편집`/`직접 입력` 기능이 있습니다. 자동 추출이 비어 있거나 부자연스러운 경우 사용자가 PDF 원본을 보며 원문 텍스트를 붙여 넣거나 다듬을 수 있습니다.
 - OCR 재추출은 `OCR_ENABLED=true`, `OCR_PROVIDER=auto`, `CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`로 활성화합니다.
 - OCR provider는 NAVER CLOVA OCR과 RapidOCR을 병행합니다. `auto` 모드는 영문 힌트가 있으면 RapidOCR을 우선하고, 그 외에는 CLOVA를 우선합니다. 첫 결과 품질이 낮으면 다른 provider로 fallback합니다.
@@ -87,6 +89,8 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 2026-07-07에 PDF 추출 품질 회귀 테스트를 확대했습니다. `backend/tests/test_pdf_extraction_regression.py`를 추가해 동적 PDF bytes 기반 통합 경로에서 상단 front matter+하단 2단 본문 읽기 순서, 글자 단위 front matter 보정, 빈 PDF failed 품질 상태를 검증합니다. `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q` 기준 113 passed입니다.
 - 2026-07-07에 리뷰 노트의 목적 탭 영역을 접을 수 있게 했습니다. `읽기 목적과 3단계 읽기` 카드가 `SectionCard` 접기 동작을 사용하도록 바꿨고, `frontend/src/components/SectionCard.test.tsx`로 헤더 클릭 시 children 토글을 검증합니다. `cd frontend && npm run build`, `cd frontend && npm run lint`, `cd frontend && npm test -- --run src/components/SectionCard.test.tsx`를 통과했습니다.
 - 2026-07-08에 T2~T5 목적 질문 작성란 placeholder를 질문별 안내 문구로 교체했습니다. `frontend/src/lib/templates.ts`의 `PurposeQuestion.placeholder`를 `ReviewNotePanel` textarea에 연결했고, `cd frontend && npm run build`, `cd frontend && npm run lint`를 통과했습니다.
+- 2026-07-08에 그림/표 네비게이터의 이동 동작을 명시적으로 분리했습니다. 캡션 라벨은 식별 텍스트로 남기고 `원문 위치` 버튼은 문자 추출 원문 위치로, `PDF p.N`/`PDF 보기` 버튼은 PDF 뷰어 페이지로 이동하게 했습니다. `cd frontend && npm run build`, `cd frontend && npm run lint`를 통과했습니다.
+- 2026-07-08에 한국어 섹션 헤딩 감지를 보강했습니다. `요약`, `서론`, `본론`, `결론`, `참고문헌`과 `Ⅰ. 서론`/`1. 서론` 형태가 기존 영문 canonical 섹션과 동일하게 작동하도록 `backend/app/services/paper_sections.py`를 수정했고, `backend/tests/test_papers.py`에 회귀 테스트를 추가했습니다. `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestCanonicalSection backend/tests/test_papers.py::TestDetectSections`는 10 passed, `backend/.venv/bin/python -m ruff check backend/app/services/paper_sections.py backend/tests/test_papers.py`는 통과했습니다. 전체 `backend/tests`는 실행했으나 장시간 새 출력 없이 멈춰 중단했습니다.
 - 2026-07-07에 데모 로그인 직후 빠른 테스트 문서 로드가 오래 걸리고 샘플 PDF가 이어서 실패하는 현상을 분석했습니다. 1차 개선으로 데모 seed bulk copy, 데모 cleanup rate limit, 초기 health 비차단화, `/notes` 30초 대기, 샘플 PDF 단계별 timeout을 적용했습니다. 배포 후 Network 탭에서 `/api/notes`, `/api/papers/sample-pdf`, `/api/papers/extract-text` 시간을 분리해 확인했습니다.
 - 2026-07-06에 모달 크기/폰트 변경 이후 최신 배포가 반영되지 않던 원인은 코드 빌드 실패가 아니라 GitHub Pages deploy job 실패였습니다. `actions/deploy-pages@v5` 갱신 커밋 `e1b886e` 이후 Pages 배포가 성공했고, 설문 프롬프트 커밋 `c1393d5`도 Pages 배포 성공을 확인했습니다.
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
@@ -112,6 +116,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - 좌표 reflow가 본문 일부만 남기던 PDF에서 기본 추출 fallback이 원문을 보존하는지 확인
    - `논문형식_04`처럼 `1. 서론`이 오른쪽 컬럼 첫 줄과 같은 높이에 있는 PDF에서 왼쪽 컬럼 헤더/본문이 오른쪽 컬럼보다 먼저 이어지는지 확인
    - `논문형식_05`처럼 상단 요약/ABSTRACT/키워드 후 하단 `Ⅰ. 서론` 2단 본문이 시작되는 PDF에서 상단 영역 누락 없이 원문이 보존되고 품질 점수가 100점으로 오판되지 않는지 확인
+   - 한국어 섹션명(`요약`, `서론`, `본론`, `결론`, `참고문헌`)과 로마숫자 접두(`Ⅰ. 서론`)가 섹션 아웃라인/요약 카드/시그널 스캐너에서 기존 영문 섹션과 동일하게 동작하는지 확인
    - 상단 1단+하단 2단 혼합형 페이지에서 읽기 순서가 제목/초록/키워드 후 왼쪽 컬럼→오른쪽 컬럼인지 확인
    - 추출이 부자연스러운 PDF에서 `텍스트 편집`/`직접 입력` 후 자동 저장, 새로고침 복원, 하이라이트 offset 계산 확인
    - 원문 직접 저장 후 `사용자 보정됨` 상태가 저장되고 새로고침 뒤에도 유지되는지 확인
@@ -134,6 +139,8 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - 샘플 PDF 버튼으로 PDF 다운로드, 텍스트 추출, 리뷰 노트 열기까지 확인하고 `/sample-pdf`와 `/extract-text` 시간을 따로 기록
    - 데모 세션 seed 샘플이 이미 있는 상태에서 샘플 PDF를 다시 눌렀을 때 새 노트를 만들지 않고 기존 샘플 리뷰 노트를 여는지 확인
    - PDF 원본 보기에서 401 콘솔 오류 없이 blob 미리보기가 뜨거나 fallback 안내가 뜨는지 확인
+   - 그림/표 네비게이터에서 `원문 위치`는 문자 추출 원문 위치로 이동하고, `PDF p.N`/`PDF 보기`는 PDF 탭의 해당 페이지로 이동하는지 확인
+   - PDF 이미지 매칭이 없는 그림/표 항목은 비활성 `PDF 보기` 안내가 보이고, `PDF 그림 페이지` 칩으로 후보 페이지를 열 수 있는지 확인
    - DOI 등록은 메타데이터/원문 별도 연결 안내가 뜨는지 확인
    - PDF 원문 URL 예: https://arxiv.org/pdf/2604.04977v1 등록 시 원문 추출과 PDF 원본 보기가 연결되는지 확인
    - 일반 웹페이지 URL 입력 시 PDF 원문 URL이 필요하다는 안내가 뜨고 노트가 생성되지 않는지 확인
@@ -181,6 +188,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - backend/.venv/bin/python -m pytest backend/tests/test_db.py backend/tests/test_auth.py -q
 - backend/.venv/bin/python -m pytest backend/tests/test_auth.py backend/tests/test_diagnostics.py
 - backend/.venv/bin/python -m pytest backend/tests/test_auth.py backend/tests/test_diagnostics.py backend/tests/test_papers.py
+- backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestCanonicalSection backend/tests/test_papers.py::TestDetectSections
 - curl -L -I https://nebu-25.github.io/Paperlens_26.06/
 - curl -L -I https://nebu-25.github.io/Paperlens_26.06/service_home/
 - curl -L -I https://nebu-25.github.io/Paperlens_26.06/favicon.svg
