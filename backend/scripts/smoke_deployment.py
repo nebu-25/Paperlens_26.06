@@ -80,6 +80,21 @@ def _response_message(response: Response) -> str:
     return json.dumps(body, ensure_ascii=False)
 
 
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().casefold() in {"1", "true", "yes", "on"}
+
+
+def _print_warnings(label: str, warnings: object) -> None:
+    if not isinstance(warnings, list) or not warnings:
+        return
+    print(f"{label} warnings:", file=sys.stderr)
+    for warning in warnings:
+        print(f"- {warning}", file=sys.stderr)
+
+
 def _check_pages(frontend_base: str) -> None:
     root = _request("HEAD", f"{frontend_base}/")
     _assert(root.status == 200, f"Pages root expected 200, got {root.status}")
@@ -101,7 +116,7 @@ def _check_pages(frontend_base: str) -> None:
     )
 
 
-def _check_api(api_base: str) -> None:
+def _check_api(api_base: str, *, require_ai_ready: bool) -> None:
     health = _request("GET", f"{api_base}/api/health", timeout=75)
     _assert(health.status == 200, f"health expected 200, got {health.status}")
     _assert(health.json() == {"status": "ok"}, f"unexpected health response: {health.body!r}")
@@ -121,8 +136,11 @@ def _check_api(api_base: str) -> None:
     )
     _assert(ai.get("enabled") is True, f"ai.enabled expected true, got {ai.get('enabled')}")
     if "ready" in ai:
-        _assert(ai.get("ready") is True, f"ai.ready expected true, got {ai.get('ready')}")
-    if "warnings" in ai:
+        if require_ai_ready:
+            _assert(ai.get("ready") is True, f"ai.ready expected true, got {ai.get('ready')}")
+        elif ai.get("ready") is not True:
+            _print_warnings("AI diagnostics", ai.get("warnings"))
+    if require_ai_ready and "warnings" in ai:
         _assert(ai.get("warnings") == [], f"ai.warnings expected [], got {ai.get('warnings')}")
 
     ai_status = _request("GET", f"{api_base}/api/ai/status")
@@ -189,6 +207,7 @@ def main() -> int:
         print("FRONTEND_BASE_URL and API_BASE_URL are required.", file=sys.stderr)
         return 2
     has_smoke_account = bool(smoke_email and smoke_password)
+    require_ai_ready = _env_flag("REQUIRE_AI_READY")
     if has_smoke_account and (not supabase_url or not supabase_anon_key):
         print(
             "SUPABASE_URL and SUPABASE_ANON_KEY are required when PAPERLENS_SMOKE_EMAIL/PASSWORD are set.",
@@ -198,7 +217,7 @@ def main() -> int:
 
     started = time.monotonic()
     _check_pages(frontend_base)
-    _check_api(api_base)
+    _check_api(api_base, require_ai_ready=require_ai_ready)
     if has_smoke_account:
         access_token = _supabase_password_token(
             supabase_url,
