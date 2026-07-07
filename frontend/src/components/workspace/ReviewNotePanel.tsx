@@ -221,13 +221,15 @@ export function ReviewNotePanel() {
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 sm:px-6">
-        <section className="rounded border border-line bg-white p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold">읽기 목적과 3단계 읽기</h3>
+        <SectionCard
+          title="읽기 목적과 3단계 읽기"
+          icon={<PencilLine size={16} />}
+          action={
             <span className="rounded bg-paper px-2 py-0.5 text-xs text-muted">
               {reviewDoneCount}/{reviewRoadmap.length} 단계
             </span>
-          </div>
+          }
+        >
           <div className="mb-2 flex flex-wrap gap-1" role="radiogroup" aria-label="읽기 목적 선택">
             {PURPOSE_TEMPLATES.map((t) => (
               <button
@@ -296,7 +298,7 @@ export function ReviewNotePanel() {
             이 논문을 인용하는 이유는 무엇인가요? 내 주장과 같은 결과인지, 반대 결과인지,
             또는 방법론을 참고하려는지 먼저 정하면 리뷰 방향이 선명해집니다.
           </div>
-        </section>
+        </SectionCard>
 
         {/* 논문 메타정보 (영역 1) — 자동 추출 결과를 직접 수정 가능 */}
         <SectionCard title="논문 메타정보" icon={<FileText size={16} />}>
