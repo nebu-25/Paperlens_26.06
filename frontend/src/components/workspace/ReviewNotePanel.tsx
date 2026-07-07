@@ -300,57 +300,6 @@ export function ReviewNotePanel() {
           </div>
         </SectionCard>
 
-        {/* 논문 메타정보 (영역 1) — 자동 추출 결과를 직접 수정 가능 */}
-        <SectionCard title="논문 메타정보" icon={<FileText size={16} />}>
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm">
-              <span className="w-10 shrink-0 text-xs text-muted">제목</span>
-              <input
-                name="paper-title"
-                aria-label="논문 제목"
-                title="논문 제목"
-                className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
-                placeholder="논문 제목을 입력하세요"
-                value={paper.title}
-                onChange={(e) => updatePaper({ title: e.target.value })}
-              />
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <span className="w-10 shrink-0 text-xs text-muted">저자</span>
-              <input
-                name="paper-authors"
-                aria-label="논문 저자"
-                title="논문 저자"
-                className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
-                placeholder="저자를 입력하세요 (쉼표로 구분)"
-                value={paper.authors}
-                onChange={(e) => updatePaper({ authors: e.target.value })}
-              />
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <span className="w-10 shrink-0 text-xs text-muted">링크</span>
-              <input
-                name="paper-link"
-                aria-label="논문 링크"
-                title="논문 링크"
-                className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
-                placeholder="DOI 또는 PDF 원문 URL"
-                value={paper.link}
-                onChange={(e) => updatePaper({ link: e.target.value })}
-              />
-            </label>
-            <div className="flex items-start gap-2 text-sm">
-              <span className="w-10 shrink-0 pt-1.5 text-xs text-muted">태그</span>
-              <div className="min-w-0 flex-1">
-                <TagEditor tags={note.tags} onChange={setTags} />
-              </div>
-            </div>
-          </div>
-          <p className="mt-2 text-xs text-muted">
-            자동 추출이 비어 있으면 직접 입력하세요. (KCI 등 CrossRef 미등재 논문)
-          </p>
-        </SectionCard>
-
         <QuestionsCard
           questions={note.questions}
           onChange={(q) => updateNote('questions', q)}
@@ -443,7 +392,7 @@ export function ReviewNotePanel() {
           </ul>
         </SectionCard>
 
-        <SectionCard title="수동 요약 템플릿" icon={<PencilLine size={16} />}>
+        <SectionCard title="수동 요약 템플릿" icon={<PencilLine size={16} />} defaultOpen={false}>
           <div className="mb-2 flex flex-col gap-2 sm:flex-row">
             <select
               name="manual-summary-label"
@@ -545,7 +494,7 @@ export function ReviewNotePanel() {
           )}
         </SectionCard>
 
-        <SectionCard title="하이라이트" icon={<Highlighter size={16} />}>
+        <SectionCard title="하이라이트" icon={<Highlighter size={16} />} defaultOpen={false}>
           <div className="mb-3 flex flex-wrap gap-1">
             <button
               type="button"
@@ -709,7 +658,7 @@ export function ReviewNotePanel() {
           )}
         </SectionCard>
 
-        <SectionCard title="용어 사전" icon={<Library size={16} />}>
+        <SectionCard title="용어 사전" icon={<Library size={16} />} defaultOpen={false}>
           {note.terms.length === 0 ? (
             <p className="text-xs text-muted">
               본문에서 모르는 단어를 드래그해 추가하세요.
@@ -863,6 +812,60 @@ export function ReviewNotePanel() {
               로드맵의 한 단계를 시작하면 내보낼 수 있습니다.
             </p>
           )}
+        </SectionCard>
+
+        <div className="pt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+          부가 기능
+        </div>
+        {/* 논문 메타정보 (영역 1) — 자동 추출 결과를 직접 수정 가능 */}
+        <SectionCard title="논문 메타정보" icon={<FileText size={16} />} defaultOpen={false}>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <span className="w-10 shrink-0 text-xs text-muted">제목</span>
+              <input
+                name="paper-title"
+                aria-label="논문 제목"
+                title="논문 제목"
+                className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
+                placeholder="논문 제목을 입력하세요"
+                value={paper.title}
+                onChange={(e) => updatePaper({ title: e.target.value })}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <span className="w-10 shrink-0 text-xs text-muted">저자</span>
+              <input
+                name="paper-authors"
+                aria-label="논문 저자"
+                title="논문 저자"
+                className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
+                placeholder="저자를 입력하세요 (쉼표로 구분)"
+                value={paper.authors}
+                onChange={(e) => updatePaper({ authors: e.target.value })}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <span className="w-10 shrink-0 text-xs text-muted">링크</span>
+              <input
+                name="paper-link"
+                aria-label="논문 링크"
+                title="논문 링크"
+                className="min-w-0 flex-1 rounded border border-line px-2 py-1.5 outline-none focus:border-action"
+                placeholder="DOI 또는 PDF 원문 URL"
+                value={paper.link}
+                onChange={(e) => updatePaper({ link: e.target.value })}
+              />
+            </label>
+            <div className="flex items-start gap-2 text-sm">
+              <span className="w-10 shrink-0 pt-1.5 text-xs text-muted">태그</span>
+              <div className="min-w-0 flex-1">
+                <TagEditor tags={note.tags} onChange={setTags} />
+              </div>
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            자동 추출이 비어 있으면 직접 입력하세요. (KCI 등 CrossRef 미등재 논문)
+          </p>
         </SectionCard>
       </div>
       {digestOpen && <LibraryDigest onClose={() => setDigestOpen(false)} />}

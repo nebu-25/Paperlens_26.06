@@ -5,6 +5,7 @@ import { scrollToTextOffset } from '../../lib/domText';
 import { needsPdfText } from '../../lib/format';
 import { buildOutline } from '../../lib/outline';
 import { extractionQualityLabel } from '../../lib/paperInputs';
+import { SectionCard } from '../SectionCard';
 import { PdfViewer } from './PdfViewer';
 import { useWorkspace } from './WorkspaceContext';
 
@@ -336,6 +337,7 @@ export function SourcePanel() {
         className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 text-sm leading-7 text-neutral-800 sm:px-6"
       >
         {paperViewMode === 'text' ? (
+          <>
           <section className="rounded border border-line bg-white p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-ink">하이라이트 가능한 원문</h3>
@@ -380,168 +382,6 @@ export function SourcePanel() {
                   </button>
                 ))}
               </nav>
-            )}
-            {!sourceEditOpen && (figureCaptions.length > 0 || figurePages.length > 0) && (
-              <section
-                aria-label="그림/표 네비게이터"
-                className="mb-3 rounded border border-line bg-paper/60 p-2"
-              >
-                <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-muted">
-                  <Image size={12} />
-                  {figureCaptions.length > 0
-                    ? `그림/표 ${figureCaptions.length}건 — 표적 읽기(2차)에서 결과·그림을 먼저 확인하세요`
-                    : 'PDF에서 그림 이미지를 찾았습니다 — 표적 읽기(2차)에서 먼저 확인하세요'}
-                </div>
-                {figurePages.length > 0 && (
-                  <div className="mb-1 flex flex-wrap items-center gap-1">
-                    <span className="text-[11px] font-semibold text-muted">PDF 그림</span>
-                    {figurePages.map((entry) => (
-                      <button
-                        key={entry.page}
-                        type="button"
-                        className="rounded-full border border-line bg-white px-2 py-0.5 text-[11px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={!paperPdfUrl}
-                        title={
-                          paperPdfUrl
-                            ? `PDF 탭에서 ${entry.page}페이지를 엽니다 (이미지 ${entry.count}개)`
-                            : 'PDF 원본이 연결되면 사용할 수 있습니다'
-                        }
-                        onClick={() => openPdfAtPage(entry.page)}
-                      >
-                        p.{entry.page}
-                        {entry.count > 1 ? ` ×${entry.count}` : ''}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <ul className="space-y-1">
-                  {figureCaptions.map((caption) => {
-                    const memo = note.figureNotes?.[caption.id] ?? '';
-                    const memoOpen = openFigureMemos.has(caption.id) || memo.length > 0;
-                    const mentions = figureMentionCounts[caption.id] ?? 0;
-                    return (
-                      <li key={caption.id} className="rounded bg-white/70 px-2 py-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            className="inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-action hover:underline"
-                            title={`${caption.label} 캡션 위치로 이동`}
-                            onClick={() => jumpToTextOffset(caption.start)}
-                          >
-                            {caption.label}
-                          </button>
-                          {captionImagePage.has(caption.id) && (
-                            <button
-                              type="button"
-                              className="shrink-0 rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
-                              disabled={!paperPdfUrl}
-                              title={
-                                paperPdfUrl
-                                  ? `PDF ${captionImagePage.get(caption.id)}페이지에서 이 그림을 봅니다`
-                                  : 'PDF 원본이 연결되면 사용할 수 있습니다'
-                              }
-                              onClick={() => openPdfAtPage(captionImagePage.get(caption.id) as number)}
-                            >
-                              PDF p.{captionImagePage.get(caption.id)}
-                            </button>
-                          )}
-                          <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
-                            {caption.preview}
-                          </span>
-                          {mentions > 0 && (
-                            <span
-                              className="shrink-0 rounded bg-paper px-1.5 py-0.5 text-[10px] text-muted"
-                              title="본문에서 이 그림/표를 언급한 횟수 — 본문 속 링크를 클릭하면 캡션으로 이동합니다"
-                            >
-                              언급 {mentions}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${
-                              memoOpen
-                                ? 'border-action bg-action/10 font-semibold text-action'
-                                : 'border-line text-muted hover:border-action hover:text-action'
-                            }`}
-                            aria-expanded={memoOpen}
-                            onClick={() => toggleFigureMemo(caption.id)}
-                          >
-                            메모{memo ? ' ●' : ''}
-                          </button>
-                        </div>
-                        {memoOpen && (
-                          <textarea
-                            name={`figure-note-${caption.id}`}
-                            aria-label={`${caption.label} 메모`}
-                            title={`${caption.label} 메모 — 그림이 보여주는 것에 대한 내 해석을 직접 적으세요`}
-                            className="mt-1 min-h-12 w-full resize-y rounded border border-line p-2 text-xs outline-none focus:border-action"
-                            placeholder="이 그림/표에서 확인한 것을 직접 정리하세요. (해석은 도구가 하지 않습니다)"
-                            value={memo}
-                            onChange={(e) =>
-                              updateNote('figureNotes', {
-                                ...(note.figureNotes ?? {}),
-                                [caption.id]: e.target.value,
-                              })
-                            }
-                          />
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            )}
-            {!sourceEditOpen && paper.text && (
-              <div className="mb-3 rounded border border-line bg-paper/60 p-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-semibold text-muted">
-                    <input
-                      name="signal-scan-toggle"
-                      aria-label="시그널 스캐너 켜기"
-                      type="checkbox"
-                      className="accent-action"
-                      checked={signalScanEnabled}
-                      disabled={signalScanBlocked}
-                      onChange={(e) => setSignalScanEnabled(e.target.checked)}
-                    />
-                    <ScanSearch size={12} />
-                    시그널 스캐너
-                  </label>
-                  {signalScanBlocked ? (
-                    <span className="text-[11px] text-muted">
-                      추출 품질이 낮아 사용할 수 없습니다. 텍스트 편집으로 원문을 보정한 뒤 다시 켜세요.
-                    </span>
-                  ) : signalScanEnabled ? (
-                    <span className="rounded bg-white px-1.5 py-0.5 text-[11px] text-muted">
-                      시그널 <b>{signalMatches.length}</b>건 (관점{' '}
-                      <b className="text-indigo-600">{signalCounts.perspective}</b> · 한계{' '}
-                      <b className="text-rose-600">{signalCounts.limitation}</b> · 비판{' '}
-                      <b className="text-amber-600">{signalCounts.critique}</b>) — 점선 문장을 클릭하면
-                      해당 라벨 하이라이트로 추가됩니다
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-muted">
-                      규칙 기반 안내(저장 안 함). T4 비판적 검토에서는 기본으로 켜집니다.
-                    </span>
-                  )}
-                </div>
-                {signalScanEnabled && !signalScanBlocked && keywordCandidates.length > 0 && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1">
-                    <span className="text-[11px] font-semibold text-muted">키워드 후보</span>
-                    {keywordCandidates.map((candidate) => (
-                      <button
-                        key={candidate.term}
-                        type="button"
-                        className="rounded-full border border-line bg-white px-2 py-0.5 text-[11px] text-muted hover:border-action hover:text-action"
-                        title={`${candidate.reasons.join(' · ')} — 클릭하면 용어 사전에 추가됩니다`}
-                        onClick={() => addTermText(candidate.term)}
-                      >
-                        + {candidate.term}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
             )}
             {sourceEditOpen ? (
               <div className="space-y-3">
@@ -607,6 +447,176 @@ export function SourcePanel() {
               </div>
             )}
           </section>
+          {!sourceEditOpen && (figureCaptions.length > 0 || figurePages.length > 0 || paper.text) && (
+            <SectionCard
+              title="추가 탐색 도구"
+              icon={<ScanSearch size={16} />}
+              defaultOpen={false}
+            >
+              <div className="space-y-3">
+                {(figureCaptions.length > 0 || figurePages.length > 0) && (
+                  <div>
+                    <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-muted">
+                      <Image size={12} />
+                      {figureCaptions.length > 0
+                        ? `그림/표 ${figureCaptions.length}건 — 표적 읽기(2차)에서 결과·그림을 먼저 확인하세요`
+                        : 'PDF에서 그림 이미지를 찾았습니다 — 표적 읽기(2차)에서 먼저 확인하세요'}
+                    </div>
+                    {figurePages.length > 0 && (
+                      <div className="mb-1 flex flex-wrap items-center gap-1">
+                        <span className="text-[11px] font-semibold text-muted">PDF 그림</span>
+                        {figurePages.map((entry) => (
+                          <button
+                            key={entry.page}
+                            type="button"
+                            className="rounded-full border border-line bg-white px-2 py-0.5 text-[11px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={!paperPdfUrl}
+                            title={
+                              paperPdfUrl
+                                ? `PDF 탭에서 ${entry.page}페이지를 엽니다 (이미지 ${entry.count}개)`
+                                : 'PDF 원본이 연결되면 사용할 수 있습니다'
+                            }
+                            onClick={() => openPdfAtPage(entry.page)}
+                          >
+                            p.{entry.page}
+                            {entry.count > 1 ? ` ×${entry.count}` : ''}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <ul className="space-y-1">
+                      {figureCaptions.map((caption) => {
+                        const memo = note.figureNotes?.[caption.id] ?? '';
+                        const memoOpen = openFigureMemos.has(caption.id) || memo.length > 0;
+                        const mentions = figureMentionCounts[caption.id] ?? 0;
+                        return (
+                          <li key={caption.id} className="rounded bg-white/70 px-2 py-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                className="inline-flex min-w-0 items-center gap-1 text-[11px] font-semibold text-action hover:underline"
+                                title={`${caption.label} 캡션 위치로 이동`}
+                                onClick={() => jumpToTextOffset(caption.start)}
+                              >
+                                {caption.label}
+                              </button>
+                              {captionImagePage.has(caption.id) && (
+                                <button
+                                  type="button"
+                                  className="shrink-0 rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
+                                  disabled={!paperPdfUrl}
+                                  title={
+                                    paperPdfUrl
+                                      ? `PDF ${captionImagePage.get(caption.id)}페이지에서 이 그림을 봅니다`
+                                      : 'PDF 원본이 연결되면 사용할 수 있습니다'
+                                  }
+                                  onClick={() => openPdfAtPage(captionImagePage.get(caption.id) as number)}
+                                >
+                                  PDF p.{captionImagePage.get(caption.id)}
+                                </button>
+                              )}
+                              <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
+                                {caption.preview}
+                              </span>
+                              {mentions > 0 && (
+                                <span
+                                  className="shrink-0 rounded bg-paper px-1.5 py-0.5 text-[10px] text-muted"
+                                  title="본문에서 이 그림/표를 언급한 횟수 — 본문 속 링크를 클릭하면 캡션으로 이동합니다"
+                                >
+                                  언급 {mentions}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${
+                                  memoOpen
+                                    ? 'border-action bg-action/10 font-semibold text-action'
+                                    : 'border-line text-muted hover:border-action hover:text-action'
+                                }`}
+                                aria-expanded={memoOpen}
+                                onClick={() => toggleFigureMemo(caption.id)}
+                              >
+                                메모{memo ? ' ●' : ''}
+                              </button>
+                            </div>
+                            {memoOpen && (
+                              <textarea
+                                name={`figure-note-${caption.id}`}
+                                aria-label={`${caption.label} 메모`}
+                                title={`${caption.label} 메모 — 그림이 보여주는 것에 대한 내 해석을 직접 적으세요`}
+                                className="mt-1 min-h-12 w-full resize-y rounded border border-line p-2 text-xs outline-none focus:border-action"
+                                placeholder="이 그림/표에서 확인한 것을 직접 정리하세요. (해석은 도구가 하지 않습니다)"
+                                value={memo}
+                                onChange={(e) =>
+                                  updateNote('figureNotes', {
+                                    ...(note.figureNotes ?? {}),
+                                    [caption.id]: e.target.value,
+                                  })
+                                }
+                              />
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+                {paper.text && (
+                  <div className={`${figureCaptions.length > 0 || figurePages.length > 0 ? 'border-t border-line pt-3' : ''}`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-semibold text-muted">
+                        <input
+                          name="signal-scan-toggle"
+                          aria-label="시그널 스캐너 켜기"
+                          type="checkbox"
+                          className="accent-action"
+                          checked={signalScanEnabled}
+                          disabled={signalScanBlocked}
+                          onChange={(e) => setSignalScanEnabled(e.target.checked)}
+                        />
+                        <ScanSearch size={12} />
+                        시그널 스캐너
+                      </label>
+                      {signalScanBlocked ? (
+                        <span className="text-[11px] text-muted">
+                          추출 품질이 낮아 사용할 수 없습니다. 텍스트 편집으로 원문을 보정한 뒤 다시 켜세요.
+                        </span>
+                      ) : signalScanEnabled ? (
+                        <span className="rounded bg-white px-1.5 py-0.5 text-[11px] text-muted">
+                          시그널 <b>{signalMatches.length}</b>건 (관점{' '}
+                          <b className="text-indigo-600">{signalCounts.perspective}</b> · 한계{' '}
+                          <b className="text-rose-600">{signalCounts.limitation}</b> · 비판{' '}
+                          <b className="text-amber-600">{signalCounts.critique}</b>) — 점선 문장을 클릭하면
+                          해당 라벨 하이라이트로 추가됩니다
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-muted">
+                          규칙 기반 안내(저장 안 함). T4 비판적 검토에서는 기본으로 켜집니다.
+                        </span>
+                      )}
+                    </div>
+                    {signalScanEnabled && !signalScanBlocked && keywordCandidates.length > 0 && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1">
+                        <span className="text-[11px] font-semibold text-muted">키워드 후보</span>
+                        {keywordCandidates.map((candidate) => (
+                          <button
+                            key={candidate.term}
+                            type="button"
+                            className="rounded-full border border-line bg-white px-2 py-0.5 text-[11px] text-muted hover:border-action hover:text-action"
+                            title={`${candidate.reasons.join(' · ')} — 클릭하면 용어 사전에 추가됩니다`}
+                            onClick={() => addTermText(candidate.term)}
+                          >
+                            + {candidate.term}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          )}
+          </>
         ) : (
           <section className="rounded border border-line bg-white p-4">
             <PdfViewer

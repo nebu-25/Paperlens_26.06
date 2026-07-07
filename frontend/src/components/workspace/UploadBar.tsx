@@ -1,4 +1,5 @@
 import { Upload } from 'lucide-react';
+import { useState } from 'react';
 import {
   samplePhasePercent,
   samplePhaseText,
@@ -9,6 +10,7 @@ import { NoticeBanner } from '../NoticeBanner';
 import { useWorkspace } from './WorkspaceContext';
 
 export function UploadBar() {
+  const [doiOpen, setDoiOpen] = useState(false);
   const {
     paper,
     uploadOpen,
@@ -68,43 +70,59 @@ export function UploadBar() {
             if (file) void handleFile(file);
           }}
         />
-        <div className={`${paper && !uploadOpen ? 'hidden' : 'mt-2 grid'} gap-2 sm:grid-cols-[150px_180px_minmax(0,1fr)_86px]`}>
-          <button
-            className="flex items-center justify-center gap-2 rounded border border-dashed border-line bg-white px-3 py-3 text-sm font-semibold text-muted hover:border-action hover:text-action disabled:opacity-60"
-            onClick={() => void handleSamplePdf()}
-            disabled={uploading || doiLoading || sampleLoading}
-          >
-            {sampleLoading ? '샘플 준비 중' : '샘플 PDF'}
-          </button>
-          <button
-            className="flex items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
-            onClick={() => {
-              attachTargetRef.current = null;
-              fileInputRef.current?.click();
-            }}
-            disabled={uploading || sampleLoading}
-          >
-            <Upload size={16} />
-            {uploading ? uploadPhaseText[uploadPhase] || '처리 중' : 'PDF 업로드'}
-          </button>
-          <input
-            name="paper-source"
-            aria-label="DOI 또는 PDF 원문 URL"
-            title="DOI 또는 PDF 원문 URL"
-            className="min-w-0 rounded border border-line bg-white px-4 py-3 text-sm outline-none focus:border-action disabled:opacity-60"
-            placeholder="DOI 또는 PDF 원문 URL"
-            value={doiInput}
-            disabled={doiLoading || uploading || sampleLoading}
-            onChange={(e) => setDoiInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && registerByDoi()}
-          />
-          <button
-            className="rounded border border-line bg-white px-3 text-sm font-medium disabled:opacity-60"
-            onClick={registerByDoi}
-            disabled={doiLoading || uploading || sampleLoading}
-          >
-            {doiLoading ? uploadPhaseText[uploadPhase] || '조회 중' : '등록'}
-          </button>
+        <div className={`${paper && !uploadOpen ? 'hidden' : 'mt-2 space-y-2'}`}>
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <button
+              className="flex items-center justify-center gap-2 rounded border border-dashed border-line bg-white px-3 py-3 text-sm font-semibold text-muted hover:border-action hover:text-action disabled:opacity-60"
+              onClick={() => void handleSamplePdf()}
+              disabled={uploading || doiLoading || sampleLoading}
+            >
+              {sampleLoading ? '샘플 준비 중' : '샘플 PDF'}
+            </button>
+            <button
+              className="flex items-center justify-center gap-2 rounded bg-action px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+              onClick={() => {
+                attachTargetRef.current = null;
+                fileInputRef.current?.click();
+              }}
+              disabled={uploading || sampleLoading}
+            >
+              <Upload size={16} />
+              {uploading ? uploadPhaseText[uploadPhase] || '처리 중' : 'PDF 업로드'}
+            </button>
+          </div>
+          <div className="flex items-center justify-start gap-2">
+            <button
+              type="button"
+              className="rounded border border-line bg-white px-2 py-1 text-xs text-muted hover:border-action hover:text-action"
+              aria-expanded={doiOpen}
+              onClick={() => setDoiOpen((open) => !open)}
+            >
+              {doiOpen ? 'DOI/원문 URL 접기' : 'DOI/원문 URL'}
+            </button>
+          </div>
+          {doiOpen && (
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_86px]">
+              <input
+                name="paper-source"
+                aria-label="DOI 또는 PDF 원문 URL"
+                title="DOI 또는 PDF 원문 URL"
+                className="min-w-0 rounded border border-line bg-white px-4 py-3 text-sm outline-none focus:border-action disabled:opacity-60"
+                placeholder="DOI 또는 PDF 원문 URL"
+                value={doiInput}
+                disabled={doiLoading || uploading || sampleLoading}
+                onChange={(e) => setDoiInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && registerByDoi()}
+              />
+              <button
+                className="rounded border border-line bg-white px-3 text-sm font-medium disabled:opacity-60"
+                onClick={registerByDoi}
+                disabled={doiLoading || uploading || sampleLoading}
+              >
+                {doiLoading ? uploadPhaseText[uploadPhase] || '조회 중' : '등록'}
+              </button>
+            </div>
+          )}
         </div>
         <div className={paper && !uploadOpen ? 'hidden' : ''}>
           {(uploading || doiLoading || sampleLoading) && (
