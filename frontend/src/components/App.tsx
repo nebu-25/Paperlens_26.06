@@ -167,30 +167,79 @@ function WorkspaceLoadingState({
   demoSessionId: string | null;
   savedAt: string | null;
 }) {
+  const eyebrow = demoSessionId ? '데모 문서 준비 중' : '리뷰 노트 불러오는 중';
+  const title = demoSessionId ? '빠른 테스트 문서를 여는 중입니다' : '저장된 작업을 확인하고 있습니다';
+  const status = savedAt || '서버와 로컬 캐시를 확인하고 있습니다.';
+
   return (
-    <section className="min-h-0 overflow-y-auto bg-white/50 p-6 sm:p-10">
-      <div className="mx-auto grid min-h-full max-w-5xl place-items-center">
-        <div className="w-full max-w-2xl rounded border border-line bg-panel/95 p-6 shadow-sm">
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-action">
-                {demoSessionId ? '데모 문서 준비 중' : '리뷰 노트 불러오는 중'}
-              </p>
-              <h2 className="text-xl font-bold leading-tight">
-                {demoSessionId ? '빠른 테스트 문서를 여는 중입니다' : '저장된 작업을 확인하고 있습니다'}
-              </h2>
+    <section className="flex min-h-0 flex-col">
+      <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.8fr)]">
+        <article className="flex min-h-0 flex-col border-b border-line bg-white xl:border-b-0 xl:border-r">
+          <div className="shrink-0 border-b border-line bg-paper/95 p-5 pb-3 sm:p-6 sm:pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-action">
+                  {eyebrow}
+                </p>
+                <h2 className="text-base font-semibold">원문 패널</h2>
+              </div>
+              <div className="size-9 shrink-0 animate-pulse rounded bg-action/15" aria-hidden="true" />
             </div>
-            <div className="size-9 shrink-0 animate-pulse rounded bg-action/15" aria-hidden="true" />
           </div>
-          <div className="grid gap-3" aria-hidden="true">
-            <div className="h-4 w-3/4 animate-pulse rounded bg-paper" />
-            <div className="h-4 w-11/12 animate-pulse rounded bg-paper" />
-            <div className="h-4 w-2/3 animate-pulse rounded bg-paper" />
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+            <div className="mb-5 max-w-2xl">
+              <h3 className="text-xl font-bold leading-tight">{title}</h3>
+              <p role="status" aria-live="polite" className="mt-3 text-sm leading-6 text-muted">
+                {status}
+              </p>
+            </div>
+            <div className="space-y-4" aria-hidden="true">
+              <div className="h-5 w-3/4 animate-pulse rounded bg-paper" />
+              <div className="h-4 w-11/12 animate-pulse rounded bg-paper" />
+              <div className="h-4 w-5/6 animate-pulse rounded bg-paper" />
+              <div className="mt-8 grid gap-3">
+                <div className="h-24 animate-pulse rounded border border-line bg-panel" />
+                <div className="h-24 animate-pulse rounded border border-line bg-panel" />
+                <div className="h-24 animate-pulse rounded border border-line bg-panel" />
+              </div>
+            </div>
           </div>
-          <p role="status" aria-live="polite" className="mt-5 text-sm leading-6 text-muted">
-            {savedAt || '서버와 로컬 캐시를 확인하고 있습니다.'}
-          </p>
-        </div>
+        </article>
+
+        <article className="flex min-h-0 flex-col bg-paper">
+          <div className="shrink-0 border-b border-line bg-paper/95 p-5 pb-3 sm:p-6 sm:pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold">리뷰 노트</h2>
+              <div className="h-7 w-28 animate-pulse rounded bg-white" aria-hidden="true" />
+            </div>
+            <div className="mt-3 rounded border border-line bg-white p-2" aria-hidden="true">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="h-3 w-20 animate-pulse rounded bg-paper" />
+                <div className="h-3 w-28 animate-pulse rounded bg-paper" />
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-paper">
+                <div className="h-full w-1/3 animate-pulse rounded-full bg-action/30" />
+              </div>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-6 pt-5 sm:px-6">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="rounded border border-line bg-white p-4" aria-hidden="true">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="h-4 w-32 animate-pulse rounded bg-paper" />
+                  <div className="h-5 w-16 animate-pulse rounded bg-paper" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 w-full animate-pulse rounded bg-paper" />
+                  <div className="h-3 w-10/12 animate-pulse rounded bg-paper" />
+                  <div className="h-3 w-2/3 animate-pulse rounded bg-paper" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
       </div>
     </section>
   );

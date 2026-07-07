@@ -36,6 +36,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 데모 세션 만료 데이터 정리는 `/api/notes` 요청마다 실행하지 않고 프로세스 기준 10분 간격으로 제한해 로그인 초기 요청 지연을 줄였습니다.
 - 로그인 후 초기 복원은 `/api/health`를 비차단 warm-up으로 호출하고 `/api/notes`는 최대 30초까지 기다립니다. Render 콜드스타트/데모 seed 지연 중에도 로컬 캐시 또는 안내 상태를 먼저 유지합니다.
 - 로그인 후 문서 복원 중에는 빈 상태 화면 대신 skeleton 준비 화면을 표시합니다. 데모 계정은 "빠른 테스트 문서", 일반 계정은 "저장된 작업"을 확인 중이라고 구분해 안내하며, 사이드바도 복원 중 문구를 표시합니다.
+- 빠른 테스트 문서/저장된 작업 로딩 skeleton은 실제 워크스페이스와 같은 원문/리뷰 2열 비율(`1.7fr / 0.8fr`)을 사용합니다. 단일 중앙 카드로 뜨던 이전 로딩 화면은 기존 작업 화면과 비율이 달라 보여 교체했습니다.
 - 로그인 후 저장된 논문이 있으면 추가 업로드 없이 마지막 활성 논문 또는 첫 논문을 바로 엽니다.
 - PDF 원본 보기는 Bearer token으로 PDF를 fetch한 뒤 blob URL로 iframe에 표시합니다. 실패해도 하이라이트 가능한 원문은 유지합니다.
 - 원문 패널의 PDF 연결 안내와 원문 텍스트 상태 경고는 기본 접힘 상태의 작은 상태 줄로 표시합니다. 상세 설명, PDF 연결 버튼, OCR 버튼은 사용자가 "상세 보기"를 눌렀을 때만 펼쳐 산만함을 줄입니다.
@@ -74,6 +75,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 2026-07-07 운영 Pages를 Playwright로 확인했습니다. 데모 계정은 로그인 폼에 prefill 되었고, 로그인 직후 skeleton 준비 화면과 사이드바 "리뷰 노트를 불러오는 중입니다" 문구가 보였습니다. `/api/notes`는 8.0초, lazy-load `/api/notes/<quickstart>`는 2.1초에 200으로 끝났고 빠른 체험 문서가 열렸습니다. 샘플 PDF 흐름은 `/api/health` 0.2초, `/api/papers/sample-pdf` 0.2초, `/api/papers/extract-text` 6.6초였습니다.
 - 같은 운영 확인에서 이미 데모 세션에 샘플 PDF seed가 있는데도 샘플 PDF 버튼이 새 샘플 노트를 하나 더 만드는 문제가 발견됐습니다. 프론트 중복 감지를 `sample:paperlens`와 `demo-session:demo-paperlens-sample-pdf` 모두 인식하도록 수정했으며, 다음 배포 후 샘플 PDF 버튼 재클릭 시 기존 샘플 리뷰 노트가 열리는지 확인해야 합니다.
 - 2026-07-07에 로그인 후 서비스 화면 공백기와 파일 로드 후 알림 과다 문제를 1차 개선했습니다. `loaded=false` 상태에서는 skeleton 준비 화면을 보여 주고, 업로드 info/success 알림은 자동 숨김 처리하며, 원문 PDF/추출 품질 안내는 접힌 상태 줄로 축소했습니다.
+- 2026-07-07에 빠른 노트 불러오기 skeleton 화면의 본문 비율을 기존 워크스페이스와 맞췄습니다. 원문/리뷰 패널 skeleton을 실제 작업 화면과 같은 `xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,0.8fr)]`로 배치했고, `cd frontend && npm run build`, `cd frontend && npm run lint`를 통과했습니다.
 - 2026-07-07에 데모 로그인 직후 빠른 테스트 문서 로드가 오래 걸리고 샘플 PDF가 이어서 실패하는 현상을 분석했습니다. 1차 개선으로 데모 seed bulk copy, 데모 cleanup rate limit, 초기 health 비차단화, `/notes` 30초 대기, 샘플 PDF 단계별 timeout을 적용했습니다. 배포 후 Network 탭에서 `/api/notes`, `/api/papers/sample-pdf`, `/api/papers/extract-text` 시간을 분리해 확인했습니다.
 - 2026-07-06에 모달 크기/폰트 변경 이후 최신 배포가 반영되지 않던 원인은 코드 빌드 실패가 아니라 GitHub Pages deploy job 실패였습니다. `actions/deploy-pages@v5` 갱신 커밋 `e1b886e` 이후 Pages 배포가 성공했고, 설문 프롬프트 커밋 `c1393d5`도 Pages 배포 성공을 확인했습니다.
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
@@ -110,6 +112,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - /api/diagnostics 운영 응답에서 `auth.mode: supabase`, `auth.ready: true`, `auth.warnings: []` 확인
    - 실제 로그인 후 /api/notes 200 여부 확인
    - 로그인 직후 문서 복원 중 빈 화면이 아니라 skeleton 준비 화면이 보이는지 확인
+   - 빠른 노트 불러오기 skeleton이 기존 워크스페이스와 같은 원문/리뷰 2열 비율로 보이는지 확인
    - 데모 계정 로그인 직후 `/api/notes`가 30초 안에 끝나고 기본 빠른 테스트 문서가 열리는지 재확인
    - 로그인 후 저장된 논문이 추가 업로드 없이 바로 열리는지 확인
    - 파일이 열린 직후 큰 알림이 여러 개 쌓이지 않고, 원문 PDF/원문 상태 안내가 접힌 상태 줄로 보이는지 확인
