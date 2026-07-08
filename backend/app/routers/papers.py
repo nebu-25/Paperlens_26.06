@@ -729,6 +729,27 @@ def _front_matter_missing_from(candidate: str, reference: str) -> set[str]:
     return reference_markers - _front_matter_markers(candidate)
 
 
+def _raw_has_column_tail_order_error(raw: str, reflowed: str) -> bool:
+    bad_email_tail = re.search(r"(?:e-?mail|@)[^\n]{0,160}목적이\s+있다\.", raw, re.IGNORECASE)
+    if bad_email_tail and re.search(r"그\s+목적이\s+있다\.", reflowed):
+        return True
+
+    anchor = "DICOM 파일과 동일하거나"
+    raw_anchor = raw.find(anchor)
+    raw_tail = raw.find("목적이 있다")
+    reflow_anchor = reflowed.find(anchor)
+    reflow_tail = reflowed.find("목적이 있다")
+    return (
+        raw_tail != -1
+        and raw_anchor != -1
+        and raw_tail < raw_anchor
+        and reflow_anchor != -1
+        and reflow_tail != -1
+        and reflow_anchor < reflow_tail
+        and bool(re.search(r"그\s+목적이\s+있다\.", reflowed))
+    )
+
+
 def _choose_extracted_text(reflowed: str, raw: str) -> str:
     """문단 재구성 결과와 기본 추출 결과 중 더 보존적인 텍스트를 고른다."""
     if not reflowed.strip():
@@ -742,6 +763,8 @@ def _choose_extracted_text(reflowed: str, raw: str) -> str:
     raw_total = int(raw_stats["total"])
     if raw_total >= 120 and reflow_total < raw_total * 0.45:
         return raw
+    if _raw_has_column_tail_order_error(raw, reflowed):
+        return reflowed
     if len(_front_matter_missing_from(reflowed, raw)) >= 2:
         return raw
     if float(raw_stats["broken_ratio"]) + 0.03 < float(reflow_stats["broken_ratio"]):

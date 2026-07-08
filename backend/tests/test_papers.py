@@ -421,6 +421,40 @@ class TestChooseExtractedText:
 
         assert papers._choose_extracted_text(reflowed, raw) == raw
 
+    def test_keeps_reflow_when_raw_joins_purpose_to_email(self):
+        reflowed = (
+            "Catholic University of Pusan, Korea. E-mail: sjko@cup.ac.kr\n\n"
+            "I. 서론\n\n"
+            "DICOM 파일과 동일하거나 유사한 결과를제공할 수 있는 이미지 파일의 기준을 제시하여"
+            "기초자료로서의 활용 및 연구의 신뢰성을높이는데 그 목적이 있다."
+        )
+        raw = (
+            "요약 의료영상 비교 연구입니다.\n"
+            "ABSTRACT Comparison of medical images.\n"
+            "키워드 DICOM, CT\n"
+            "Catholic University of Pusan, Korea. E-mail: sjko@cup.ac.kr 목적이 있다.\n"
+            "DICOM 파일과 동일하거나 유사한 결과를 제공할 수 있는 이미지 파일의 기준을 제시하여 "
+            "기초자료로서의 활용 및 연구의 신뢰성을 높이는데 그"
+        )
+
+        assert papers._choose_extracted_text(reflowed, raw) == reflowed
+
+    def test_keeps_reflow_when_raw_places_right_column_tail_before_left_body(self):
+        reflowed = (
+            "I. 서론\n\n"
+            "DICOM 파일과 동일하거나 유사한 결과를제공할 수 있는 이미지 파일의 기준을 제시하여"
+            "기초자료로서의 활용 및 연구의 신뢰성을높이는데 그 목적이 있다.\n\n"
+            "II. 재료 및 방법"
+        )
+        raw = (
+            "I. 서론 목적이 있다.\n"
+            "DICOM 파일과 동일하거나 유사한 결과를 제공할 수 있는 이미지 파일의 기준을 제시하여 "
+            "기초자료로서의 활용 및 연구의 신뢰성을 높이는데 그\n"
+            "II. 재료 및 방법"
+        )
+
+        assert papers._choose_extracted_text(reflowed, raw) == reflowed
+
 
 class TestNoiseBlock:
     def test_page_number_is_noise(self):
