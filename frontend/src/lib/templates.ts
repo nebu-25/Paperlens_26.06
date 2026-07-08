@@ -68,9 +68,17 @@ const T1_GENERAL: PurposeTemplateDef = {
   recommendedColors: ['yellow', 'blue'],
   // 기존 5문항(q1~q5)을 그대로 승계 — 답변은 하위 호환을 위해 note.template에 저장한다.
   // 관련 라벨(FR-22): 무엇을 해결→주장, 방법→방법론, 결과→결과, 한계→한계/비판.
+  // placeholder는 T2~T5와 같은 안내 문구 UX를 맞추되, 범용 리뷰 목적에 맞게 작성한다.
   questions: TEMPLATE_QUESTIONS.map((q, index) => ({
     key: q.key,
     label: q.label,
+    placeholder: [
+      '논문이 다루는 문제 상황, 연구 질문, 해결하려는 공백을 한두 문장으로 정리하세요.',
+      '사용한 데이터, 실험 설계, 분석 절차, 비교 기준을 중심으로 방법의 뼈대를 적어 보세요.',
+      '핵심 발견, 성능 차이, 주장에 직접 연결되는 결과를 먼저 정리하세요.',
+      '저자가 밝힌 한계와 읽으면서 보이는 제약을 구분해서 적어 보세요.',
+      '이 논문을 다시 설명해야 할 때 남길 핵심 메시지를 내 말로 요약하세요.',
+    ][index],
     relatedColors: ([['yellow'], ['green'], ['blue'], ['pink'], []] as HighlightColor[][])[index],
   })),
   completionLabel: '5문항을 모두 작성하면 정독 단계가 완료됩니다.',

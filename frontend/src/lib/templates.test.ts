@@ -21,6 +21,13 @@ describe('resolvePurposeTemplate', () => {
     expect(resolvePurposeTemplate(undefined).id).toBe(DEFAULT_TEMPLATE_ID);
     expect(resolvePurposeTemplate('t9_future').id).toBe(DEFAULT_TEMPLATE_ID);
   });
+
+  it('provides placeholders for T1 questions too', () => {
+    const t1 = resolvePurposeTemplate('t1_general');
+    expect(t1.questions).toHaveLength(5);
+    expect(t1.questions.every((q) => q.placeholder && q.placeholder.length > 0)).toBe(true);
+    expect(t1.questions[0].placeholder).toContain('연구 질문');
+  });
 });
 
 describe('isPurposeTemplateId', () => {

@@ -263,6 +263,8 @@ python3 backend/scripts/smoke_deployment.py
 
 GitHub Actions의 `Production smoke` 워크플로도 같은 검사를 수행합니다. 이 워크플로는 수동 실행할 수 있고, GitHub Pages 배포 워크플로가 성공한 뒤 자동으로도 실행됩니다. Render 배포는 GitHub Actions가 완료 시점을 직접 알 수 없으므로 Render 배포 후 필요할 때 수동 실행합니다.
 
+Supabase anon key를 교체한 경우에는 GitHub Actions repository secret `SUPABASE_ANON_KEY`와 GitHub Pages environment variable `VITE_SUPABASE_ANON_KEY`를 함께 갱신한 뒤 프론트를 재배포합니다. `VITE_*` 값은 빌드 산출물에 포함되므로 secret만 바꾸고 재배포하지 않으면 운영 프론트와 smoke 설정이 서로 다른 키를 사용할 수 있습니다.
+
 `/api/diagnostics`는 비밀값을 반환하지 않고 Supabase/Auth/DB/AI 설정 여부만 반환합니다. 운영에서는 `auth.mode`가 `supabase`, `auth.ready`가 `true`, `auth.warnings`가 빈 배열이어야 합니다. AI를 켠 운영 환경에서는 `ai.ready`도 `true`, `ai.warnings`도 빈 배열이어야 합니다. 기본 `smoke_deployment.py`는 공개 배포 생존성을 우선 확인하므로 `ai.ready=false`는 stderr 경고로 출력하고 실패 처리하지 않습니다. 운영 가드레일을 엄격하게 배포 차단 조건으로 확인할 때는 `REQUIRE_AI_READY=true python3 backend/scripts/smoke_deployment.py`로 실행합니다. `smoke_deployment.py`는 다음 공개 항목을 확인합니다.
 
 - Pages 루트, `/service_home/`, `favicon.svg`

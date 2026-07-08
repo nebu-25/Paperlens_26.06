@@ -18,6 +18,7 @@ npm run build
 - `frontend/src/lib/export.test.ts`: Markdown/PDF HTML 생성, HTML escape, 파일명 보호
 - `frontend/src/lib/localReviewCache.test.ts`: 계정별 브라우저 캐시 fallback, 원문 텍스트 분리 저장/복원, 캐시 삭제
 - `frontend/src/lib/reviewProgress.test.ts`: 리뷰 진행률 체크리스트
+- `frontend/src/lib/templates.test.ts`: 목적 템플릿 id 폴백, T1 legacy 답변 경로, T1~T5 완료 기준, T1 질문 placeholder 안내문구
 - `frontend/src/hooks/useReviewStore.test.ts`: 핵심 상태/액션(논문 누적 등록, 태그 갱신, 하이라이트/용어 추가, 태그 필터, 삭제, 로컬 파일 경로 안내, 차단된 PDF URL 처리)
 - `frontend/src/components/NoticeBanner.test.tsx`: 알림 배너 접근성(심각도별 role/aria-live, 색상 비의존 접두사)
 
@@ -122,6 +123,8 @@ PAPERLENS_SMOKE_EMAIL=paperlens-smoke@example.com \
 PAPERLENS_SMOKE_PASSWORD='...' \
 python3 backend/scripts/smoke_deployment.py
 ```
+
+Supabase anon key를 갱신하면 repository secret `SUPABASE_ANON_KEY`와 GitHub Pages environment variable `VITE_SUPABASE_ANON_KEY`를 모두 갱신한 뒤 프론트 재배포와 `Production smoke` 재실행을 순서대로 확인합니다.
 
 ### 운영 체크리스트
 
