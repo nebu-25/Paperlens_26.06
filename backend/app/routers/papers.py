@@ -644,6 +644,18 @@ def _is_column_continuation_fragment(text: str) -> bool:
     return not re.match(r"^(?:abstract|keywords?|요약|초록|키워드)\b", stripped, re.IGNORECASE)
 
 
+def _join_column_continuation(previous: str, fragment: str) -> str:
+    prev = previous.rstrip()
+    next_part = fragment.lstrip()
+    if (
+        re.search(r"(?:^|\s)(?:그|이|저)$", prev)
+        and next_part
+        and _is_cjk(next_part[0])
+    ):
+        return f"{prev} {next_part}"
+    return _join_lines([previous, fragment])
+
+
 def _append_reflowed_group(paragraphs: list[str], group_paragraphs: list[str]) -> None:
     """컬럼 경계에서 끊긴 문장 꼬리는 이전 문단에 이어 붙인다."""
     if not group_paragraphs:
@@ -654,7 +666,7 @@ def _append_reflowed_group(paragraphs: list[str], group_paragraphs: list[str]) -
         and not _ends_sentence(paragraphs[-1])
         and _is_column_continuation_fragment(pending[0])
     ):
-        paragraphs[-1] = _tidy_spacing(_join_lines([paragraphs[-1], pending.pop(0)]))
+        paragraphs[-1] = _tidy_spacing(_join_column_continuation(paragraphs[-1], pending.pop(0)))
     paragraphs.extend(pending)
 
 
