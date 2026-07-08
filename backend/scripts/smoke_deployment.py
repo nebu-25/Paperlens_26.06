@@ -336,12 +336,14 @@ def _check_sample_pdf_extract_flow(api_base: str, auth_headers: dict[str, str]) 
         {"paper_id": smoke_paper_id},
         {"file": ("2604.04977v1.pdf", sample.body, "application/pdf")},
     )
-    extract = _request(
+    extract = _request_with_retries(
         "POST",
         f"{api_base}/api/papers/extract-text",
         data=body,
         headers={**auth_headers, "Content-Type": content_type},
         timeout=120,
+        attempts=4,
+        label="sample PDF extract",
     )
     try:
         _assert(
@@ -356,11 +358,12 @@ def _check_sample_pdf_extract_flow(api_base: str, auth_headers: dict[str, str]) 
         quality = extract_body.get("extraction_quality") or {}
         _assert(isinstance(quality, dict), "extract response missing extraction_quality object")
 
-        stored_pdf = _request(
+        stored_pdf = _request_with_retries(
             "GET",
             f"{api_base}/api/papers/{smoke_paper_id}/pdf",
             headers=auth_headers,
             timeout=45,
+            label="stored sample PDF",
         )
         _assert(stored_pdf.status == 200, f"stored sample PDF expected 200, got {stored_pdf.status}")
         _assert(
