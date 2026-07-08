@@ -304,8 +304,8 @@ function App() {
   const devLocalMode = import.meta.env.DEV && !authEnabled;
 
   const requestSurveyPrompt = useCallback((reason: SurveyPromptReason) => {
-    if (!canShowSurveyPrompt()) return;
-    markSurveyPromptShown();
+    if (!canShowSurveyPrompt(reason)) return;
+    markSurveyPromptShown(reason);
     setSurveyPromptReason(reason);
   }, []);
 
