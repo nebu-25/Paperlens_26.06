@@ -628,6 +628,36 @@ def _reflow_lines(lines: list[dict[str, object]]) -> list[str]:
     return [_tidy_spacing(p) for p in paragraphs if p]
 
 
+_SENTENCE_END = re.compile(r"[.!?。！？…]+[\"')\]}»”’】」』]*$")
+
+
+def _ends_sentence(text: str) -> bool:
+    return bool(_SENTENCE_END.search(text.strip()))
+
+
+def _is_column_continuation_fragment(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped or len(stripped) > 80:
+        return False
+    if _is_numbered_section_heading_line(stripped):
+        return False
+    return not re.match(r"^(?:abstract|keywords?|요약|초록|키워드)\b", stripped, re.IGNORECASE)
+
+
+def _append_reflowed_group(paragraphs: list[str], group_paragraphs: list[str]) -> None:
+    """컬럼 경계에서 끊긴 문장 꼬리는 이전 문단에 이어 붙인다."""
+    if not group_paragraphs:
+        return
+    pending = list(group_paragraphs)
+    if (
+        paragraphs
+        and not _ends_sentence(paragraphs[-1])
+        and _is_column_continuation_fragment(pending[0])
+    ):
+        paragraphs[-1] = _tidy_spacing(_join_lines([paragraphs[-1], pending.pop(0)]))
+    paragraphs.extend(pending)
+
+
 def _reflow_document(document) -> str:
     """줄 단위로 문단을 재구성해 자연스럽게 읽히는 텍스트를 만든다.
 
@@ -653,7 +683,7 @@ def _reflow_document(document) -> str:
             continue
         page_width = float(getattr(getattr(page, "rect", None), "width", 0.0)) or _page_width_from_lines(body)
         for group in _split_page_columns(body, page_width):
-            paragraphs.extend(_reflow_lines(group))
+            _append_reflowed_group(paragraphs, _reflow_lines(group))
     return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p)
 
 

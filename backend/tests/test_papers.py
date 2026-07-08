@@ -587,6 +587,32 @@ class TestReflowDocument:
         assert text.index("Left body four") < text.index("Right column first line")
         assert "1. 서론 Right column first line" not in text
 
+    def test_joins_right_column_sentence_tail_aligned_with_left_heading(self):
+        page = FakePage(
+            [
+                {"text": "DICOM 화상과 CT영상 관심의 영상 비교", "x0": 348, "x1": 470, "y0": 45, "y1": 55},
+                {"text": "I. 서론", "x0": 145, "x1": 190, "y0": 82, "y1": 94, "size": 12},
+                {"text": "목적이 있다.", "x0": 275, "x1": 330, "y0": 82, "y1": 94},
+                {"text": "의료영상 연구는 소프트웨어 성능을 비교하여 연구의", "x0": 72, "x1": 244, "y0": 110, "y1": 122},
+                {"text": "핵심 지표를 평가하고 임상 적용 가능성을 확인하는", "x0": 72, "x1": 244, "y0": 124, "y1": 136},
+                {"text": "과정을 제안하며 장비별 차이를 분석하는 데 그", "x0": 72, "x1": 244, "y0": 138, "y1": 150},
+                {"text": "실험 기준과 영상 처리 조건을 함께 검토하는 연구의", "x0": 72, "x1": 244, "y0": 152, "y1": 164},
+                {"text": "II. 재료 및 방법", "x0": 333, "x1": 430, "y0": 120, "y1": 132, "size": 12},
+                {"text": "2.1 실험재료", "x0": 275, "x1": 335, "y0": 156, "y1": 168},
+                {"text": "2.1.1 AAPM 성능 평가용 팬텀", "x0": 275, "x1": 430, "y0": 176, "y1": 188},
+                {"text": "CT 정도관리 표준 팬텀은 CT number", "x0": 275, "x1": 465, "y0": 196, "y1": 208},
+                {"text": "calibration 등을 측정할 수 있다.", "x0": 275, "x1": 465, "y0": 210, "y1": 222},
+                {"text": "beam alignment 및 노이즈 측정용 팬텀을", "x0": 275, "x1": 465, "y0": 224, "y1": 236},
+            ]
+        )
+
+        text = papers._reflow_document(FakeDocument([page]))
+
+        assert "연구의목적이 있다." in text
+        assert "\n\n목적이 있다." not in text
+        assert text.index("I. 서론") < text.index("연구의목적이 있다.")
+        assert text.index("연구의목적이 있다.") < text.index("II. 재료 및 방법")
+
     def test_keeps_front_matter_before_roman_section_two_column_body(self):
         page = FakePage(
             [

@@ -175,6 +175,37 @@ Supabase anon key를 갱신하면 repository secret `SUPABASE_ANON_KEY`와 GitHu
 - Supabase SQL 편집기에서 mock 계정을 확인 완료 상태로 조정한 뒤, 같은 계정으로 `backend/scripts/smoke_deployment.py`를 실행해 운영 인증 smoke가 통과했다: `Production deployment smoke passed ... (with authenticated notes check)`.
 - GitHub repository secrets `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `PAPERLENS_SMOKE_EMAIL`, `PAPERLENS_SMOKE_PASSWORD`를 등록한 뒤 `Production smoke` workflow를 브랜치 기준으로 수동 실행했다. Run `28748255495`가 통과했고 로그에서 `with authenticated notes check`를 확인했다.
 
+### 2026-07-08 그림/표 네비게이션과 2단 PDF 문장 꼬리 reflow
+
+반영한 범위:
+
+- 그림/표 네비게이터는 문자 추출 원문 위치와 PDF 뷰어 위치를 별도 버튼으로 유지한다.
+- 백엔드는 표처럼 이미지 객체가 잡히지 않는 경우에도 캡션 좌표를 `captionOnly` PDF 참조로 저장한다.
+- 프론트는 `paper.figureImages`에만 있는 PDF 캡션 참조를 캡션 목록에 병합해 `PDF p.N 캡션` 버튼을 표시한다.
+- 기존 저장 PDF 노트는 `/api/papers/{paper_id}/structure-index`로 저장 PDF를 다시 열어 figure/table 구조 인덱스를 보강한다.
+- 2단 PDF에서 좌측 섹션 헤딩과 같은 높이에 우측 컬럼 문장 꼬리가 놓이면, 이전 컬럼 문장이 종결되지 않은 경우 짧은 꼬리 문단을 이전 문단에 이어 붙인다.
+
+실행한 검증:
+
+- `cd frontend && npm test -- figureIndex.test.ts`: 6 passed.
+- `cd frontend && npm run build`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_figure_images.py::TestDetectFigureImages backend/tests/test_figure_images.py::TestCaptionImageMatching -q`: 5 passed.
+- `python3 -m py_compile backend/app/routers/papers.py backend/scripts/smoke_deployment.py`: 통과.
+- `backend/.venv/bin/python -m ruff check backend/scripts/smoke_deployment.py backend/app/routers/papers.py backend/app/services/figure_images.py backend/tests/test_figure_images.py`: 통과.
+- `PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestReflowDocument -q`: 8 passed.
+- `PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/test_papers.py -q`: 112 passed.
+- `PYTHONPATH=backend backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
+
+운영 확인:
+
+- Render에 `a892598 Retry sample PDF smoke extraction` 반영 후 `Production smoke`가 성공했다.
+- 운영 화면에서 그림/표 PDF 캡션 이동 적용을 확인했다.
+
+남는 확인:
+
+- 기존 저장 노트의 구조 인덱스 보강은 백그라운드 보강 실패가 편집 흐름을 막지 않도록 설계했다. 특정 노트에서 여전히 캡션 버튼이 비면 해당 PDF의 저장 원본 존재 여부와 `/api/papers/{paper_id}/structure-index` 응답을 우선 확인한다.
+- 백엔드 TestClient 통합 테스트 일부는 로컬 환경에서 장시간 멈추는 현상이 있어 순수 함수/서비스 단위 테스트와 운영 smoke로 검증했다.
+
 ## Demo Account Reset
 
 예비 사용자를 위한 공용 데모 계정은 매일 04:00 KST에 기본 샘플 노트 상태로 되돌립니다. 사용자가 데모 계정으로 로그인하면 브라우저 탭 단위 `demo_session_id`가 생성되고, 백엔드는 공용 데모 계정의 현재 샘플 노트를 세션 전용 사용자 공간으로 복사합니다. 데모 API 진입 시 `DEMO_SESSION_TTL_HOURS`가 지난 세션 데이터는 자동 정리됩니다. 리셋은 원본 데모 계정의 모든 노트를 삭제한 뒤 `demo-paperlens-quickstart` 빠른 체험 노트와 `demo-paperlens-sample-pdf` 샘플 PDF 노트를 다시 저장하고, 빠른 체험 노트의 하이라이트 오프셋이 원문 텍스트와 일치하는지 검증합니다.
