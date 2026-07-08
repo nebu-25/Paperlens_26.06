@@ -492,6 +492,7 @@ export function SourcePanel() {
                         const memoOpen = openFigureMemos.has(caption.id) || memo.length > 0;
                         const mentions = figureMentionCounts[caption.id] ?? 0;
                         const pdfRef = captionImagePage.get(caption.id);
+                        const canOpenTextCaption = !caption.pdfOnly && caption.start >= 0;
                         const canOpenPdfFigure = Boolean(paperPdfUrl && pdfRef);
                         return (
                           <li key={caption.id} className="rounded bg-white/70 px-2 py-1">
@@ -501,9 +502,16 @@ export function SourcePanel() {
                               </span>
                               <button
                                 type="button"
-                                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action"
-                                title={`${caption.label}의 문자 추출 원문 위치로 이동합니다`}
-                                onClick={() => jumpToTextOffset(caption.start)}
+                                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={!canOpenTextCaption}
+                                title={
+                                  canOpenTextCaption
+                                    ? `${caption.label}의 문자 추출 원문 위치로 이동합니다`
+                                    : '추출 원문에서는 캡션 위치를 찾지 못했습니다. PDF 캡션 버튼을 사용하세요.'
+                                }
+                                onClick={() => {
+                                  if (canOpenTextCaption) jumpToTextOffset(caption.start);
+                                }}
                               >
                                 <ScanText size={11} />
                                 원문 위치

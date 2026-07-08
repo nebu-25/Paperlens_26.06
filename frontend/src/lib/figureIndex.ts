@@ -1,6 +1,7 @@
 // 그림/표 네비게이터 (기획서 v4.0 §8-7, FR-27) — 캡션·교차참조 인덱스. 순수 함수만 둔다.
 // 추출 텍스트에서 "Figure N / 그림 N / Table N / 표 N" 캡션 줄과 본문 언급을 찾는다.
 // 위치 안내까지만 하고 그림의 의미(추세·결과)는 해석하지 않는다 (§4-2 경계).
+import type { FigureImageRef } from '../types';
 
 export interface FigureCaption {
   // 정규화 키: 'figure-3' | 'table-1' — 노트의 그림 메모(figureNotes)가 이 키로 저장된다.
@@ -12,6 +13,8 @@ export interface FigureCaption {
   end: number;
   // 캡션 설명 앞부분 (목록 미리보기용)
   preview: string;
+  // true면 추출 텍스트가 아니라 PDF 캡션 좌표 fallback에서 온 항목이다.
+  pdfOnly?: boolean;
 }
 
 // 본문 속 "그림 3" 언급 → 캡션으로 연결된 교차참조
@@ -52,8 +55,24 @@ const displayLabel = (prefix: string, num: string) => {
   return `${kind === 'figure' ? 'Figure' : 'Table'} ${num}`;
 };
 
-export function buildFigureIndex(text: string): FigureIndex {
-  if (!text) return { captions: [], mentions: [] };
+const kindFromId = (id: string): 'figure' | 'table' =>
+  id.startsWith('figure-') ? 'figure' : 'table';
+
+function captionFromPdfRef(ref: FigureImageRef): FigureCaption | null {
+  if (!ref.captionId || !ref.captionLabel) return null;
+  return {
+    id: ref.captionId,
+    kind: kindFromId(ref.captionId),
+    label: ref.captionLabel,
+    start: -1,
+    end: -1,
+    preview: 'PDF 캡션 위치',
+    pdfOnly: true,
+  };
+}
+
+export function buildFigureIndex(text: string, figureImages: FigureImageRef[] = []): FigureIndex {
+  if (!text && figureImages.length === 0) return { captions: [], mentions: [] };
 
   const captions: FigureCaption[] = [];
   const seen = new Set<string>();
@@ -85,6 +104,12 @@ export function buildFigureIndex(text: string): FigureIndex {
       }
     }
     lineStart = lineEnd + 1;
+  }
+  for (const ref of figureImages) {
+    const caption = captionFromPdfRef(ref);
+    if (!caption || seen.has(caption.id)) continue;
+    seen.add(caption.id);
+    captions.push(caption);
   }
 
   // 본문 언급: 캡션 줄 내부는 제외하고, 실제 캡션이 존재하는 번호만 링크한다.

@@ -1200,8 +1200,8 @@ export function useReviewStore({
 
   // ── 그림/표 네비게이터 (FR-27, M5: 캡션 목록·점프·본문 교차참조·캡션 메모) ──
   const figureIndex = React.useMemo(
-    () => buildFigureIndex(paper?.text ?? ''),
-    [paper?.text],
+    () => buildFigureIndex(paper?.text ?? '', paper?.figureImages ?? []),
+    [paper?.text, paper?.figureImages],
   );
   const figureMentionCounts = React.useMemo(() => mentionCounts(figureIndex), [figureIndex]);
 

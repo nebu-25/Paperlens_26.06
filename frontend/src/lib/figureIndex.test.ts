@@ -51,4 +51,38 @@ describe('buildFigureIndex (FR-27)', () => {
     expect(captions).toHaveLength(1);
     expect(buildFigureIndex('')).toEqual({ captions: [], mentions: [] });
   });
+
+  it('adds PDF caption fallback refs when extracted text misses captions', () => {
+    const { captions } = buildFigureIndex('', [
+      {
+        page: 3,
+        bbox: [72, 100, 160, 116],
+        captionId: 'table-2',
+        captionLabel: 'Table 2',
+        captionOnly: true,
+      },
+    ]);
+
+    expect(captions).toEqual([
+      {
+        id: 'table-2',
+        kind: 'table',
+        label: 'Table 2',
+        start: -1,
+        end: -1,
+        preview: 'PDF 캡션 위치',
+        pdfOnly: true,
+      },
+    ]);
+  });
+
+  it('keeps extracted text captions ahead of duplicate PDF refs', () => {
+    const { captions } = buildFigureIndex('Table 2. Extracted caption', [
+      { page: 3, captionId: 'table-2', captionLabel: 'Table 2', captionOnly: true },
+    ]);
+
+    expect(captions).toHaveLength(1);
+    expect(captions[0].pdfOnly).toBeUndefined();
+    expect(captions[0].preview).toBe('Extracted caption');
+  });
 });

@@ -70,6 +70,33 @@ def _request(
         )
 
 
+def _request_with_retries(
+    method: str,
+    url: str,
+    *,
+    data: bytes | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: int = 45,
+    attempts: int = 4,
+    retry_statuses: set[int] | None = None,
+    label: str = "request",
+) -> Response:
+    retryable = retry_statuses if retry_statuses is not None else {502, 503, 504}
+    response: Response | None = None
+    for attempt in range(1, attempts + 1):
+        response = _request(method, url, data=data, headers=headers, timeout=timeout)
+        if response.status not in retryable or attempt == attempts:
+            return response
+        delay = min(2 ** (attempt - 1), 8)
+        print(
+            f"{label} got {response.status}; retrying in {delay}s ({attempt}/{attempts})",
+            file=sys.stderr,
+        )
+        time.sleep(delay)
+    _assert(response is not None, f"{label} did not return a response")
+    return response
+
+
 def _multipart_form_data(fields: dict[str, str], files: dict[str, tuple[str, bytes, str]]) -> tuple[bytes, str]:
     boundary = f"----paperlens-smoke-{secrets.token_hex(12)}"
     chunks: list[bytes] = []
@@ -245,10 +272,11 @@ def _supabase_password_token(
 
 
 def _check_authenticated_api(api_base: str, access_token: str) -> None:
-    notes = _request(
+    notes = _request_with_retries(
         "GET",
         f"{api_base}/api/notes",
         headers={"Authorization": f"Bearer {access_token}"},
+        label="authenticated notes",
     )
     _assert(notes.status == 200, f"authenticated notes expected 200, got {notes.status}")
     notes_body = notes.json()
@@ -262,10 +290,13 @@ def _check_demo_session_api(api_base: str, access_token: str) -> None:
         "Authorization": f"Bearer {access_token}",
         "X-PaperLens-Demo-Session": demo_session_id,
     }
-    notes = _request(
+    notes = _request_with_retries(
         "GET",
         f"{api_base}/api/notes",
         headers=auth_headers,
+        attempts=5,
+        timeout=60,
+        label="demo session notes",
     )
     _assert(notes.status == 200, f"demo session notes expected 200, got {notes.status}")
     notes_body = notes.json()
