@@ -1572,6 +1572,32 @@ def get_pdf(paper_id: str, user_id: str = Depends(current_user_id)) -> Response:
     )
 
 
+@router.post("/{paper_id}/structure-index")
+def refresh_structure_index(paper_id: str, user_id: str = Depends(current_user_id)) -> dict[str, object]:
+    """Recompute lightweight PDF structure indexes for an already stored PDF."""
+    stored = db.get_pdf(user_id, paper_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="저장된 PDF를 찾을 수 없습니다.")
+    _filename, content = stored
+    try:
+        import fitz
+
+        document = fitz.open(stream=content, filetype="pdf")
+    except Exception as exc:  # pragma: no cover - library-specific parse failures
+        raise HTTPException(status_code=422, detail="저장된 PDF를 열 수 없습니다.") from exc
+    if document.needs_pass:
+        raise HTTPException(status_code=400, detail="암호로 보호된 PDF입니다.")
+
+    figure_images = _detect_figure_images(document)
+    existing = db.get_note(user_id, paper_id)
+    if existing is not None:
+        paper = existing.get("paper")
+        note = existing.get("note")
+        if isinstance(paper, dict) and isinstance(note, dict):
+            db.upsert_note(user_id, paper_id, {**paper, "figureImages": figure_images}, note)
+    return {"figure_images": figure_images}
+
+
 @router.post("/{paper_id}/ocr")
 def ocr_paper(
     paper_id: str,

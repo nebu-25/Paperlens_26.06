@@ -155,6 +155,7 @@ export function useReviewStore({
   const bodyRef = useRef<HTMLDivElement>(null);
   const attachTargetRef = useRef<string | null>(null);
   const sampleAbortRef = useRef<AbortController | null>(null);
+  const refreshedStructureIndexRef = useRef<Set<string>>(new Set());
 
   const paper = activeId ? library[activeId] ?? null : null;
   const note = (activeId ? notes[activeId] : undefined) ?? EMPTY_NOTE;
@@ -255,6 +256,40 @@ export function useReviewStore({
     markDirty(activeId, { includeText: typeof patch.text === 'string' });
     setLibrary((lib) => (lib[activeId] ? { ...lib, [activeId]: { ...lib[activeId], ...patch } } : lib));
   }
+
+  useEffect(() => {
+    if (!authReady || !paper?.id || !paper.pdfUrl) return;
+    if (refreshedStructureIndexRef.current.has(paper.id)) return;
+    refreshedStructureIndexRef.current.add(paper.id);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/papers/${paper.id}/structure-index`, {
+          method: 'POST',
+          headers: authHeaders,
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { figure_images?: FigureImageRef[] };
+        if (cancelled || !Array.isArray(data.figure_images)) return;
+        setLibrary((lib) => {
+          const current = lib[paper.id];
+          if (!current) return lib;
+          return {
+            ...lib,
+            [paper.id]: {
+              ...current,
+              figureImages: data.figure_images,
+            },
+          };
+        });
+      } catch {
+        /* 기존 PDF 구조 인덱스 보강 실패는 편집 흐름을 막지 않는다. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, paper?.id, paper?.pdfUrl, accessToken, demoSessionId]);
 
   // 손상/스캔 PDF: 저장된 PDF 원본을 서버에서 렌더→OCR로 재인식해 원문을 복구한다.
   async function ocrPaper() {

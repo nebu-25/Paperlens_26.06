@@ -172,6 +172,33 @@ class TestStructureIndexPersistence:
             }
         ]
 
+    def test_structure_index_refresh_updates_existing_note(self, client):
+        put = client.put(
+            "/api/notes/p-table",
+            json={
+                "paper": {
+                    "title": "기존 표 논문",
+                    "authors": "",
+                    "text": "본문은 있지만 표 캡션 위치 인덱스는 비어 있음",
+                    "figureImages": [],
+                },
+                "note": {},
+            },
+        )
+        assert put.status_code == 200
+
+        import app.db as db_module
+
+        db_module.store_pdf("local", "p-table", "table.pdf", _caption_only_table_pdf())
+        res = client.post("/api/papers/p-table/structure-index")
+        assert res.status_code == 200
+        images = res.json()["figure_images"]
+        assert images[0]["captionId"] == "table-1"
+        assert images[0]["captionOnly"] is True
+
+        got = client.get("/api/notes/p-table").json()["paper"]
+        assert got["figureImages"] == images
+
     def test_caption_ids_roundtrip_via_notes(self, client):
         paper = {
             "title": "캡션 매칭 논문",
