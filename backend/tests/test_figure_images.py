@@ -50,6 +50,21 @@ def _caption_pdf() -> bytes:
     return doc.tobytes()
 
 
+def _caption_only_table_pdf() -> bytes:
+    """표 캡션은 있지만 PDF 이미지 객체는 없는 벡터/텍스트 표 형태."""
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text((72, 110), "Table 1. Regression results by condition.")
+    page.draw_rect(fitz.Rect(72, 140, 520, 260))
+    page.draw_line((72, 175), (520, 175))
+    page.draw_line((220, 140), (220, 260))
+    page.insert_text((88, 165), "Condition")
+    page.insert_text((250, 165), "Score")
+    page.insert_text((88, 210), "A")
+    page.insert_text((250, 210), "0.92")
+    return doc.tobytes()
+
+
 class TestDetectFigureImages:
     def test_keeps_significant_images_only(self):
         document = fitz.open(stream=_sample_pdf(), filetype="pdf")
@@ -83,6 +98,18 @@ class TestCaptionImageMatching:
         assert by_page[2]["captionLabel"] == "Table 2"
         # p3: 캡션 없는 이미지는 미매칭
         assert "captionId" not in by_page[3]
+
+    def test_adds_caption_only_reference_for_vector_tables(self):
+        figures = _detect_figure_images(fitz.open(stream=_caption_only_table_pdf(), filetype="pdf"))
+        assert figures == [
+            {
+                "page": 1,
+                "bbox": figures[0]["bbox"],
+                "captionId": "table-1",
+                "captionLabel": "Table 1",
+                "captionOnly": True,
+            }
+        ]
 
 
 @pytest.fixture()
@@ -127,6 +154,23 @@ class TestStructureIndexPersistence:
         images = res.json()["figure_images"]
         matched = {img.get("captionId") for img in images if img.get("captionId")}
         assert {"figure-1", "table-2"} <= matched
+
+    def test_extract_response_includes_caption_only_table_reference(self, client):
+        res = client.post(
+            "/api/papers/extract-text",
+            files={"file": ("table.pdf", _caption_only_table_pdf(), "application/pdf")},
+        )
+        assert res.status_code == 200
+        images = res.json()["figure_images"]
+        assert images == [
+            {
+                "page": 1,
+                "bbox": images[0]["bbox"],
+                "captionId": "table-1",
+                "captionLabel": "Table 1",
+                "captionOnly": True,
+            }
+        ]
 
     def test_caption_ids_roundtrip_via_notes(self, client):
         paper = {

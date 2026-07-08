@@ -17,6 +17,8 @@ export interface FigureImageRef {
   // captionId는 lib/figureIndex.ts와 동일 규칙('figure-1' 등)이라 네비게이터에서 캡션 행에 조인된다.
   captionId?: string;
   captionLabel?: string;
+  // true면 이미지 객체가 아니라 캡션 텍스트 위치만 찾은 fallback이다.
+  captionOnly?: boolean;
 }
 
 export type ExtractionQualityStatus = 'good' | 'review' | 'poor' | 'failed';

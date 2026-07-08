@@ -59,9 +59,11 @@ export function SourcePanel() {
   const [requestedPdfPage, setRequestedPdfPage] = useState<number | null>(null);
   // 캡션↔이미지 매칭(백엔드): 캡션 id -> 그 이미지가 있는 PDF 페이지. 캡션 행의 "PDF 보기" 버튼에 사용.
   const captionImagePage = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, { page: number; captionOnly: boolean }>();
     for (const image of paper?.figureImages ?? []) {
-      if (image.captionId && !map.has(image.captionId)) map.set(image.captionId, image.page);
+      if (image.captionId && !map.has(image.captionId)) {
+        map.set(image.captionId, { page: image.page, captionOnly: image.captionOnly === true });
+      }
     }
     return map;
   }, [paper?.figureImages]);
@@ -489,8 +491,8 @@ export function SourcePanel() {
                         const memo = note.figureNotes?.[caption.id] ?? '';
                         const memoOpen = openFigureMemos.has(caption.id) || memo.length > 0;
                         const mentions = figureMentionCounts[caption.id] ?? 0;
-                        const pdfPage = captionImagePage.get(caption.id);
-                        const canOpenPdfFigure = Boolean(paperPdfUrl && pdfPage !== undefined);
+                        const pdfRef = captionImagePage.get(caption.id);
+                        const canOpenPdfFigure = Boolean(paperPdfUrl && pdfRef);
                         return (
                           <li key={caption.id} className="rounded bg-white/70 px-2 py-1">
                             <div className="flex flex-wrap items-center gap-2">
@@ -513,16 +515,18 @@ export function SourcePanel() {
                                 title={
                                   !paperPdfUrl
                                     ? 'PDF 원본이 연결되면 사용할 수 있습니다'
-                                    : pdfPage
-                                      ? `PDF ${pdfPage}페이지에서 이 그림/표를 봅니다`
+                                    : pdfRef
+                                      ? pdfRef.captionOnly
+                                        ? `PDF ${pdfRef.page}페이지의 캡션 위치로 이동합니다`
+                                        : `PDF ${pdfRef.page}페이지에서 이 그림/표를 봅니다`
                                       : '이 캡션과 매칭된 PDF 그림/표 위치가 없습니다. 원문 위치를 확인하거나 PDF 그림 페이지 칩을 사용하세요.'
                                 }
                                 onClick={() => {
-                                  if (pdfPage) openPdfAtPage(pdfPage);
+                                  if (pdfRef) openPdfAtPage(pdfRef.page);
                                 }}
                               >
                                 <FileText size={11} />
-                                {pdfPage ? `PDF p.${pdfPage}` : 'PDF 보기'}
+                                {pdfRef ? `PDF p.${pdfRef.page}${pdfRef.captionOnly ? ' 캡션' : ''}` : 'PDF 보기'}
                               </button>
                               <span className="min-w-0 flex-1 truncate text-[11px] text-muted">
                                 {caption.preview}

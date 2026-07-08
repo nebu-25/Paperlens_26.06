@@ -68,6 +68,7 @@ def _page_caption_lines(page) -> list[dict[str, object]]:
                     "id": _figure_caption_id(prefix, num),
                     "label": _figure_caption_label(prefix, num),
                     "kind": _figure_caption_kind(prefix),
+                    "bbox": [round(float(v), 2) for v in bbox],
                     "y0": float(bbox[1]),
                     "y1": float(bbox[3]),
                 }
@@ -101,11 +102,16 @@ def _match_captions_to_images(captions: list[dict[str, object]], images: list[di
 
 
 def detect_figure_images(document) -> list[dict[str, object]]:
-    """Collect meaningful embedded image boxes by page and attach nearby captions."""
+    """Collect meaningful embedded image boxes by page and attach nearby captions.
+
+    Vector/text tables often have no PDF image object. For those captions, add a
+    caption-only page reference so the frontend can still jump to the PDF page.
+    """
     figures: list[dict[str, object]] = []
     for page_index in range(document.page_count):
         page = document[page_index]
         page_area = float(page.rect.width * page.rect.height) or 1.0
+        captions = _page_caption_lines(page)
         try:
             infos = page.get_image_info()
         except Exception:  # pragma: no cover - 렌더 불가 페이지는 건너뛴다
@@ -124,8 +130,21 @@ def detect_figure_images(document) -> list[dict[str, object]]:
                 {"page": page_index + 1, "bbox": [round(float(v), 2) for v in bbox]}
             )
         if page_images:
-            _match_captions_to_images(_page_caption_lines(page), page_images)
+            _match_captions_to_images(captions, page_images)
             figures.extend(page_images)
+        matched_caption_ids = {image.get("captionId") for image in page_images if image.get("captionId")}
+        for caption in captions:
+            if caption["id"] in matched_caption_ids:
+                continue
+            figures.append(
+                {
+                    "page": page_index + 1,
+                    "bbox": caption["bbox"],
+                    "captionId": caption["id"],
+                    "captionLabel": caption["label"],
+                    "captionOnly": True,
+                }
+            )
         if len(figures) >= _FIGURE_IMAGE_LIMIT:
             return figures[:_FIGURE_IMAGE_LIMIT]
     return figures
