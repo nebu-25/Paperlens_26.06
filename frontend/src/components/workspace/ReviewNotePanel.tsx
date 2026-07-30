@@ -495,6 +495,9 @@ export function ReviewNotePanel() {
         </SectionCard>
 
         <SectionCard title="하이라이트" icon={<Highlighter size={16} />} defaultOpen={false}>
+          <p className="mb-3 text-xs leading-5 text-muted">
+            각 항목의 휴지통 아이콘으로 제거하고, <b className="font-semibold text-ink">인용 목적</b>을 고르면 인용 후보 보드에 모입니다.
+          </p>
           <div className="mb-3 flex flex-wrap gap-1">
             <button
               type="button"
@@ -580,6 +583,8 @@ export function ReviewNotePanel() {
                       </select>
                       <button
                         className="text-muted hover:text-ink"
+                        title="하이라이트 제거"
+                        aria-label="하이라이트 제거"
                         onClick={() =>
                           updateNote(
                             'highlights',
