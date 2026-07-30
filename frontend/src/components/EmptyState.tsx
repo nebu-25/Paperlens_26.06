@@ -1,4 +1,5 @@
 import { FileText } from 'lucide-react';
+import { ONBOARDING_STEPS } from '../constants';
 
 export function EmptyState() {
   return (
@@ -17,9 +18,11 @@ export function EmptyState() {
               흐름을 확인하고, 등록 후에는 원문과 리뷰를 독립적으로 스크롤하며 작성할 수 있습니다.
             </p>
             <div className="mt-5 grid gap-2 text-sm text-ink sm:grid-cols-3">
-              <div className="rounded border border-line bg-paper px-3 py-2">1. 논문 등록</div>
-              <div className="rounded border border-line bg-paper px-3 py-2">2. 문장 하이라이트</div>
-              <div className="rounded border border-line bg-paper px-3 py-2">3. 리뷰 노트 작성</div>
+              {ONBOARDING_STEPS.map((step, index) => (
+                <div key={step.label} className="rounded border border-line bg-paper px-3 py-2">
+                  {index + 1}. {step.label}
+                </div>
+              ))}
             </div>
           </div>
           <div className="mx-auto grid size-44 place-items-center rounded-full bg-action/10 text-action">

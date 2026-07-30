@@ -137,6 +137,26 @@ export const RESEARCH_LINKS = [
   { label: 'Scholar', url: 'https://scholar.google.com' },
 ] as const;
 
+// 첫 사용 안내(온보딩 가이드)와 빈 화면(EmptyState)이 공유하는 기본 사용 순서.
+// 상세 설명을 다시 쓰기보다 "무엇을 어디서 하는지"만 짚는 3단계.
+export const ONBOARDING_STEPS = [
+  {
+    label: '논문 등록',
+    description:
+      '상단 바에서 PDF 업로드나 샘플 PDF로 시작하고, 필요하면 DOI·PDF 원문 URL로도 논문을 추가할 수 있습니다.',
+  },
+  {
+    label: '문장 하이라이트',
+    description:
+      '원문에서 중요한 문장을 드래그하면 하이라이트로 저장되고, 리뷰 노트에서 다시 찾아볼 수 있습니다.',
+  },
+  {
+    label: '리뷰 노트 작성',
+    description:
+      '읽기 목적·3단계 읽기·섹션 요약·용어 사전을 채우며 논문을 자신만의 표현으로 정리하고, 완성되면 내보낼 수 있습니다.',
+  },
+] as const;
+
 export const uploadPhaseText: Record<UploadPhase, string> = {
   idle: '',
   uploading: '업로드 중',

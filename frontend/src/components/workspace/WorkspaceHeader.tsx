@@ -1,4 +1,4 @@
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, HelpCircle } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { RESEARCH_LINKS } from '../../constants';
 import { AuthControls } from '../AuthControls';
@@ -9,6 +9,7 @@ interface WorkspaceHeaderProps {
   authEnabled: boolean;
   authReady: boolean;
   user: User | null;
+  onOpenGuide: () => void;
   onSignOutStarted: () => void;
   onSignOutComplete: () => void;
 }
@@ -17,6 +18,7 @@ export function WorkspaceHeader({
   authEnabled,
   authReady,
   user,
+  onOpenGuide,
   onSignOutStarted,
   onSignOutComplete,
 }: WorkspaceHeaderProps) {
@@ -54,6 +56,15 @@ export function WorkspaceHeader({
         <span className="hidden rounded bg-paper px-3 py-1 text-xs text-muted sm:inline-flex">
           코어 MVP · {aiEnabled ? 'AI 용어 설명 활성' : 'AI 보조 준비 중'}
         </span>
+        <button
+          type="button"
+          className="inline-flex shrink-0 items-center gap-1 rounded p-1.5 text-muted hover:bg-paper hover:text-action"
+          title="사용 순서 가이드 다시 보기"
+          aria-label="사용 순서 가이드 다시 보기"
+          onClick={onOpenGuide}
+        >
+          <HelpCircle size={17} aria-hidden="true" />
+        </button>
         <AuthControls
           enabled={authEnabled}
           ready={authReady}

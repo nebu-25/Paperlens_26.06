@@ -4,6 +4,7 @@ import { useReviewStore } from '../hooks/useReviewStore';
 import { useAuthSession } from '../hooks/useAuthSession';
 import { EmptyState } from './EmptyState';
 import { LandingPage } from './LandingPage';
+import { OnboardingGuide } from './OnboardingGuide';
 import { PaperSidebar } from './workspace/PaperSidebar';
 import { ReviewNotePanel } from './workspace/ReviewNotePanel';
 import { SelectionToolbar } from './workspace/SelectionToolbar';
@@ -17,6 +18,7 @@ import {
   markSurveyPromptShown,
   type SurveyPromptReason,
 } from '../lib/surveyPrompt';
+import { markGuideSeen, shouldShowGuide } from '../lib/onboardingGuide';
 
 const SERVICE_ROUTE = 'service_home';
 
@@ -105,6 +107,22 @@ function ReviewWorkspace({
     restoreElapsedSeconds,
   } = store;
 
+  const userId = user?.id ?? null;
+  const [guideOpen, setGuideOpen] = useState(false);
+  const guideCheckedRef = useRef(false);
+
+  // 첫 워크스페이스 화면(논문 없음)에서 계정 기준 1회만 자동 노출한다.
+  // 로딩 스켈레톤 위에 겹치지 않도록 복원이 끝난 뒤(loaded) 판단한다.
+  useEffect(() => {
+    if (guideCheckedRef.current || !loaded) return;
+    guideCheckedRef.current = true;
+    if (paper) return; // 저장된 논문이 바로 열리면 안내를 띄우지 않는다.
+    if (shouldShowGuide(userId)) {
+      markGuideSeen(userId);
+      setGuideOpen(true);
+    }
+  }, [loaded, paper, userId]);
+
   return (
     <WorkspaceContext.Provider value={{ store, accessToken, demoSessionId, requestSurveyPrompt }}>
       <main
@@ -115,6 +133,7 @@ function ReviewWorkspace({
           authEnabled={authEnabled}
           authReady={authReady}
           user={user}
+          onOpenGuide={() => setGuideOpen(true)}
           onSignOutStarted={onSignOutStarted}
           onSignOutComplete={onSignOutComplete}
         />
@@ -170,6 +189,8 @@ function ReviewWorkspace({
 
         {/* 드래그 선택 플로팅 툴바 */}
         <SelectionToolbar />
+
+        {guideOpen && <OnboardingGuide onClose={() => setGuideOpen(false)} />}
       </main>
     </WorkspaceContext.Provider>
   );
