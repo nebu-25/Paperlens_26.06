@@ -206,6 +206,31 @@ Supabase anon key를 갱신하면 repository secret `SUPABASE_ANON_KEY`와 GitHu
 - 기존 저장 노트의 구조 인덱스 보강은 백그라운드 보강 실패가 편집 흐름을 막지 않도록 설계했다. 특정 노트에서 여전히 캡션 버튼이 비면 해당 PDF의 저장 원본 존재 여부와 `/api/papers/{paper_id}/structure-index` 응답을 우선 확인한다.
 - 백엔드 TestClient 통합 테스트 일부는 로컬 환경에서 장시간 멈추는 현상이 있어 순수 함수/서비스 단위 테스트와 운영 smoke로 검증했다.
 
+### 2026-07-31 Hook dependency와 프론트 번들 분리
+
+반영한 범위:
+
+- `useReviewStore`의 인증 헤더 객체를 `React.useMemo`로 안정화하고, PDF 구조 인덱스 보강 `useEffect` dependency를 실제 사용값인 `authHeaders` 기준으로 정리했다.
+- `PdfViewer`를 PDF 탭 진입 시점에 lazy load하도록 바꿔 pdf.js 뷰어 코드를 초기 워크스페이스 렌더에서 분리했다.
+- `SurveyPrompt`와 `OnboardingGuide` 모달을 lazy load로 분리했다.
+- `App.tsx`에 있던 워크스페이스 렌더링을 `ReviewWorkspace.tsx`로 옮기고, 서비스 라우트에서 lazy load하도록 구성했다.
+- lazy workspace 로딩을 반영해 로그아웃 설문 테스트의 버튼 대기 시간을 명시했다.
+
+실행한 검증:
+
+- `cd frontend && npm run lint`: 통과, React hook dependency 경고 0.
+- `cd frontend && npm test -- --run src/hooks/useReviewStore.test.ts`: 12 passed.
+- `cd frontend && npm test -- --run src/components/App.signout-survey.test.tsx src/components/OnboardingGuide.test.tsx src/hooks/useReviewStore.test.ts`: 18 passed.
+- `cd frontend && npm run build`: 통과.
+- `cd frontend && npm test`: 25 files, 143 passed.
+
+번들 결과:
+
+- 기존 메인 `index` chunk: 약 574 kB.
+- PDF/모달만 lazy load한 1차 결과: 약 552 kB로 여전히 Vite 500 kB 경고가 남았다.
+- 워크스페이스 라우트까지 분리한 최종 결과: `index-CnLTgUhs.js` 399.88 kB, `ReviewWorkspace-CZzNP2M9.js` 152.00 kB, `PdfViewer-DNMZFeyY.js` 18.15 kB, `pdf-CED3u375.js` 425.24 kB.
+- 최종 build에서는 Vite의 500 kB chunk 경고가 사라졌다.
+
 ## Demo Account Reset
 
 예비 사용자를 위한 공용 데모 계정은 매일 04:00 KST에 기본 샘플 노트 상태로 되돌립니다. 사용자가 데모 계정으로 로그인하면 브라우저 탭 단위 `demo_session_id`가 생성되고, 백엔드는 공용 데모 계정의 현재 샘플 노트를 세션 전용 사용자 공간으로 복사합니다. 데모 API 진입 시 `DEMO_SESSION_TTL_HOURS`가 지난 세션 데이터는 자동 정리됩니다. 리셋은 원본 데모 계정의 모든 노트를 삭제한 뒤 `demo-paperlens-quickstart` 빠른 체험 노트와 `demo-paperlens-sample-pdf` 샘플 PDF 노트를 다시 저장하고, 빠른 체험 노트의 하이라이트 오프셋이 원문 텍스트와 일치하는지 검증합니다.

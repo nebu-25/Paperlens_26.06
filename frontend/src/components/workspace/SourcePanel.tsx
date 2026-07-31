@@ -1,15 +1,16 @@
 import { FileText, Highlighter, Image, ListTree, PencilLine, ScanSearch, ScanText, Upload } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { resolveApiUrl } from '../../constants';
 import { scrollToTextOffset } from '../../lib/domText';
 import { needsPdfText } from '../../lib/format';
 import { buildOutline } from '../../lib/outline';
 import { extractionQualityLabel } from '../../lib/paperInputs';
 import { SectionCard } from '../SectionCard';
-import { PdfViewer } from './PdfViewer';
 import { useWorkspace } from './WorkspaceContext';
 
 type PaperViewMode = 'text' | 'pdf';
+
+const PdfViewer = lazy(() => import('./PdfViewer').then((module) => ({ default: module.PdfViewer })));
 
 export function SourcePanel() {
   const { store, accessToken, demoSessionId } = useWorkspace();
@@ -640,25 +641,33 @@ export function SourcePanel() {
           </>
         ) : (
           <section className="rounded border border-line bg-white p-4">
-            <PdfViewer
-              title={paper.pdfFilename || paper.title || '저장된 PDF'}
-              url={paperPdfUrl}
-              accessToken={accessToken}
-              demoSessionId={demoSessionId}
-              highlights={note.highlights}
-              highlightColor={highlightColor}
-              onSelectHighlightColor={setHighlightColor}
-              onAddHighlight={addPdfHighlight}
-              onRemoveHighlight={(highlightId) =>
-                updateNote(
-                  'highlights',
-                  note.highlights.filter((highlight) => highlight.id !== highlightId),
-                )
+            <Suspense
+              fallback={
+                <div className="rounded border border-line bg-panel p-4 text-sm text-muted" role="status">
+                  PDF 원본 보기를 불러오는 중입니다.
+                </div>
               }
-              onAddTerm={addTermText}
-              requestedPage={requestedPdfPage}
-              onRequestedPageHandled={() => setRequestedPdfPage(null)}
-            />
+            >
+              <PdfViewer
+                title={paper.pdfFilename || paper.title || '저장된 PDF'}
+                url={paperPdfUrl}
+                accessToken={accessToken}
+                demoSessionId={demoSessionId}
+                highlights={note.highlights}
+                highlightColor={highlightColor}
+                onSelectHighlightColor={setHighlightColor}
+                onAddHighlight={addPdfHighlight}
+                onRemoveHighlight={(highlightId) =>
+                  updateNote(
+                    'highlights',
+                    note.highlights.filter((highlight) => highlight.id !== highlightId),
+                  )
+                }
+                onAddTerm={addTermText}
+                requestedPage={requestedPdfPage}
+                onRequestedPageHandled={() => setRequestedPdfPage(null)}
+              />
+            </Suspense>
           </section>
         )}
       </div>

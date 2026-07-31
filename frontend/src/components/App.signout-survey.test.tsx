@@ -4,6 +4,7 @@ import type { Session } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type AuthCallback = (event: string, session: Session | null) => void;
+const LAZY_WORKSPACE_TIMEOUT_MS = 5000;
 
 const authState = vi.hoisted(() => ({
   session: null as Session | null,
@@ -104,7 +105,11 @@ describe('sign-out survey prompt after pending save', () => {
   it('shows the survey modal after saving pending changes and signing out', async () => {
     render(<App />);
 
-    const signOutButton = await screen.findByRole('button', { name: '로그아웃' });
+    const signOutButton = await screen.findByRole(
+      'button',
+      { name: '로그아웃' },
+      { timeout: LAZY_WORKSPACE_TIMEOUT_MS },
+    );
     fireEvent.click(signOutButton);
 
     await waitFor(() => expect(signOutMock).toHaveBeenCalledTimes(1));
@@ -121,7 +126,11 @@ describe('sign-out survey prompt after pending save', () => {
 
     render(<App />);
 
-    const signOutButton = await screen.findByRole('button', { name: '로그아웃' });
+    const signOutButton = await screen.findByRole(
+      'button',
+      { name: '로그아웃' },
+      { timeout: LAZY_WORKSPACE_TIMEOUT_MS },
+    );
     fireEvent.click(signOutButton);
 
     await waitFor(() => expect(signOutMock).toHaveBeenCalledTimes(1));

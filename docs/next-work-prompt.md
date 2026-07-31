@@ -94,6 +94,8 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - 2026-07-08에 그림/표 네비게이터의 PDF 위치 인식을 보강했습니다. 백엔드는 캡션 주변 이미지가 없더라도 PDF 캡션 좌표를 `captionOnly` 참조로 저장하고, 프론트는 `paper.figureImages`의 PDF 참조를 캡션 목록에 병합해 추출 원문에 없는 표/그림도 `PDF p.N 캡션` 버튼으로 열 수 있습니다. 기존 저장 PDF 노트는 `/api/papers/{paper_id}/structure-index`가 저장 PDF를 다시 열어 구조 인덱스를 보강합니다. Render에 `a892598` 반영 후 `Production smoke`가 성공했고, 운영 화면에서 적용을 확인했습니다.
 - 2026-07-08에 `헤드와 같은 높이에 있는 문장 추출이 안 되는 문제.jpg`를 확인해 2단 PDF reflow를 보정했습니다. 이미지처럼 좌측 섹션 헤딩(`I. 서론`)과 같은 높이에 우측 컬럼의 짧은 문장 꼬리(`목적이 있다.`)가 있을 때, 꼬리가 별도 짧은 문단으로 떨어져 리뷰 문장 후보에서 빠질 수 있었습니다. 이전 문단이 종결부호 없이 끝나고 다음 컬럼 그룹 첫 문단이 짧은 continuation fragment이면 이전 문단에 이어 붙이도록 `backend/app/routers/papers.py`를 보강했고, `backend/tests/test_papers.py`에 회귀 테스트를 추가했습니다. `backend/tests/test_papers.py` 전체 112개와 ruff가 통과했습니다.
 - 2026-07-08에 한국어 섹션 헤딩 감지를 보강했습니다. `요약`, `서론`, `본론`, `결론`, `참고문헌`과 `Ⅰ. 서론`/`1. 서론` 형태가 기존 영문 canonical 섹션과 동일하게 작동하도록 `backend/app/services/paper_sections.py`를 수정했고, `backend/tests/test_papers.py`에 회귀 테스트를 추가했습니다. `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestCanonicalSection backend/tests/test_papers.py::TestDetectSections`는 10 passed, `backend/.venv/bin/python -m ruff check backend/app/services/paper_sections.py backend/tests/test_papers.py`는 통과했습니다. 전체 `backend/tests`는 실행했으나 장시간 새 출력 없이 멈춰 중단했습니다.
+- 2026-07-31에 React hook lint 경고를 제거했습니다. `useReviewStore`의 인증 헤더 객체를 `React.useMemo`로 안정화하고 PDF 구조 인덱스 보강 effect dependency를 `authHeaders`로 정리했습니다. `cd frontend && npm run lint`, `cd frontend && npm test -- --run src/hooks/useReviewStore.test.ts`, `cd frontend && npm run build`를 통과했습니다.
+- 2026-07-31에 프론트 번들 분리 1차 작업을 완료했습니다. `PdfViewer`는 PDF 탭 진입 시 lazy load하고, `SurveyPrompt`/`OnboardingGuide` 모달도 lazy load합니다. `App.tsx` 안의 워크스페이스 렌더링은 `ReviewWorkspace.tsx`로 분리해 서비스 라우트에서 lazy load합니다. 최종 build에서 메인 `index` chunk는 약 574 kB에서 399.88 kB로 줄었고 Vite 500 kB chunk 경고가 사라졌습니다. `cd frontend && npm run lint`, `cd frontend && npm test`, `cd frontend && npm run build`를 통과했습니다.
 - 2026-07-07에 데모 로그인 직후 빠른 테스트 문서 로드가 오래 걸리고 샘플 PDF가 이어서 실패하는 현상을 분석했습니다. 1차 개선으로 데모 seed bulk copy, 데모 cleanup rate limit, 초기 health 비차단화, `/notes` 30초 대기, 샘플 PDF 단계별 timeout을 적용했습니다. 배포 후 Network 탭에서 `/api/notes`, `/api/papers/sample-pdf`, `/api/papers/extract-text` 시간을 분리해 확인했습니다.
 - 2026-07-06에 모달 크기/폰트 변경 이후 최신 배포가 반영되지 않던 원인은 코드 빌드 실패가 아니라 GitHub Pages deploy job 실패였습니다. `actions/deploy-pages@v5` 갱신 커밋 `e1b886e` 이후 Pages 배포가 성공했고, 설문 프롬프트 커밋 `c1393d5`도 Pages 배포 성공을 확인했습니다.
 - VITE_API_BASE_URL은 반드시 https://paperlens-backend-53ki.onrender.com 이어야 합니다.
@@ -126,7 +128,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - 필요하면 실제 PDF 샘플을 테스트 fixture로 추가하는 방안 검토
 
 2. 배포 후 운영 수동 smoke test
-   - 이번 로컬 수정(데모 seed 샘플 PDF 중복 방지)을 커밋/푸시한 뒤 GitHub Pages가 최신 JS 번들을 가리키는지 확인
+   - 이번 로컬 수정(hook dependency 정리, 프론트 번들 분리)을 커밋/푸시한 뒤 GitHub Pages가 최신 JS 번들을 가리키는지 확인
    - Pages deploy job이 `actions/deploy-pages@v5`로 성공하는지 확인
    - Production smoke workflow가 확장된 demo 샘플 PDF 추출/PDF 재조회 단계까지 성공하는지 확인
    - Render가 최신 백엔드로 재배포됐는지 확인
