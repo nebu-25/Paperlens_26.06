@@ -195,7 +195,10 @@ export function useReviewStore({
       demoSessionId,
     });
 
-  const authHeaders: Record<string, string> = buildAuthHeaders(accessToken, demoSessionId);
+  const authHeaders: Record<string, string> = React.useMemo(
+    () => buildAuthHeaders(accessToken, demoSessionId),
+    [accessToken, demoSessionId],
+  );
 
   useEffect(() => {
     if (!uploadNotice || (uploadNotice.tone !== 'success' && uploadNotice.tone !== 'info')) return;
@@ -289,7 +292,7 @@ export function useReviewStore({
     return () => {
       cancelled = true;
     };
-  }, [authReady, paper?.id, paper?.pdfUrl, accessToken, demoSessionId]);
+  }, [authReady, paper?.id, paper?.pdfUrl, authHeaders]);
 
   // 손상/스캔 PDF: 저장된 PDF 원본을 서버에서 렌더→OCR로 재인식해 원문을 복구한다.
   async function ocrPaper() {
