@@ -6,12 +6,13 @@
 
 다음 세션에서는 아래 순서로 진행한다.
 
-1. 운영 배포 확인: 최신 Pages 번들, Production smoke, `/api/diagnostics`, 로그인 후 `/api/notes`, 샘플 PDF, PDF 원본 보기까지 확인한다.
-2. PDF 추출 개선 운영 확인: 한국어/2단/혼합형 PDF 샘플을 다시 업로드해 추출 품질 경고, 섹션 아웃라인, 원문 보존, 직접 편집 저장 복원을 확인한다.
-3. 랜딩 polish: 로그인 사용자 CTA, 모바일 로그인 모달, 모바일 nav, 랜딩 warm-up 호출을 점검한다.
-4. 저장/인증 견고화: 인증 서버 장애, 토큰 만료, fallback cache TTL, 사용자 안내 문구를 점검한다.
-5. 번역 보기 UX 설계: 원문 하이라이트 영역은 `notranslate`로 유지하고, 별도 번역 보기 패널/탭 설계를 검토한다.
-6. 스키마 분리 운영 검증: 운영 PostgreSQL 백업 후 분리 테이블, 기존 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소를 확인한다.
+1. 모바일 PDF 뷰어 UI 수정: 모바일에서 PDF 뷰어의 화면비율/맞춤 설정 컨트롤이 바를 벗어나 상호작용이 어려운 문제를 재현하고, 툴바 wrap/overflow/compact control 방식으로 수정한다.
+2. 운영 배포 확인: 최신 Pages 번들, Production smoke, `/api/diagnostics`, 로그인 후 `/api/notes`, 샘플 PDF, PDF 원본 보기까지 확인한다.
+3. PDF 추출 개선 운영 확인: 한국어/2단/혼합형 PDF 샘플을 다시 업로드해 추출 품질 경고, 섹션 아웃라인, 원문 보존, 직접 편집 저장 복원을 확인한다.
+4. 랜딩 polish: 모바일 랜딩 페이지 전체 구성 깨짐, 모바일 nav, 랜딩 warm-up 호출을 점검한다. 모바일 로그인 모달 폭/간격/스크롤 잠금은 2026-08-01 수동 확인 기준 문제 없음.
+5. 저장/인증 견고화: 인증 서버 장애, 토큰 만료, fallback cache TTL, 사용자 안내 문구를 점검한다.
+6. 번역 보기 UX 설계: 원문 하이라이트 영역은 `notranslate`로 유지하고, 별도 번역 보기 패널/탭 설계를 검토한다.
+7. 스키마 분리 운영 검증: 운영 PostgreSQL 백업 후 분리 테이블, 기존 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소를 확인한다.
 
 최근 완료:
 
@@ -19,6 +20,8 @@
 - `PdfViewer`, 설문/온보딩 모달, 서비스 워크스페이스 lazy load 적용 완료.
 - 메인 프론트 `index` chunk는 약 574 kB에서 399.88 kB로 감소했고 Vite 500 kB 경고는 제거됨.
 - 최신 커밋 push 후 CI, Pages deploy, Production smoke가 성공함.
+- 데모 계정 로그인 상태의 랜딩 CTA가 데모 세션을 준비하고 확인 모달을 열도록 수정했으며, 데모 세션 복원 후 빠른 리뷰 샘플이 우선 열리도록 수정 완료.
+- 로그아웃 설문은 사용자가 `이 데모 세션에서는 다시 보지 않기`를 선택하거나 설문 참여를 완료하지 않았다면 로그아웃 때마다 다시 노출하도록 정책 변경 완료.
 
 ```text
 PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
@@ -35,8 +38,9 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 - GitHub Pages 빌드에 `VITE_DEMO_EMAIL`/`VITE_DEMO_PASSWORD`가 있으면 데모 계정이 로그인 폼에 미리 입력됩니다. 이 값은 공개 번들에 포함되므로 데모 전용 계정만 사용합니다.
 - 데모 설문 링크는 https://forms.gle/WrYxvAt6RQqxVia29 입니다.
 - 데모 설문 모달은 리뷰 노트 Markdown/PDF, 라이브러리 취합 Markdown, 연구 질문 문서 Markdown 내보내기 후 먼저 표시합니다.
-- 내보내기 설문 모달을 보지 않은 사용자는 로그아웃 완료 후 설문 모달을 한 번 볼 수 있습니다. 로그아웃 자체는 막지 않습니다.
-- 설문 참여 완료는 `localStorage`, 세션 내 숨김/이미 표시 상태는 `sessionStorage`로 저장해 같은 세션에서 반복 노출하지 않습니다.
+- 로그아웃 완료 후 설문 모달을 볼 수 있습니다. 로그아웃 자체는 막지 않습니다.
+- 로그아웃 설문은 사용자가 `이 데모 세션에서는 다시 보지 않기`를 선택하거나 설문 참여를 완료하지 않았다면 로그아웃 때마다 다시 노출됩니다.
+- 설문 참여 완료는 `localStorage`, 세션 내 숨김 상태는 `sessionStorage`로 저장해 재노출을 차단합니다.
 - 랜딩 페이지는 로드 즉시 백그라운드에서 `/api/health`를 호출해 Render 무료 플랜 콜드스타트를 미리 깨웁니다. 요청 실패는 UI에 표시하지 않습니다.
 - Supabase Auth가 켜져 있고, 프론트는 Supabase access token을 Authorization: Bearer로 FastAPI에 보냅니다.
 - 백엔드는 HS256 토큰을 SUPABASE_JWT_SECRET으로 검증하고, 다른 알고리즘이면 Supabase /auth/v1/user fallback으로 사용자 id를 확인합니다.
@@ -170,35 +174,43 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - 로그아웃 후 /service_home 접근 시 랜딩으로 되돌아가는지 확인
    - 리뷰 노트 Markdown/PDF 내보내기 후 데모 설문 모달이 뜨고 설문 링크가 새 탭으로 열리는지 확인
    - 라이브러리 취합/연구 질문 문서 내보내기 후 데모 설문 모달이 뜨는지 확인
-   - 같은 세션에서 설문 모달이 반복 노출되지 않는지, `이 데모 세션에서는 다시 보지 않기`가 동작하는지 확인
+   - 로그아웃 설문은 `이 데모 세션에서는 다시 보지 않기`를 선택하지 않았고 설문 참여를 완료하지 않았다면 로그아웃 때마다 다시 뜨는지 확인
+   - `이 데모 세션에서는 다시 보지 않기` 선택 후 같은 세션에서 설문 모달이 다시 뜨지 않는지 확인
    - 설문 참여 클릭 후 다음 세션에서도 설문 모달이 다시 뜨지 않는지 확인
    - 결과를 docs/testing.md의 운영 체크리스트에 반영
 
 3. 랜딩 페이지 polish
    - 로그인된 사용자가 루트 랜딩에 들어왔을 때 "서비스로 이동" CTA를 더 명확하게 배치
-   - 모바일에서 로그인 모달 폭·간격과 배경 스크롤 잠금 동작 확인
+   - 모바일에서 로그인 모달 폭·간격과 배경 스크롤 잠금 동작은 2026-08-01 수동 확인 기준 문제 없음
+   - 모바일 랜딩 페이지 전체 구성 깨짐을 확인하고, hero/mockup/nav/CTA의 responsive layout을 정리
    - 좁은 화면에서 nav 섹션 링크(왜 만들었나/사용 방법/목적 템플릿)가 숨겨질 때 모바일 메뉴/아이콘으로 개선
    - 랜딩 진입 warm-up 호출이 Pages 운영 번들에서 Render `/api/health`로 나가는지 Network 탭에서 확인
 
-4. 문서와 배포 자동화
+4. 모바일 PDF 뷰어 컨트롤
+   - 모바일 PDF 탭에서 화면비율/맞춤 설정 컨트롤이 툴바 바깥으로 벗어나 상호작용이 어렵다
+   - `frontend/src/components/workspace/PdfViewer.tsx`의 툴바 버튼/세그먼트/zoom 또는 fit control 구조를 확인한다
+   - 작은 화면에서는 컨트롤 줄바꿈, compact icon button, horizontal scroll, 또는 드롭다운 메뉴 전환 중 기존 디자인과 가장 맞는 방식을 선택한다
+   - 모바일 viewport에서 텍스트가 버튼 밖으로 넘치지 않고 PDF 페이지 이동/확대/맞춤 조작이 가능한지 확인한다
+
+5. 문서와 배포 자동화
    - docs/deployment.md의 환경변수 표를 실제 운영값 기준으로 재확인
    - Pages workflow는 프론트엔드/워크플로 변경시에만 자동 실행되도록 path 필터가 설정되어 있다
    - Pages deploy action은 `actions/deploy-pages@v5`를 유지한다
    - `backend/scripts/smoke_deployment.py`와 GitHub Actions `Production smoke` 워크플로로 공개 운영 endpoint 자동 확인을 수행한다
    - Render 배포 완료 시점은 GitHub Actions가 직접 알 수 없으므로 Render 배포 후 `Production smoke`를 수동 실행한다
 
-5. 추가 저장/인증 견고화 검토
+6. 추가 저장/인증 견고화 검토
    - diagnostics endpoint 운영 응답을 배포 후 확인
    - fallback cache TTL이 운영 로그와 맞는지 관찰
    - 인증 서버 장애와 사용자 토큰 만료의 사용자 안내가 충분히 구분되는지 확인
 
-6. 번역 보기 UX 설계
+7. 번역 보기 UX 설계
    - 원문 하이라이트 패널은 계속 `notranslate`로 보호
    - 별도 번역 보기 패널 또는 탭을 추가할지 검토
    - 번역 보기에서는 읽기/복사 중심으로 제공하고, 하이라이트는 원문 기준으로 저장하는 흐름 검토
    - 브라우저 번역 감지/안내 문구가 필요한지 검토
 
-7. 스키마 분리 운영 검증
+8. 스키마 분리 운영 검증
    - 배포 전 운영 PostgreSQL 백업 생성
    - 배포 후 분리 테이블 생성과 기존 `papers` 데이터 복사 여부 확인
    - 기존 저장 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소가 정상 동작하는지 확인

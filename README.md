@@ -30,7 +30,7 @@ PaperLens는 논문을 직접 읽으며 하이라이트, 용어, 질문, 요약�
 | 그림/표 탐색 | 추출 원문 위치와 PDF 캡션/페이지 이동 버튼 분리, 기존 저장 PDF 구조 인덱스 보강 |
 | 로그인/저장 | Supabase Auth, 사용자별 노트 저장, IndexedDB 오프라인 폴백, 수동 저장, 로그아웃 전 저장 확인 |
 | 내보내기 | 하이라이트 의미 라벨별 Markdown 다운로드, 브라우저 인쇄 기반 PDF 저장 |
-| 데모 피드백 | 주요 내보내기/로그아웃 후 선택형 1분 설문 모달, 세션 내 재노출 방지 |
+| 데모 피드백 | 주요 내보내기/로그아웃 후 선택형 1분 설문 모달, 사용자가 숨기거나 참여 완료하면 재노출 중단 |
 
 ## Current Deployment Notes
 
@@ -40,7 +40,7 @@ PaperLens는 논문을 직접 읽으며 하이라이트, 용어, 질문, 요약�
 - Pages 배포는 `.github/workflows/deploy-pages.yml`에서 `actions/deploy-pages@v5`를 사용합니다. 이전 `v4` 배포 단계 실패 후 `v5`로 갱신했습니다.
 - 로그인은 "무료로 리뷰 노트 만들기" 등 CTA를 누르면 뜨는 모달로 처리합니다. 모달은 데모 계정 빌드 변수가 있으면 로그인 폼을 미리 채우고, 이메일 입력에 자동 포커스하며 Esc/배경 클릭으로 닫힙니다. 로그인된 사용자는 CTA에서 바로 서비스로 이동합니다.
 - 랜딩 진입 시 백그라운드에서 `/api/health`를 호출해 Render 무료 플랜 콜드스타트를 미리 깨웁니다.
-- 데모 설문은 `https://forms.gle/WrYxvAt6RQqxVia29`로 연결합니다. 리뷰 노트/라이브러리 취합/연구 질문 문서 내보내기 후 먼저 요청하고, 내보내기 요청을 보지 않은 사용자는 로그아웃 완료 후 한 번 요청합니다. 설문 참여 완료는 `localStorage`, 세션 내 숨김/이미 표시 상태는 `sessionStorage`로 제어합니다.
+- 데모 설문은 `https://forms.gle/WrYxvAt6RQqxVia29`로 연결합니다. 리뷰 노트/라이브러리 취합/연구 질문 문서 내보내기 후 먼저 요청하고, 로그아웃 완료 후에도 요청합니다. 사용자가 `이 데모 세션에서는 다시 보지 않기`를 선택하거나 설문 참여를 완료하면 이후 재노출하지 않습니다.
 - Pages 빌드 변수는 `github-pages` environment variables에서 검증합니다. `VITE_API_BASE_URL`은 Render 백엔드 오리진이어야 하며 Supabase key를 넣으면 빌드가 실패합니다.
 - Render 백엔드는 Supabase `HS256` JWT를 직접 검증하고, 다른 서명 알고리즘 토큰은 Supabase `/auth/v1/user` 확인으로 사용자 id를 가져옵니다.
 - PDF 업로드는 브라우저/OS가 `application/octet-stream`으로 보내도 PyMuPDF 파서 검증으로 실제 PDF 여부를 판단합니다.

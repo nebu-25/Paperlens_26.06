@@ -18,6 +18,7 @@ npm run build
 - `frontend/src/lib/export.test.ts`: Markdown/PDF HTML 생성, HTML escape, 파일명 보호
 - `frontend/src/lib/localReviewCache.test.ts`: 계정별 브라우저 캐시 fallback, 원문 텍스트 분리 저장/복원, 캐시 삭제
 - `frontend/src/lib/reviewProgress.test.ts`: 리뷰 진행률 체크리스트
+- `frontend/src/lib/surveyPrompt.test.ts`: 데모 설문 노출 정책(로그아웃 반복 노출, 세션 숨김, 참여 완료 차단)
 - `frontend/src/lib/templates.test.ts`: 목적 템플릿 id 폴백, T1 legacy 답변 경로, T1~T5 완료 기준, T1 질문 placeholder 안내문구
 - `frontend/src/hooks/useReviewStore.test.ts`: 핵심 상태/액션(논문 누적 등록, 태그 갱신, 하이라이트/용어 추가, 태그 필터, 삭제, 로컬 파일 경로 안내, 차단된 PDF URL 처리)
 - `frontend/src/components/NoticeBanner.test.tsx`: 알림 배너 접근성(심각도별 role/aria-live, 색상 비의존 접두사)
@@ -230,6 +231,32 @@ Supabase anon key를 갱신하면 repository secret `SUPABASE_ANON_KEY`와 GitHu
 - PDF/모달만 lazy load한 1차 결과: 약 552 kB로 여전히 Vite 500 kB 경고가 남았다.
 - 워크스페이스 라우트까지 분리한 최종 결과: `index-CnLTgUhs.js` 399.88 kB, `ReviewWorkspace-CZzNP2M9.js` 152.00 kB, `PdfViewer-DNMZFeyY.js` 18.15 kB, `pdf-CED3u375.js` 425.24 kB.
 - 최종 build에서는 Vite의 500 kB chunk 경고가 사라졌다.
+
+### 2026-08-01 데모 CTA 복원과 설문 노출 정책
+
+반영한 범위:
+
+- 데모 계정으로 이미 로그인된 상태에서 랜딩의 "무료로 시작" CTA를 누르면 바로 서비스로 이동하지 않고, 데모 세션 ID를 준비한 뒤 확인 모달을 열도록 수정했다.
+- 데모 세션 복원 후 active paper 선택 시 `demo-paperlens-quickstart` 빠른 리뷰 샘플을 우선 열도록 보강했다. 단, 마지막 active hint가 있으면 기존처럼 그 값을 우선한다.
+- 로그아웃 설문은 사용자가 `이 데모 세션에서는 다시 보지 않기`를 선택하거나 설문 참여를 완료하지 않았다면 로그아웃 때마다 다시 노출하도록 정책을 바꿨다.
+- 이전 버전에서 남은 `paperlens:demo-survey:signout-shown-this-session` 세션 키가 있어도 로그아웃 설문을 막지 않도록 했다.
+
+운영 수동 확인:
+
+- 데모 CTA와 빠른 리뷰 샘플 복원은 배포본에서 정상 동작 확인.
+- 모바일 로그인 모달 폭, 간격, 배경 스크롤 잠금은 문제 없음.
+- 모바일 랜딩 페이지 전체 구성은 깨지는 부분이 남아 있음.
+- 모바일 PDF 뷰어에서 화면비율 설정 컨트롤이 바를 벗어나 상호작용이 어렵다. 다음 세션에서 우선 확인할 UI 버그로 남김.
+- 설문 모달은 수정 전 운영 기준으로 1회 이후 다시 노출되지 않는 것을 확인했고, 이번 변경으로 로그아웃마다 노출되는 정책으로 전환했다.
+
+실행한 검증:
+
+- `cd frontend && npm test -- --run src/components/LandingPage.test.tsx src/hooks/useReviewPersistence.test.ts`: 7 passed.
+- `cd frontend && npm test -- --run src/components/AuthControls.test.tsx src/components/App.signout-survey.test.tsx`: 5 passed.
+- `cd frontend && npm test -- --run src/lib/surveyPrompt.test.ts src/components/App.signout-survey.test.tsx`: 6 passed.
+- `cd frontend && npm test -- --run src/components/SurveyPrompt.tsx src/components/AuthControls.test.tsx`: 3 passed.
+- `cd frontend && npm run lint`: 통과.
+- `cd frontend && npm run build`: 통과.
 
 ## Demo Account Reset
 

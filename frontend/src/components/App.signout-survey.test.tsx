@@ -139,4 +139,23 @@ describe('sign-out survey prompt after pending save', () => {
       expect(screen.getByText('나가기 전에 1분만 알려주세요')).toBeTruthy(),
     );
   });
+
+  it('shows the sign-out survey even if a previous sign-out survey key exists', async () => {
+    window.sessionStorage.setItem('paperlens:demo-survey:signout-shown-this-session', 'true');
+
+    render(<App />);
+
+    const signOutButton = await screen.findByRole(
+      'button',
+      { name: '로그아웃' },
+      { timeout: LAZY_WORKSPACE_TIMEOUT_MS },
+    );
+    fireEvent.click(signOutButton);
+
+    await waitFor(() => expect(signOutMock).toHaveBeenCalledTimes(1));
+
+    await waitFor(() =>
+      expect(screen.getByText('나가기 전에 1분만 알려주세요')).toBeTruthy(),
+    );
+  });
 });
