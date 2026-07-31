@@ -2,6 +2,24 @@
 
 아래 프롬프트를 다음 작업 세션의 시작 메시지로 사용한다.
 
+## 다음 세션 시작 요약
+
+다음 세션에서는 아래 순서로 진행한다.
+
+1. 운영 배포 확인: 최신 Pages 번들, Production smoke, `/api/diagnostics`, 로그인 후 `/api/notes`, 샘플 PDF, PDF 원본 보기까지 확인한다.
+2. PDF 추출 개선 운영 확인: 한국어/2단/혼합형 PDF 샘플을 다시 업로드해 추출 품질 경고, 섹션 아웃라인, 원문 보존, 직접 편집 저장 복원을 확인한다.
+3. 랜딩 polish: 로그인 사용자 CTA, 모바일 로그인 모달, 모바일 nav, 랜딩 warm-up 호출을 점검한다.
+4. 저장/인증 견고화: 인증 서버 장애, 토큰 만료, fallback cache TTL, 사용자 안내 문구를 점검한다.
+5. 번역 보기 UX 설계: 원문 하이라이트 영역은 `notranslate`로 유지하고, 별도 번역 보기 패널/탭 설계를 검토한다.
+6. 스키마 분리 운영 검증: 운영 PostgreSQL 백업 후 분리 테이블, 기존 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소를 확인한다.
+
+최근 완료:
+
+- React hook dependency 경고 제거 완료.
+- `PdfViewer`, 설문/온보딩 모달, 서비스 워크스페이스 lazy load 적용 완료.
+- 메인 프론트 `index` chunk는 약 574 kB에서 399.88 kB로 감소했고 Vite 500 kB 경고는 제거됨.
+- 최신 커밋 push 후 CI, Pages deploy, Production smoke가 성공함.
+
 ```text
 PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
 
