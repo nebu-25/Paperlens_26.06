@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js';
 import { API_BASE, DEMO_AUTH_ENABLED, DEMO_EMAIL, DEMO_PASSWORD } from '../constants';
 import { AuthControls } from './AuthControls';
 import { BrandLogo } from './BrandLogo';
+import { createDemoSessionId, readDemoSessionId } from '../lib/demoSession';
 
 interface LandingPageProps {
   authEnabled: boolean;
@@ -196,6 +197,11 @@ export function LandingPage({
   const activeTpl = templates[active];
   const demoPrefill = loginMode === 'demo';
   const serviceUrl = `${window.location.origin}${import.meta.env.BASE_URL}service_home/`;
+  const isDemoUser = Boolean(
+    DEMO_AUTH_ENABLED &&
+      user?.email &&
+      user.email.trim().toLowerCase() === DEMO_EMAIL.trim().toLowerCase(),
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -234,7 +240,10 @@ export function LandingPage({
 
   // 신규 체험 CTA: 로그인 상태면 바로 서비스로, 아니면 데모 프리필 모달
   function start() {
-    if (user) onEnterService();
+    if (user && isDemoUser) {
+      if (!readDemoSessionId()) createDemoSessionId();
+      openLogin('demo');
+    } else if (user) onEnterService();
     else openLogin('demo');
   }
 

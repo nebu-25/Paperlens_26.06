@@ -29,6 +29,10 @@ interface UseReviewPersistenceArgs {
 
 const SAVE_DEBOUNCE_MS = 5000; // 편집 멈춘 뒤 저장까지 대기(trailing)
 const SAVE_MAX_WAIT_MS = 10000; // 연속 편집 중 강제 저장 상한(maxWait)
+const DEMO_QUICKSTART_SOURCE_KEYS = new Set([
+  'demo-session:demo-paperlens-quickstart',
+  'demo:paperlens-quickstart',
+]);
 
 export type RestorePhase = 'idle' | 'local-cache' | 'warming' | 'remote-notes' | 'ready' | 'offline';
 
@@ -36,6 +40,22 @@ export type RestorePhase = 'idle' | 'local-cache' | 'warming' | 'remote-notes' |
 // 편집이 멈추면 trailing(5초), 쉬지 않고 편집하면 maxWait(10초) 내 강제 저장.
 export function nextSaveWaitMs(elapsedSinceFirstDirty: number): number {
   return Math.min(SAVE_DEBOUNCE_MS, Math.max(0, SAVE_MAX_WAIT_MS - elapsedSinceFirstDirty));
+}
+
+export function pickActivePaperId(
+  library: Record<string, Paper>,
+  activeHint: string | null,
+  preferDemoQuickstart: boolean,
+): string | null {
+  const ids = Object.keys(library);
+  if (activeHint && ids.includes(activeHint)) return activeHint;
+  if (preferDemoQuickstart) {
+    const quickstart = Object.entries(library).find(([, paper]) =>
+      DEMO_QUICKSTART_SOURCE_KEYS.has(paper.sourceKey ?? ''),
+    );
+    if (quickstart) return quickstart[0];
+  }
+  return ids[0] ?? null;
 }
 
 async function fetchWithTimeout(
@@ -350,8 +370,7 @@ export function useReviewPersistence({
       }
       setLibrary(filteredLibrary);
       setNotes(fixed);
-      const ids = Object.keys(filteredLibrary);
-      const nextActiveId = activeHint && ids.includes(activeHint) ? activeHint : ids[0] ?? null;
+      const nextActiveId = pickActivePaperId(filteredLibrary, activeHint, Boolean(demoSessionIdRef.current));
       activeIdRef.current = nextActiveId;
       setActiveId(nextActiveId);
     };
