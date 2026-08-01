@@ -2,6 +2,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Hand,
+  Maximize2,
   MousePointer2,
   RotateCcw,
   Trash2,
@@ -644,13 +645,13 @@ export function PdfViewer({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 sm:flex-1">
           <h3 className="text-sm font-semibold text-ink">PDF 원본 보기</h3>
           <div className="truncate text-xs text-muted">{title || '저장된 PDF'}</div>
         </div>
-        <div className="flex items-center gap-1">
-          <div className="mr-1 inline-flex rounded border border-line bg-white p-1" aria-label="PDF 조작 모드">
+        <div className="flex w-full flex-wrap items-center gap-1 sm:w-auto sm:justify-end">
+          <div className="inline-flex shrink-0 rounded border border-line bg-white p-1" aria-label="PDF 조작 모드">
             <button
               type="button"
               className={`inline-flex h-7 w-7 items-center justify-center rounded ${
@@ -679,61 +680,68 @@ export function PdfViewer({
               <Hand size={14} />
             </button>
           </div>
+          <div className="inline-flex shrink-0 items-center rounded border border-line bg-white">
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-l text-muted hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="이전 페이지"
+              title="이전 페이지"
+              disabled={!canGoPrevious}
+              onClick={() => setPageNumber((value) => Math.max(1, value - 1))}
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span className="min-w-[4.75rem] px-1 text-center text-xs text-muted">
+              {pageCount ? `${pageNumber} / ${pageCount}` : '- / -'}
+            </span>
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-r text-muted hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="다음 페이지"
+              title="다음 페이지"
+              disabled={!canGoNext}
+              onClick={() => setPageNumber((value) => Math.min(pageCount, value + 1))}
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+          <div className="inline-flex shrink-0 items-center rounded border border-line bg-white">
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-l text-muted hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="축소"
+              title="축소"
+              disabled={scale <= MIN_SCALE}
+              onClick={() => zoomBy(-SCALE_STEP)}
+            >
+              <ZoomOut size={15} />
+            </button>
+            <span className="min-w-[3.25rem] px-1 text-center text-xs text-muted">{scalePercent}</span>
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-r text-muted hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="확대"
+              title="확대"
+              disabled={scale >= MAX_SCALE}
+              onClick={() => zoomBy(SCALE_STEP)}
+            >
+              <ZoomIn size={15} />
+            </button>
+          </div>
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded border border-line text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="이전 페이지"
-            title="이전 페이지"
-            disabled={!canGoPrevious}
-            onClick={() => setPageNumber((value) => Math.max(1, value - 1))}
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <span className="min-w-[5.5rem] text-center text-xs text-muted">
-            {pageCount ? `${pageNumber} / ${pageCount}` : '- / -'}
-          </span>
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded border border-line text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="다음 페이지"
-            title="다음 페이지"
-            disabled={!canGoNext}
-            onClick={() => setPageNumber((value) => Math.min(pageCount, value + 1))}
-          >
-            <ChevronRight size={15} />
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded border border-line text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="축소"
-            title="축소"
-            disabled={scale <= MIN_SCALE}
-            onClick={() => zoomBy(-SCALE_STEP)}
-          >
-            <ZoomOut size={15} />
-          </button>
-          <span className="min-w-[3.5rem] text-center text-xs text-muted">{scalePercent}</span>
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded border border-line text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="확대"
-            title="확대"
-            disabled={scale >= MAX_SCALE}
-            onClick={() => zoomBy(SCALE_STEP)}
-          >
-            <ZoomIn size={15} />
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-8 items-center justify-center rounded border border-line px-2 text-xs font-medium text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-8 shrink-0 items-center justify-center rounded border border-line px-2 text-xs font-medium text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="폭 맞춤"
+            title="폭 맞춤"
             disabled={!pageSize}
             onClick={fitWidth}
           >
-            폭 맞춤
+            <Maximize2 size={15} />
+            <span className="ml-1 hidden sm:inline">폭 맞춤</span>
           </button>
           <button
             type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded border border-line text-muted hover:border-action hover:text-action"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-line text-muted hover:border-action hover:text-action"
             aria-label="PDF 다시 불러오기"
             title="PDF 다시 불러오기"
             onClick={() => setReloadKey((value) => value + 1)}
@@ -744,7 +752,7 @@ export function PdfViewer({
       </div>
       <div
         ref={scrollRef}
-        className={`h-[calc(100vh-21rem)] min-h-[560px] overflow-auto rounded border border-line bg-paper p-3 ${
+        className={`h-[calc(100vh-21rem)] min-h-[420px] overflow-auto rounded border border-line bg-paper p-2 sm:min-h-[560px] sm:p-3 ${
           status === 'ready' && (isPanMode || panning) ? (panning ? 'cursor-grabbing select-none' : 'cursor-grab') : ''
         }`}
         title="텍스트 선택 모드: 드래그로 선택, 이동 모드: 드래그로 화면 이동"
