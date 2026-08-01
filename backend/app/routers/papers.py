@@ -644,6 +644,17 @@ def _is_column_continuation_fragment(text: str) -> bool:
     return not re.match(r"^(?:abstract|keywords?|요약|초록|키워드)\b", stripped, re.IGNORECASE)
 
 
+def _is_page_continuation_fragment(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if _is_numbered_section_heading_line(stripped):
+        return False
+    if re.match(r"^(?:abstract|keywords?|references|요약|초록|키워드|참고문헌)\b", stripped, re.IGNORECASE):
+        return False
+    return True
+
+
 def _join_column_continuation(previous: str, fragment: str) -> str:
     prev = previous.rstrip()
     next_part = fragment.lstrip()
@@ -667,6 +678,20 @@ def _append_reflowed_group(paragraphs: list[str], group_paragraphs: list[str]) -
         and _is_column_continuation_fragment(pending[0])
     ):
         paragraphs[-1] = _tidy_spacing(_join_column_continuation(paragraphs[-1], pending.pop(0)))
+    paragraphs.extend(pending)
+
+
+def _append_reflowed_page(paragraphs: list[str], page_paragraphs: list[str]) -> None:
+    """페이지 경계에서 끊긴 미완성 문단은 다음 페이지 첫 문단과 이어 붙인다."""
+    if not page_paragraphs:
+        return
+    pending = list(page_paragraphs)
+    if (
+        paragraphs
+        and not _ends_sentence(paragraphs[-1])
+        and _is_page_continuation_fragment(pending[0])
+    ):
+        paragraphs[-1] = _tidy_spacing(_join_lines([paragraphs[-1], pending.pop(0)]))
     paragraphs.extend(pending)
 
 
@@ -694,8 +719,10 @@ def _reflow_document(document) -> str:
         if not body:
             continue
         page_width = float(getattr(getattr(page, "rect", None), "width", 0.0)) or _page_width_from_lines(body)
+        page_paragraphs: list[str] = []
         for group in _split_page_columns(body, page_width):
-            _append_reflowed_group(paragraphs, _reflow_lines(group))
+            _append_reflowed_group(page_paragraphs, _reflow_lines(group))
+        _append_reflowed_page(paragraphs, page_paragraphs)
     return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p)
 
 

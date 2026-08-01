@@ -6,16 +6,17 @@
 
 다음 세션에서는 아래 순서로 진행한다.
 
-1. 모바일 PDF 뷰어 UI 수정: 모바일에서 PDF 뷰어의 화면비율/맞춤 설정 컨트롤이 바를 벗어나 상호작용이 어려운 문제를 재현하고, 툴바 wrap/overflow/compact control 방식으로 수정한다.
-2. 운영 배포 확인: 최신 Pages 번들, Production smoke, `/api/diagnostics`, 로그인 후 `/api/notes`, 샘플 PDF, PDF 원본 보기까지 확인한다.
-3. PDF 추출 개선 운영 확인: 한국어/2단/혼합형 PDF 샘플을 다시 업로드해 추출 품질 경고, 섹션 아웃라인, 원문 보존, 직접 편집 저장 복원을 확인한다.
-4. 랜딩 polish: 모바일 랜딩 페이지 전체 구성 깨짐, 모바일 nav, 랜딩 warm-up 호출을 점검한다. 모바일 로그인 모달 폭/간격/스크롤 잠금은 2026-08-01 수동 확인 기준 문제 없음.
-5. 저장/인증 견고화: 인증 서버 장애, 토큰 만료, fallback cache TTL, 사용자 안내 문구를 점검한다.
-6. 번역 보기 UX 설계: 원문 하이라이트 영역은 `notranslate`로 유지하고, 별도 번역 보기 패널/탭 설계를 검토한다.
-7. 스키마 분리 운영 검증: 운영 PostgreSQL 백업 후 분리 테이블, 기존 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소를 확인한다.
+1. 운영 배포 확인: 최신 Pages 번들, Production smoke, `/api/diagnostics`, 로그인 후 `/api/notes`, 샘플 PDF, PDF 원본 보기까지 확인한다.
+2. PDF 추출 개선 운영 확인: 한국어/2단/혼합형 PDF 샘플을 다시 업로드해 추출 품질 경고, 섹션 아웃라인, 원문 보존, 직접 편집 저장 복원을 확인한다. 특히 페이지 경계에서 끊긴 미완성 문단이 다음 페이지 첫 문단과 자연스럽게 이어지는지 확인한다.
+3. 랜딩 polish: 모바일 랜딩 페이지 전체 구성 깨짐, 모바일 nav, 랜딩 warm-up 호출을 점검한다. 모바일 로그인 모달 폭/간격/스크롤 잠금은 2026-08-01 수동 확인 기준 문제 없음.
+4. 저장/인증 견고화: 인증 서버 장애, 토큰 만료, fallback cache TTL, 사용자 안내 문구를 점검한다.
+5. 번역 보기 UX 설계: 원문 하이라이트 영역은 `notranslate`로 유지하고, 별도 번역 보기 패널/탭 설계를 검토한다.
+6. 스키마 분리 운영 검증: 운영 PostgreSQL 백업 후 분리 테이블, 기존 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소를 확인한다.
 
 최근 완료:
 
+- 모바일 PDF 뷰어 툴바가 좁은 화면에서 여러 줄로 안정적으로 접히도록 수정했고, 페이지/줌 컨트롤 그룹과 `폭 맞춤` compact 아이콘 버튼을 적용함. `cd frontend && npm run lint`, `cd frontend && npm run build` 통과 후 `bb22d08`로 push 완료.
+- PDF 추출 reflow에서 페이지 경계로 끊긴 미완성 문단을 다음 페이지 첫 문단과 병합하도록 개선함. 섹션 헤딩, Abstract/Keywords/References/한국어 주요 헤딩은 병합 대상에서 제외하며, `backend/tests/test_papers.py::TestReflowDocument`에 회귀 테스트를 추가함. `ruff`, `TestReflowDocument`, `tests/test_papers.py` 전체 통과.
 - React hook dependency 경고 제거 완료.
 - `PdfViewer`, 설문/온보딩 모달, 서비스 워크스페이스 lazy load 적용 완료.
 - 메인 프론트 `index` chunk는 약 574 kB에서 399.88 kB로 감소했고 Vite 500 kB 경고는 제거됨.
@@ -145,6 +146,7 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - `논문형식_05`처럼 상단 요약/ABSTRACT/키워드 후 하단 `Ⅰ. 서론` 2단 본문이 시작되는 PDF에서 상단 영역 누락 없이 원문이 보존되고 품질 점수가 100점으로 오판되지 않는지 확인
    - 한국어 섹션명(`요약`, `서론`, `본론`, `결론`, `참고문헌`)과 로마숫자 접두(`Ⅰ. 서론`)가 섹션 아웃라인/요약 카드/시그널 스캐너에서 기존 영문 섹션과 동일하게 동작하는지 확인
    - 상단 1단+하단 2단 혼합형 페이지에서 읽기 순서가 제목/초록/키워드 후 왼쪽 컬럼→오른쪽 컬럼인지 확인
+   - 페이지 경계에서 앞 페이지 마지막 문단이 문장 종결 없이 끝나는 PDF에서 다음 페이지 첫 문단과 같은 문단으로 이어지는지 확인
    - 추출이 부자연스러운 PDF에서 `텍스트 편집`/`직접 입력` 후 자동 저장, 새로고침 복원, 하이라이트 offset 계산 확인
    - 원문 직접 저장 후 `사용자 보정됨` 상태가 저장되고 새로고침 뒤에도 유지되는지 확인
    - 필요하면 실제 PDF 샘플을 테스트 fixture로 추가하는 방안 검토
@@ -186,31 +188,25 @@ PaperLens 프로젝트의 다음 개선 작업을 진행해 주세요.
    - 좁은 화면에서 nav 섹션 링크(왜 만들었나/사용 방법/목적 템플릿)가 숨겨질 때 모바일 메뉴/아이콘으로 개선
    - 랜딩 진입 warm-up 호출이 Pages 운영 번들에서 Render `/api/health`로 나가는지 Network 탭에서 확인
 
-4. 모바일 PDF 뷰어 컨트롤
-   - 모바일 PDF 탭에서 화면비율/맞춤 설정 컨트롤이 툴바 바깥으로 벗어나 상호작용이 어렵다
-   - `frontend/src/components/workspace/PdfViewer.tsx`의 툴바 버튼/세그먼트/zoom 또는 fit control 구조를 확인한다
-   - 작은 화면에서는 컨트롤 줄바꿈, compact icon button, horizontal scroll, 또는 드롭다운 메뉴 전환 중 기존 디자인과 가장 맞는 방식을 선택한다
-   - 모바일 viewport에서 텍스트가 버튼 밖으로 넘치지 않고 PDF 페이지 이동/확대/맞춤 조작이 가능한지 확인한다
-
-5. 문서와 배포 자동화
+4. 문서와 배포 자동화
    - docs/deployment.md의 환경변수 표를 실제 운영값 기준으로 재확인
    - Pages workflow는 프론트엔드/워크플로 변경시에만 자동 실행되도록 path 필터가 설정되어 있다
    - Pages deploy action은 `actions/deploy-pages@v5`를 유지한다
    - `backend/scripts/smoke_deployment.py`와 GitHub Actions `Production smoke` 워크플로로 공개 운영 endpoint 자동 확인을 수행한다
    - Render 배포 완료 시점은 GitHub Actions가 직접 알 수 없으므로 Render 배포 후 `Production smoke`를 수동 실행한다
 
-6. 추가 저장/인증 견고화 검토
+5. 추가 저장/인증 견고화 검토
    - diagnostics endpoint 운영 응답을 배포 후 확인
    - fallback cache TTL이 운영 로그와 맞는지 관찰
    - 인증 서버 장애와 사용자 토큰 만료의 사용자 안내가 충분히 구분되는지 확인
 
-7. 번역 보기 UX 설계
+6. 번역 보기 UX 설계
    - 원문 하이라이트 패널은 계속 `notranslate`로 보호
    - 별도 번역 보기 패널 또는 탭을 추가할지 검토
    - 번역 보기에서는 읽기/복사 중심으로 제공하고, 하이라이트는 원문 기준으로 저장하는 흐름 검토
    - 브라우저 번역 감지/안내 문구가 필요한지 검토
 
-8. 스키마 분리 운영 검증
+7. 스키마 분리 운영 검증
    - 배포 전 운영 PostgreSQL 백업 생성
    - 배포 후 분리 테이블 생성과 기존 `papers` 데이터 복사 여부 확인
    - 기존 저장 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소가 정상 동작하는지 확인

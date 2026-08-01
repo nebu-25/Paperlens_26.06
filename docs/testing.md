@@ -739,3 +739,20 @@ GitHub Actions `Reset demo account` workflow는 수동 실행과 cron 실행을 
 - `npm test`: 116 passed.
 - `npm run build`: 통과.
 - 남는 확인: 시각/상호작용 회귀라 렌더 테스트로는 못 잡는다. 실제 브라우저에서 PDF 선택 정렬 확인 권장(미실시).
+
+### 2026-08-01 PDF 추출 페이지 경계 문단 병합
+
+증상: 아티클 원문에서 PDF 페이지가 바뀌는 위치의 같은 문단이 원문 패널에서는 별도 문단처럼 큰 빈 간격으로 분리됐다. 예를 들어 앞 페이지 마지막 줄이 `What prevents ... from feeling`처럼 문장 종결 없이 끝나고 다음 페이지 첫 줄이 `confidence and indignation ...`으로 이어지는 경우, 두 조각 사이에 문단 구분 `\n\n`이 들어갔다.
+
+반영한 범위:
+
+- `_reflow_document`가 페이지 내부 컬럼/문단 reflow를 먼저 만든 뒤, 페이지 단위 결과를 최종 문단 목록에 병합하도록 조립 순서를 분리했다.
+- 앞 페이지 마지막 문단이 문장 종결 부호 없이 끝나고 다음 페이지 첫 문단이 일반 본문이면 같은 문단으로 이어 붙인다.
+- 번호 섹션 헤딩, Abstract/Keywords/References, 한국어 `요약`/`초록`/`키워드`/`참고문헌`은 페이지 경계 병합 대상에서 제외한다.
+- `tests/test_papers.py::TestReflowDocument`에 페이지 경계 미완성 문단 병합 회귀 테스트를 추가했다.
+
+실행한 검증:
+
+- `.venv/bin/python -m ruff check app/routers/papers.py tests/test_papers.py`: 통과.
+- `.venv/bin/python -m pytest tests/test_papers.py::TestReflowDocument -q`: 9 passed.
+- `.venv/bin/python -m pytest tests/test_papers.py -q`: 115 passed.

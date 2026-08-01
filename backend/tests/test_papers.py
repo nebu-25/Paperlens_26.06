@@ -679,6 +679,47 @@ class TestReflowDocument:
         assert text.index("Left body four") < text.index("Right column first line")
         assert "Ⅰ. 서론 Right column first line" not in text
 
+    def test_joins_unfinished_paragraph_across_page_boundary(self):
+        page1 = FakePage(
+            [
+                {"text": "What prevents the audience, then, from feeling", "x0": 52, "x1": 430, "y0": 700, "y1": 712},
+            ]
+        )
+        page2 = FakePage(
+            [
+                {
+                    "text": "confidence and indignation along with those characters in the drama who are safe and successful, as",
+                    "x0": 52,
+                    "x1": 540,
+                    "y0": 72,
+                    "y1": 84,
+                },
+                {
+                    "text": "opposed to pity and fear with those who are defeated and humiliated?",
+                    "x0": 52,
+                    "x1": 480,
+                    "y0": 86,
+                    "y1": 98,
+                },
+                {
+                    "text": "There is an implicit answer to this question in Aristotle's thesis about similarity.",
+                    "x0": 52,
+                    "x1": 520,
+                    "y0": 140,
+                    "y1": 152,
+                },
+            ]
+        )
+
+        text = papers._reflow_document(FakeDocument([page1, page2]))
+
+        assert (
+            "What prevents the audience, then, from feeling confidence and indignation along with those characters"
+            in text
+        )
+        assert "from feeling\n\nconfidence and indignation" not in text
+        assert "humiliated?\n\nThere is an implicit answer" in text
+
 
 class TestArxivId:
     def test_new_style(self):
