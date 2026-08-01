@@ -756,3 +756,21 @@ GitHub Actions `Reset demo account` workflow는 수동 실행과 cron 실행을 
 - `.venv/bin/python -m ruff check app/routers/papers.py tests/test_papers.py`: 통과.
 - `.venv/bin/python -m pytest tests/test_papers.py::TestReflowDocument -q`: 9 passed.
 - `.venv/bin/python -m pytest tests/test_papers.py -q`: 115 passed.
+
+### 2026-08-01 하이라이트 제거 툴바와 겹침 색상 표시
+
+증상: 이미 하이라이트한 원문에 다시 하이라이트를 추가할 수 있지만, 선택 툴바에서 기존 하이라이트를 바로 제거할 수 없어 리뷰 질문/인용 후보에 같은 인용문이 중복될 수 있었다. 또한 같은 구간에 여러 목적의 하이라이트가 겹쳐도 원문 표시 색상은 먼저 렌더된 한 색만 보여 다른 목적을 한눈에 파악하기 어려웠다.
+
+반영한 범위:
+
+- 원문 선택 툴바에 선택 영역과 겹치는 기존 하이라이트가 있을 때만 `하이라이트 해제` 버튼을 표시한다.
+- PDF 선택 툴바에도 선택 rect와 겹치는 기존 PDF 하이라이트 제거 버튼을 표시한다.
+- 원문 하이라이트 렌더링은 하이라이트 경계 기준으로 텍스트를 다시 나누고, 같은 구간에 여러 색이 겹치면 작은 색상 점 목록을 함께 표시한다.
+- `useReviewStore.test.ts`에 선택 영역과 겹치는 하이라이트를 한 번에 제거하는 회귀 테스트를 추가했다.
+
+실행한 검증:
+
+- `npm run lint`: 통과.
+- `npm run build`: 통과.
+- `npm test -- --run src/hooks/useReviewStore.test.ts`: worker 시작 timeout으로 실패(테스트 실행 전).
+- `npm test -- --run src/hooks/useReviewStore.test.ts --pool=threads --maxWorkers=1`: 13 passed.

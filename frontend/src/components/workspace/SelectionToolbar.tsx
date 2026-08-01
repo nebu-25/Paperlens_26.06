@@ -1,8 +1,21 @@
 import { useWorkspace } from './WorkspaceContext';
-import { AddTermButton, HighlightButton, HighlightColorSwatches } from './HighlightSelectionControls';
+import {
+  AddTermButton,
+  HighlightButton,
+  HighlightColorSwatches,
+  RemoveHighlightButton,
+} from './HighlightSelectionControls';
 
 export function SelectionToolbar() {
-  const { selection, highlightColor, setHighlightColor, addHighlight, addTerm } = useWorkspace().store;
+  const {
+    selection,
+    selectionHighlightIds,
+    highlightColor,
+    setHighlightColor,
+    addHighlight,
+    removeSelectionHighlights,
+    addTerm,
+  } = useWorkspace().store;
   if (!selection) return null;
   return (
     <div
@@ -14,6 +27,9 @@ export function SelectionToolbar() {
         <HighlightColorSwatches selected={highlightColor} onSelect={setHighlightColor} />
       </div>
       <HighlightButton onClick={addHighlight} />
+      {selectionHighlightIds.length > 0 && (
+        <RemoveHighlightButton count={selectionHighlightIds.length} onClick={removeSelectionHighlights} />
+      )}
       <AddTermButton onClick={addTerm} />
     </div>
   );

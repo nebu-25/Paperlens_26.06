@@ -98,6 +98,28 @@ describe('useReviewStore', () => {
     expect(result.current.selection).toBeNull();
   });
 
+  it('선택 영역과 겹치는 기존 하이라이트를 제거한다', async () => {
+    const { result } = await renderStore();
+    act(() => result.current.registerPaper(paperInput({ text: 'body text here' }), [], 'p1'));
+    act(() => result.current.setHighlightColor('yellow'));
+    act(() => result.current.setSelection({ text: 'body text', start: 0, end: 9, x: 0, y: 0 }));
+    act(() => result.current.addHighlight());
+    act(() => result.current.setHighlightColor('green'));
+    act(() => result.current.setSelection({ text: 'text here', start: 5, end: 14, x: 0, y: 0 }));
+    act(() => result.current.addHighlight());
+
+    expect(result.current.note.highlights).toHaveLength(2);
+
+    act(() => result.current.setSelection({ text: 'text', start: 5, end: 9, x: 0, y: 0 }));
+
+    expect(result.current.selectionHighlightIds).toHaveLength(2);
+
+    act(() => result.current.removeSelectionHighlights());
+
+    expect(result.current.note.highlights).toHaveLength(0);
+    expect(result.current.selection).toBeNull();
+  });
+
   it('위치를 해석할 수 없는 선택은 하이라이트하지 않고 경고한다', async () => {
     const { result } = await renderStore();
     act(() => result.current.registerPaper(paperInput({ text: 'short' }), [], 'p1'));

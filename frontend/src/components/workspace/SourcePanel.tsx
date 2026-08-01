@@ -663,6 +663,13 @@ export function SourcePanel() {
                     note.highlights.filter((highlight) => highlight.id !== highlightId),
                   )
                 }
+                onRemoveHighlights={(highlightIds) => {
+                  const ids = new Set(highlightIds);
+                  updateNote(
+                    'highlights',
+                    note.highlights.filter((highlight) => !ids.has(highlight.id)),
+                  );
+                }}
                 onAddTerm={addTermText}
                 requestedPage={requestedPdfPage}
                 onRequestedPageHandled={() => setRequestedPdfPage(null)}

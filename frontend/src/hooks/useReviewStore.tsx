@@ -35,6 +35,7 @@ import type {
   AppNotice,
   DetectedSection,
   FigureImageRef,
+  Highlight,
   HighlightColor,
   Paper,
   ReviewNote,
@@ -58,6 +59,25 @@ const SAMPLE_HEALTH_TIMEOUT_MS = 10_000;
 const SAMPLE_DOWNLOAD_TIMEOUT_MS = 30_000;
 const PDF_EXTRACT_TIMEOUT_MS = 90_000;
 const SAMPLE_SOURCE_KEYS = new Set(['sample:paperlens', 'demo-session:demo-paperlens-sample-pdf']);
+
+function highlightTextRange(highlight: Highlight, sourceText: string): { start: number; end: number } | null {
+  if (
+    typeof highlight.start === 'number'
+    && typeof highlight.end === 'number'
+    && highlight.start >= 0
+    && highlight.end <= sourceText.length
+    && highlight.end > highlight.start
+  ) {
+    return { start: highlight.start, end: highlight.end };
+  }
+  if (!highlight.text) return null;
+  const start = sourceText.indexOf(highlight.text);
+  return start >= 0 ? { start, end: start + highlight.text.length } : null;
+}
+
+function rangesOverlap(a: { start: number; end: number }, b: { start: number; end: number }) {
+  return a.start < b.end && b.start < a.end;
+}
 
 async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -1108,6 +1128,17 @@ export function useReviewStore({
     window.getSelection()?.removeAllRanges();
   }
 
+  function removeSelectionHighlights() {
+    if (selectionHighlightIds.length === 0) return;
+    const ids = new Set(selectionHighlightIds);
+    setNote((n) => ({
+      ...n,
+      highlights: n.highlights.filter((highlight) => !ids.has(highlight.id)),
+    }));
+    setSelection(null);
+    window.getSelection()?.removeAllRanges();
+  }
+
   function addPdfHighlight({
     color,
     page,
@@ -1251,6 +1282,18 @@ export function useReviewStore({
     jumpToTextOffset(mention.targetStart);
   }
 
+  const selectionHighlightIds = React.useMemo(() => {
+    if (!selection || !paper?.text) return [];
+    const selectedRange = { start: selection.start, end: selection.end };
+    return note.highlights
+      .filter((highlight) => !highlight.pdf)
+      .filter((highlight) => {
+        const range = highlightTextRange(highlight, paper.text);
+        return range ? rangesOverlap(selectedRange, range) : false;
+      })
+      .map((highlight) => highlight.id);
+  }, [note.highlights, paper?.text, selection]);
+
   const bodyNodes = usePaperBodyNodes(
     paper,
     note,
@@ -1389,6 +1432,7 @@ export function useReviewStore({
     highlightColor,
     highlightFilter,
     selection,
+    selectionHighlightIds,
     bodyNodes,
     checklist,
     doneCount,
@@ -1426,6 +1470,7 @@ export function useReviewStore({
     registerByDoi,
     onTextMouseUp,
     addHighlight,
+    removeSelectionHighlights,
     addPdfHighlight,
     addTerm,
     addTermText,

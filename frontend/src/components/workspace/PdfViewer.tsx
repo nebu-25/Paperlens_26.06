@@ -24,7 +24,12 @@ import { authHeaders } from '../../lib/authHeaders';
 import { isChunkLoadError } from '../../lib/chunkLoad';
 import type { Highlight, HighlightColor } from '../../types';
 import { bandIndexOf, isHorizontalRect, mergeColumnBands, type XSpan } from './pdfHighlightColumns';
-import { AddTermButton, HighlightButton, HighlightColorSwatches } from './HighlightSelectionControls';
+import {
+  AddTermButton,
+  HighlightButton,
+  HighlightColorSwatches,
+  RemoveHighlightButton,
+} from './HighlightSelectionControls';
 
 type PdfViewerStatus = 'idle' | 'loading' | 'ready' | 'error';
 type PageSize = {
@@ -79,6 +84,7 @@ interface PdfViewerProps {
     text: string;
   }) => void;
   onRemoveHighlight: (id: string) => void;
+  onRemoveHighlights?: (ids: string[]) => void;
   onAddTerm: (text: string) => void;
   // 외부(그림 네비게이터 등)에서 요청한 페이지로 이동 (M5b). 처리 후 콜백으로 소거한다.
   requestedPage?: number | null;
@@ -127,6 +133,16 @@ function rectToPdfRect(rect: ClientRectLike, pageLayer: HTMLElement, scale: numb
     width: clipped.width / scale,
     height: clipped.height / scale,
   };
+}
+
+function pdfRectsOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+) {
+  return a.x < b.x + b.width
+    && b.x < a.x + a.width
+    && a.y < b.y + b.height
+    && b.y < a.y + a.height;
 }
 
 function isTextNode(node: Node | null): node is Text {
@@ -250,6 +266,7 @@ export function PdfViewer({
   onSelectHighlightColor,
   onAddHighlight,
   onRemoveHighlight,
+  onRemoveHighlights,
   onAddTerm,
   requestedPage = null,
   onRequestedPageHandled,
@@ -642,6 +659,24 @@ export function PdfViewer({
       }
     : undefined;
   const pageHighlights = highlights.filter((highlight) => highlight.pdf?.page === pageNumber);
+  const pendingOverlapHighlightIds = pendingHighlight
+    ? pageHighlights
+        .filter((highlight) =>
+          highlight.pdf?.rects.some((rect) =>
+            pendingHighlight.rects.some((pendingRect) => pdfRectsOverlap(rect, pendingRect)),
+          ),
+        )
+        .map((highlight) => highlight.id)
+    : [];
+  const removePendingOverlaps = () => {
+    if (pendingOverlapHighlightIds.length === 0) return;
+    if (onRemoveHighlights) {
+      onRemoveHighlights(pendingOverlapHighlightIds);
+    } else {
+      pendingOverlapHighlightIds.forEach(onRemoveHighlight);
+    }
+    clearPendingHighlight();
+  };
 
   return (
     <div className="space-y-3">
@@ -866,6 +901,9 @@ export function PdfViewer({
           <div className="flex flex-wrap items-center gap-1">
             <HighlightColorSwatches selected={pendingHighlight.color} onSelect={selectPendingColor} />
             <HighlightButton onClick={applyPendingHighlight} />
+            {pendingOverlapHighlightIds.length > 0 && (
+              <RemoveHighlightButton count={pendingOverlapHighlightIds.length} onClick={removePendingOverlaps} />
+            )}
             <AddTermButton onClick={addPendingTerm} />
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { Highlighter, Library } from 'lucide-react';
+import { Highlighter, Library, Trash2 } from 'lucide-react';
 import { HIGHLIGHT_COLORS } from '../../constants';
 import type { HighlightColor } from '../../types';
 
@@ -45,6 +45,20 @@ export function AddTermButton({ onClick }: { onClick: () => void }) {
   return (
     <button type="button" className={SELECTION_ACTION_CLASS} onClick={onClick}>
       <Library size={14} /> 용어 추가
+    </button>
+  );
+}
+
+export function RemoveHighlightButton({ count, onClick }: { count: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+      title={`선택 영역과 겹치는 하이라이트 ${count}개 제거`}
+      onClick={onClick}
+    >
+      <Trash2 size={14} />
+      하이라이트 해제{count > 1 ? ` ${count}` : ''}
     </button>
   );
 }

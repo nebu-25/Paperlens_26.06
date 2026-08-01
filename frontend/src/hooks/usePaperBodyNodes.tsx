@@ -1,4 +1,5 @@
 import React, { useMemo, useRef } from 'react';
+import { HIGHLIGHT_COLORS } from '../constants';
 import type { FigureMentionLink } from '../lib/figureIndex';
 import { highlightStyle, renderHints } from '../lib/format';
 import type { SignalMatch, SignalType } from '../lib/signalScanner';
@@ -134,28 +135,52 @@ export function usePaperBodyNodes(
     };
 
     const nodes: React.ReactNode[] = [];
-    let cursor = 0;
-    for (const range of ranges) {
-      const start = Math.max(range.start, cursor);
-      const end = range.end;
-      if (end <= cursor) continue;
-      if (start > cursor) nodes.push(...renderPlainSegment(cursor, start));
-      const color = highlightStyle(range.color);
-      const focused = focusedHighlightId !== null && range.id === focusedHighlightId;
+    const boundaries = Array.from(new Set([0, text.length, ...ranges.flatMap((range) => [range.start, range.end])]))
+      .filter((offset) => offset >= 0 && offset <= text.length)
+      .sort((a, b) => a - b);
+    for (let index = 0; index < boundaries.length - 1; index += 1) {
+      const start = boundaries[index];
+      const end = boundaries[index + 1];
+      if (end <= start) continue;
+      const activeRanges = ranges.filter((range) => range.start < end && start < range.end);
+      if (activeRanges.length === 0) {
+        nodes.push(...renderPlainSegment(start, end));
+        continue;
+      }
+      const color = highlightStyle(activeRanges[0].color);
+      const focused = focusedHighlightId !== null && activeRanges.some((range) => range.id === focusedHighlightId);
+      const uniqueColors = Array.from(new Set(activeRanges.map((range) => range.color ?? 'yellow')));
+      const showColorStack = uniqueColors.length > 1;
       nodes.push(
         <mark
-          key={`hl-${start}-${end}`}
-          data-highlight-id={range.id}
-          className={`rounded ${color.markClass} text-ink ${
+          key={`hl-${start}-${end}-${activeRanges.map((range) => range.id).join('-')}`}
+          data-highlight-id={activeRanges.map((range) => range.id).join(' ')}
+          className={`relative rounded ${color.markClass} text-ink ${
             focused ? 'ring-2 ring-action ring-offset-1' : ''
           }`}
         >
           {text.slice(start, end)}
+          {showColorStack && (
+            <span
+              className="ml-1 inline-flex translate-y-[1px] items-center gap-0.5 align-baseline"
+              title={`겹친 하이라이트: ${uniqueColors
+                .map((value) => HIGHLIGHT_COLORS.find((colorItem) => colorItem.value === value)?.label ?? value)
+                .join(', ')}`}
+              aria-label={`겹친 하이라이트 ${uniqueColors.length}개`}
+            >
+              {uniqueColors.map((value) => (
+                <span
+                  key={`${start}-${end}-${value}`}
+                  className={`size-2 rounded-full border border-white ${
+                    HIGHLIGHT_COLORS.find((colorItem) => colorItem.value === value)?.swatchClass ?? 'bg-yellow-300'
+                  }`}
+                />
+              ))}
+            </span>
+          )}
         </mark>,
       );
-      cursor = end;
     }
-    if (cursor < text.length) nodes.push(...renderPlainSegment(cursor, text.length));
     return nodes;
   }, [activeHighlightColor, paper?.text, note.highlights, signals, figureMentions, focusedHighlightId]);
 }

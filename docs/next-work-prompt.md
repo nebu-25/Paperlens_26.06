@@ -15,6 +15,7 @@
 
 최근 완료:
 
+- 원문/PDF 선택 툴바에 선택 영역과 겹치는 기존 하이라이트를 바로 제거하는 `하이라이트 해제` 버튼을 추가함. 원문에서 동일 구간에 여러 색 하이라이트가 겹치면 문장 끝에 작은 색상 점 목록으로 함께 표시함. `npm run lint`, `npm run build`, `npm test -- --run src/hooks/useReviewStore.test.ts --pool=threads --maxWorkers=1` 통과.
 - 모바일 PDF 뷰어 툴바가 좁은 화면에서 여러 줄로 안정적으로 접히도록 수정했고, 페이지/줌 컨트롤 그룹과 `폭 맞춤` compact 아이콘 버튼을 적용함. `cd frontend && npm run lint`, `cd frontend && npm run build` 통과 후 `bb22d08`로 push 완료.
 - PDF 추출 reflow에서 페이지 경계로 끊긴 미완성 문단을 다음 페이지 첫 문단과 병합하도록 개선함. 섹션 헤딩, Abstract/Keywords/References/한국어 주요 헤딩은 병합 대상에서 제외하며, `backend/tests/test_papers.py::TestReflowDocument`에 회귀 테스트를 추가함. `ruff`, `TestReflowDocument`, `tests/test_papers.py` 전체 통과.
 - React hook dependency 경고 제거 완료.
