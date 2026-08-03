@@ -485,11 +485,15 @@ def _detect_column_layout(
         return None
 
     body_pair_start_y = min(paired_column_y)
+    # Some Korean two-column papers start the left column with a section heading while the
+    # right column has a short tail or figure area; stable left/right body pairs may appear
+    # several lines later. Treat nearby numbered headings as the true column start so those
+    # early left-column lines are not mixed into title/author/email front matter.
     section_heading_y = [
         float(line["y0"])
         for line in preliminary_left + preliminary_right
         if _is_numbered_section_heading_line(str(line["text"]))
-        and body_pair_start_y - line_h * 3 <= float(line["y0"]) <= body_pair_start_y + line_h * 0.75
+        and body_pair_start_y - line_h * 8 <= float(line["y0"]) <= body_pair_start_y + line_h * 0.75
     ]
     column_start_y = min([body_pair_start_y, *section_heading_y])
     body_narrow = [line for line in narrow if float(line["y0"]) >= body_pair_start_y - line_h * 0.5]

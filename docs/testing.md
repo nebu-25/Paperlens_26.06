@@ -829,3 +829,23 @@ PDF 추출 확인:
 
 - 실제 한국어 2단/혼합형 문제 PDF 원본이 로컬에 없어 운영 업로드 기반의 추출 품질 경고, 섹션 아웃라인, 페이지 경계 문단 병합은 화면 기준으로 확인하지 못했다.
 - 운영 브라우저 로그인 화면, 모바일 레이아웃, PDF iframe blob preview, 샘플 PDF 버튼 재클릭 UI, 설문 모달 반복 노출은 브라우저 실행 파일 부재로 화면 기준 확인을 완료하지 못했다.
+
+### 2026-08-03 헤딩 같은 높이 문장 꼬리 위치 보정
+
+증상:
+
+- 한국어 2단 PDF에서 왼쪽 컬럼 `I. 서론`과 같은 높이에 오른쪽 컬럼의 짧은 문장 꼬리 `목적이 있다.`가 놓이는 경우, 안정적인 좌우 본문 pair가 아래쪽에서 늦게 잡히면 해당 줄이 상단 저자/이메일 front matter로 분류될 수 있었다.
+- 그 결과 원문 추출 결과에서 `Korea. E-mail: sjko@cup.ac.kr 목적이 있다.`처럼 문장 꼬리가 이메일 뒤에 잘못 연결될 수 있었다.
+
+반영한 범위:
+
+- `_detect_column_layout`에서 안정적인 좌우 본문 pair 시작점보다 위에 있는 번호/로마숫자 섹션 헤딩을 컬럼 시작점으로 인정하는 허용 범위를 3줄에서 8줄로 넓혔다.
+- 오른쪽 컬럼 상단에 그림/소제목이 있어 안정적인 pair가 늦게 나타나는 한국어 2단 레이아웃에서도 `I. 서론` 이후 왼쪽 컬럼 본문을 먼저 읽고, 같은 높이의 짧은 오른쪽 꼬리를 왼쪽 문단 끝에 붙이도록 했다.
+- `TestReflowDocument`에 이메일 front matter 뒤로 `목적이 있다.`가 붙지 않고 `신뢰성을 높이는데 그 목적이 있다.`로 복원되는 회귀 테스트를 추가했다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestReflowDocument -q`: 10 passed.
+- `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py -q`: 116 passed.
+- `backend/.venv/bin/python -m pytest backend/tests/test_pdf_extraction_regression.py -q`: 3 passed.

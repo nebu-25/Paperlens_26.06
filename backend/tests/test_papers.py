@@ -647,6 +647,34 @@ class TestReflowDocument:
         assert text.index("I. 서론") < text.index("높이는데 그 목적이 있다.")
         assert text.index("높이는데 그 목적이 있다.") < text.index("II. 재료 및 방법")
 
+    def test_does_not_attach_heading_aligned_tail_to_email_front_matter(self):
+        page = FakePage(
+            [
+                {"text": "Catholic University of Pusan, Korea. E-mail: sjko@cup.ac.kr", "x0": 72, "x1": 330, "y0": 66, "y1": 78},
+                {"text": "I. 서론", "x0": 145, "x1": 190, "y0": 82, "y1": 94, "size": 12},
+                {"text": "목적이 있다.", "x0": 275, "x1": 330, "y0": 82, "y1": 94},
+                {"text": "그러므로 본 논문에서는 ‘영상의 질’의 척도를 나타", "x0": 72, "x1": 244, "y0": 110, "y1": 122},
+                {"text": "내는 선예도를 평가하기 위한 50% 변조 전달함수", "x0": 72, "x1": 244, "y0": 124, "y1": 136},
+                {"text": "변환 과정에서 발생하는 픽셀 값이 차이와 통계학적인", "x0": 72, "x1": 244, "y0": 138, "y1": 150},
+                {"text": "기초자료로서의 활용 및 연구의 신뢰성을 높이는데 그", "x0": 72, "x1": 244, "y0": 152, "y1": 164},
+                {"text": "II. 재료 및 방법", "x0": 333, "x1": 430, "y0": 120, "y1": 132, "size": 12},
+                {"text": "2.1 실험재료", "x0": 275, "x1": 335, "y0": 156, "y1": 168},
+                {"text": "2.1.1 AAPM 성능 평가용 팬텀", "x0": 275, "x1": 430, "y0": 176, "y1": 188},
+                {"text": "CT 정도관리 표준 팬텀은 CT number", "x0": 275, "x1": 465, "y0": 196, "y1": 208},
+                {"text": "calibration 등을 측정할 수 있다.", "x0": 275, "x1": 465, "y0": 210, "y1": 222},
+                {"text": "beam alignment 및 노이즈 측정용 팬텀을", "x0": 275, "x1": 465, "y0": 224, "y1": 236},
+                {"text": "관심영역 안에 배치한다.", "x0": 275, "x1": 465, "y0": 238, "y1": 250},
+            ]
+        )
+
+        text = papers._reflow_document(FakeDocument([page]))
+
+        assert "E-mail: sjko@cup.ac.kr 목적이 있다." not in text
+        assert "신뢰성을 높이는데 그 목적이 있다." in text
+        assert text.index("E-mail: sjko@cup.ac.kr") < text.index("I. 서론")
+        assert text.index("I. 서론") < text.index("그러므로 본 논문에서는")
+        assert text.index("신뢰성을 높이는데 그 목적이 있다.") < text.index("II. 재료 및 방법")
+
     def test_keeps_front_matter_before_roman_section_two_column_body(self):
         page = FakePage(
             [
