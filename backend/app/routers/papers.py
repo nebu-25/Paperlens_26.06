@@ -1153,7 +1153,11 @@ def _clova_multipart_payload(
 
 def _clova_request_timeout_sec() -> int:
     timeout = max(1, settings.clova_ocr_timeout_sec)
-    if settings.rapidocr_ready and settings.ocr_provider_normalized in {"auto", "clova"}:
+    if (
+        settings.ocr_allow_rapidocr_fallback
+        and settings.rapidocr_ready
+        and settings.ocr_provider_normalized in {"auto", "clova"}
+    ):
         return min(timeout, CLOVA_FALLBACK_TIMEOUT_SEC)
     return timeout
 
@@ -1548,11 +1552,12 @@ def _ocr_provider_order(document) -> list[str]:
     provider = settings.ocr_provider_normalized
     if provider in {"clova", "rapidocr"}:
         return [provider]
-    if not settings.clova_ocr_ready and not settings.rapidocr_ready:
+    rapidocr_fallback_ready = settings.ocr_allow_rapidocr_fallback and settings.rapidocr_ready
+    if not settings.clova_ocr_ready and not rapidocr_fallback_ready:
         return ["clova", "rapidocr"]
     if not settings.clova_ocr_ready:
         return ["rapidocr"]
-    if not settings.rapidocr_ready:
+    if not rapidocr_fallback_ready:
         return ["clova"]
     if _looks_latin_dominant_document(document):
         return ["rapidocr", "clova"]
@@ -1635,6 +1640,7 @@ def _ocr_document_text(
             if (
                 provider == "clova"
                 and settings.ocr_provider_normalized == "clova"
+                and settings.ocr_allow_rapidocr_fallback
                 and settings.rapidocr_ready
                 and "rapidocr" not in provider_order
                 and _is_clova_retryable_error(error)

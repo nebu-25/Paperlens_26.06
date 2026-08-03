@@ -21,6 +21,7 @@ services:
       - key: DATABASE_URL
         # 선택: 외부 PostgreSQL 연결 문자열. 비워두면 SQLite(paperlens.db)를 사용한다.
         sync: false
-      # OCR 재추출(opt-in)은 NAVER CLOVA OCR API와 선택 의존성 RapidOCR를 병행할 수 있다.
+      # OCR 재추출(opt-in)은 NAVER CLOVA OCR API를 우선 사용한다.
       # 환경변수 OCR_ENABLED=true, OCR_PROVIDER=auto, CLOVA_OCR_INVOKE_URL, CLOVA_OCR_SECRET_KEY를 설정한다.
+      # RapidOCR 자동 fallback은 메모리 여유가 있는 인스턴스에서만 OCR_ALLOW_RAPIDOCR_FALLBACK=true로 켠다.
       # RapidOCR가 끌어오는 opencv-python은 제거한 뒤 headless cv2를 다시 설치한다.

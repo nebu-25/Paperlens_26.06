@@ -1017,3 +1017,27 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 130 passed.
 - `git diff --check`: 통과.
+
+### 2026-08-04 Render RapidOCR 자동 fallback 기본 차단
+
+증상:
+
+- CLOVA timeout 후 RapidOCR fallback을 허용한 뒤 프론트는 다시 "서버 연결이 끊겼습니다"를 표시했고, Render에서는 메모리 제한 초과 알림이 발생했다.
+- RapidOCR는 자식 프로세스로 격리해도 ONNX 모델 로딩 순간 부모+자식 RSS 합산이 Render 소형 인스턴스 한도를 넘을 수 있다.
+
+반영한 범위:
+
+- `OCR_ALLOW_RAPIDOCR_FALLBACK=false`를 기본값으로 추가했다.
+- `auto` provider는 fallback 플래그가 꺼져 있으면 CLOVA만 사용한다. RapidOCR 설치 여부만으로 자동 실행하지 않는다.
+- `clova` provider도 fallback 플래그가 꺼져 있으면 CLOVA timeout 후 RapidOCR를 호출하지 않는다.
+- `OCR_PROVIDER=rapidocr`는 명시 선택이므로 fallback 플래그와 무관하게 RapidOCR만 실행한다.
+- `/api/diagnostics`의 `ocr.configured.rapidocr_fallback`로 자동 fallback 허용 여부를 노출한다.
+- README, Render 주석, 배포 문서를 Render 소형 인스턴스 안전 기본값에 맞췄다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestOcrReflow -q`: 23 passed.
+- `backend/.venv/bin/python -m pytest backend/tests/test_diagnostics.py -q`: 통과.
+- `backend/.venv/bin/python -m ruff check backend/app/config.py backend/app/routers/papers.py backend/tests/test_papers.py backend/tests/test_diagnostics.py`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py backend/tests/test_diagnostics.py -q`: 136 passed.
+- `git diff --check`: 통과.

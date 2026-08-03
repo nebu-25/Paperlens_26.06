@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     clova_ocr_invoke_url: str = ""
     clova_ocr_secret_key: str = ""
     clova_ocr_timeout_sec: int = 30
+    # RapidOCR loads ONNX models and can exceed small Render memory limits.
+    # Keep automatic fallback opt-in; OCR_PROVIDER=rapidocr still runs RapidOCR explicitly.
+    ocr_allow_rapidocr_fallback: bool = False
     rapidocr_rec_model_path: str = ""
     rapidocr_rec_keys_path: str = ""
     # 샘플 PDF 파일을 배포 서버에 커밋하지 않고 제공할 때 사용하는 원격 PDF URL.
@@ -121,6 +124,7 @@ class Settings(BaseSettings):
         configured = {
             "clova_invoke_url": bool(self.clova_ocr_invoke_url.strip()),
             "clova_secret_key": bool(self.clova_ocr_secret_key.strip()),
+            "rapidocr_fallback": self.ocr_allow_rapidocr_fallback,
             "rapidocr_package": importlib.util.find_spec("rapidocr_onnxruntime") is not None,
             "rapidocr_cv2": importlib.util.find_spec("cv2") is not None,
             "rapidocr_onnxruntime": importlib.util.find_spec("onnxruntime") is not None,
@@ -142,6 +146,15 @@ class Settings(BaseSettings):
                 "RapidOCR is not available. "
                 f"{self.rapidocr_unavailable_reason} "
                 "Install requirements-ocr.txt to enable OCR fallback."
+            )
+        if (
+            self.ocr_enabled
+            and provider == "auto"
+            and self.rapidocr_ready
+            and not self.ocr_allow_rapidocr_fallback
+        ):
+            warnings.append(
+                "RapidOCR fallback is installed but disabled. Set OCR_ALLOW_RAPIDOCR_FALLBACK=true only on instances with enough memory."
             )
         if self.ocr_provider.strip().casefold() not in {"", "auto", "clova", "rapidocr"}:
             warnings.append("Unknown OCR_PROVIDER. Falling back to auto.")

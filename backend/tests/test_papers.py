@@ -1054,6 +1054,7 @@ class TestOcrReflow:
 
     def test_clova_timeout_is_capped_in_auto_when_rapidocr_fallback_ready(self, monkeypatch):
         monkeypatch.setattr(papers.settings, "ocr_provider", "auto")
+        monkeypatch.setattr(papers.settings, "ocr_allow_rapidocr_fallback", True)
         monkeypatch.setattr(papers.settings, "clova_ocr_timeout_sec", 90)
         monkeypatch.setattr(
             type(papers.settings),
@@ -1065,6 +1066,7 @@ class TestOcrReflow:
 
     def test_clova_timeout_is_capped_in_clova_when_rapidocr_fallback_ready(self, monkeypatch):
         monkeypatch.setattr(papers.settings, "ocr_provider", "clova")
+        monkeypatch.setattr(papers.settings, "ocr_allow_rapidocr_fallback", True)
         monkeypatch.setattr(papers.settings, "clova_ocr_timeout_sec", 30)
         monkeypatch.setattr(
             type(papers.settings),
@@ -1076,11 +1078,12 @@ class TestOcrReflow:
 
     def test_clova_timeout_keeps_configured_value_without_fallback(self, monkeypatch):
         monkeypatch.setattr(papers.settings, "ocr_provider", "clova")
+        monkeypatch.setattr(papers.settings, "ocr_allow_rapidocr_fallback", False)
         monkeypatch.setattr(papers.settings, "clova_ocr_timeout_sec", 30)
         monkeypatch.setattr(
             type(papers.settings),
             "rapidocr_ready",
-            property(lambda _self: False),
+            property(lambda _self: True),
         )
 
         assert papers._clova_request_timeout_sec() == 30
@@ -1203,6 +1206,7 @@ class TestOcrReflow:
                 return _Page()
 
         monkeypatch.setattr(papers.settings, "ocr_provider", "auto")
+        monkeypatch.setattr(papers.settings, "ocr_allow_rapidocr_fallback", True)
         monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "https://example.com/ocr")
         monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "secret")
         monkeypatch.setattr(
@@ -1225,6 +1229,7 @@ class TestOcrReflow:
                 return _Page()
 
         monkeypatch.setattr(papers.settings, "ocr_provider", "auto")
+        monkeypatch.setattr(papers.settings, "ocr_allow_rapidocr_fallback", True)
         monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "https://example.com/ocr")
         monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "secret")
         monkeypatch.setattr(
@@ -1235,6 +1240,29 @@ class TestOcrReflow:
 
         assert papers._ocr_provider_order(_Doc()) == ["rapidocr", "clova"]
 
+    def test_auto_ocr_uses_clova_only_when_rapidocr_fallback_disabled(self, monkeypatch):
+        class _Doc:
+            page_count = 1
+
+            def __getitem__(self, _index):
+                class _Page:
+                    def get_text(self, _kind):
+                        return "This paper proposes a robust method for evaluation. " * 2
+
+                return _Page()
+
+        monkeypatch.setattr(papers.settings, "ocr_provider", "auto")
+        monkeypatch.setattr(papers.settings, "ocr_allow_rapidocr_fallback", False)
+        monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "https://example.com/ocr")
+        monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "secret")
+        monkeypatch.setattr(
+            type(papers.settings),
+            "rapidocr_ready",
+            property(lambda _self: True),
+        )
+
+        assert papers._ocr_provider_order(_Doc()) == ["clova"]
+
     def test_clova_provider_falls_back_to_rapidocr_on_clova_timeout(self, monkeypatch):
         class _Doc:
             page_count = 1
@@ -1243,6 +1271,7 @@ class TestOcrReflow:
 
         monkeypatch.setattr(papers.settings, "ocr_enabled", True)
         monkeypatch.setattr(papers.settings, "ocr_provider", "clova")
+        monkeypatch.setattr(papers.settings, "ocr_allow_rapidocr_fallback", True)
         monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "https://example.com/ocr")
         monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "secret")
         monkeypatch.setattr(
@@ -1271,12 +1300,48 @@ class TestOcrReflow:
         assert out == "RapidOCR fallback text"
         assert calls == ["rapidocr"]
 
+    def test_clova_provider_does_not_fallback_to_rapidocr_when_fallback_disabled(
+        self, monkeypatch
+    ):
+        class _Doc:
+            page_count = 1
+
+        monkeypatch.setattr(papers.settings, "ocr_enabled", True)
+        monkeypatch.setattr(papers.settings, "ocr_provider", "clova")
+        monkeypatch.setattr(papers.settings, "ocr_allow_rapidocr_fallback", False)
+        monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "https://example.com/ocr")
+        monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "secret")
+        monkeypatch.setattr(
+            type(papers.settings),
+            "rapidocr_ready",
+            property(lambda _self: True),
+        )
+        monkeypatch.setattr(
+            papers,
+            "_ocr_text_with_clova",
+            lambda *_args, **_kwargs: (
+                "",
+                "CLOVA OCR API에 연결하지 못했습니다. <urlopen error timed out>",
+            ),
+        )
+
+        def fail_rapidocr(*_args, **_kwargs):
+            raise AssertionError("RapidOCR fallback is disabled")
+
+        monkeypatch.setattr(papers, "_ocr_text_with_rapidocr", fail_rapidocr)
+
+        out, err = papers._ocr_document_text(_Doc(), dpi=90, max_pages=1)
+
+        assert out == ""
+        assert "clova: CLOVA OCR API에 연결하지 못했습니다." in (err or "")
+
     def test_clova_provider_does_not_fallback_to_rapidocr_on_configuration_error(self, monkeypatch):
         class _Doc:
             page_count = 1
 
         monkeypatch.setattr(papers.settings, "ocr_enabled", True)
         monkeypatch.setattr(papers.settings, "ocr_provider", "clova")
+        monkeypatch.setattr(papers.settings, "ocr_allow_rapidocr_fallback", True)
         monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "https://example.com/ocr")
         monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "secret")
         monkeypatch.setattr(

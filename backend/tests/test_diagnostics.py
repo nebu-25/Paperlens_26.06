@@ -85,6 +85,7 @@ def test_diagnostics_reports_clova_ocr_configuration_warnings(monkeypatch):
 def test_diagnostics_reports_clova_ocr_ready(monkeypatch):
     monkeypatch.setattr(settings, "ocr_enabled", True)
     monkeypatch.setattr(settings, "ocr_provider", "clova")
+    monkeypatch.setattr(settings, "ocr_allow_rapidocr_fallback", False)
     monkeypatch.setattr(settings, "clova_ocr_invoke_url", "https://example.com/ocr")
     monkeypatch.setattr(settings, "clova_ocr_secret_key", "secret")
 
@@ -93,6 +94,27 @@ def test_diagnostics_reports_clova_ocr_ready(monkeypatch):
     assert data["ocr"]["ready"] is True
     assert data["ocr"]["configured"]["clova_invoke_url"] is True
     assert data["ocr"]["configured"]["clova_secret_key"] is True
+    assert data["ocr"]["configured"]["rapidocr_fallback"] is False
+
+
+def test_diagnostics_warns_when_rapidocr_fallback_installed_but_disabled(monkeypatch):
+    def fake_find_spec(name: str):
+        if name in {"rapidocr_onnxruntime", "onnxruntime", "cv2"}:
+            return object()
+        return None
+
+    monkeypatch.setattr(settings, "ocr_enabled", True)
+    monkeypatch.setattr(settings, "ocr_provider", "auto")
+    monkeypatch.setattr(settings, "ocr_allow_rapidocr_fallback", False)
+    monkeypatch.setattr(settings, "clova_ocr_invoke_url", "https://example.com/ocr")
+    monkeypatch.setattr(settings, "clova_ocr_secret_key", "secret")
+    monkeypatch.setattr("app.config.importlib.util.find_spec", fake_find_spec)
+
+    data = diagnostics()
+
+    assert data["ocr"]["ready"] is True
+    assert data["ocr"]["configured"]["rapidocr_fallback"] is False
+    assert any("RapidOCR fallback is installed but disabled" in warning for warning in data["ocr"]["warnings"])
 
 
 def test_diagnostics_requires_rapidocr_cv2_dependency(monkeypatch):

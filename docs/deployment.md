@@ -103,6 +103,7 @@ Backend:
 | `CLOVA_OCR_INVOKE_URL` | OCR 활성화 시 필수. NAVER CLOVA OCR 도메인의 Invoke URL |
 | `CLOVA_OCR_SECRET_KEY` | OCR 활성화 시 필수. NAVER CLOVA OCR Secret Key |
 | `CLOVA_OCR_TIMEOUT_SEC` | 선택. CLOVA OCR API 요청 timeout(기본 30초) |
+| `OCR_ALLOW_RAPIDOCR_FALLBACK` | 선택. CLOVA 실패 후 RapidOCR 자동 fallback 허용 여부(기본 false). Render 소형 인스턴스에서는 메모리 초과 방지를 위해 false 권장 |
 | `RAPIDOCR_REC_MODEL_PATH` / `RAPIDOCR_REC_KEYS_PATH` | 선택. RapidOCR 커스텀 rec 모델·dict 경로. 비우면 패키지 기본 모델 사용 |
 | `SUPABASE_URL` | Supabase 프로젝트 URL |
 | `SUPABASE_ANON_KEY` | Supabase anon/publishable key. 현재 운영은 `sb_publishable_...` 형식 |
@@ -237,7 +238,7 @@ DATABASE_URL=postgresql://paperlens:paperlens_dev@127.0.0.1:5432/paperlens pytho
 폰트/인코딩이 손상되거나 스캔(이미지) PDF라 텍스트 레이어가 깨진 경우, 저장된 PDF를 렌더→OCR로 재인식해 원문을 복구할 수 있습니다. 외부 API 비용과 PDF 페이지 이미지 전송이 있는 provider가 포함되므로 기본 비활성(opt-in)입니다.
 
 - 활성화: `OCR_ENABLED=true`, `OCR_PROVIDER=auto`, `CLOVA_OCR_INVOKE_URL`, `CLOVA_OCR_SECRET_KEY`.
-- 엔진: `auto` 모드는 영문 텍스트 힌트가 있으면 RapidOCR을 먼저 시도하고, 그 외에는 NAVER CLOVA OCR API를 먼저 시도한 뒤 RapidOCR이 준비되어 있으면 fallback으로 재시도합니다. fallback이 준비된 `auto`/`clova` 모드에서는 브라우저 요청 시간 초과를 피하기 위해 CLOVA 1회 대기 시간을 최대 15초로 제한합니다. `OCR_PROVIDER=clova`에서도 CLOVA timeout/연결 지연이 감지되고 RapidOCR이 준비되어 있으면 해당 페이지는 RapidOCR로 재시도합니다. CLOVA timeout이 반복되면 임시로 `OCR_PROVIDER=rapidocr`로 바꿔 CLOVA를 완전히 우회할 수 있습니다. `/api/diagnostics`의 `ocr.providers`와 `ocr.configured`로 provider 준비 상태를 확인합니다.
+- 엔진: `auto` 모드는 CLOVA OCR을 우선 사용합니다. RapidOCR는 ONNX 모델 로딩 때문에 Render 소형 인스턴스에서 메모리 초과를 일으킬 수 있으므로 자동 fallback은 기본 비활성입니다. 충분한 메모리의 인스턴스에서만 `OCR_ALLOW_RAPIDOCR_FALLBACK=true`로 켜세요. 이때 `auto` 모드는 영문 텍스트 힌트가 있으면 RapidOCR을 먼저 시도하고, 그 외에는 CLOVA 후 RapidOCR fallback을 시도합니다. `OCR_PROVIDER=rapidocr`는 이 플래그와 무관하게 RapidOCR만 실행합니다. `/api/diagnostics`의 `ocr.configured.rapidocr_fallback`과 `ocr.providers`로 상태를 확인합니다.
 - CLOVA OCR: 서버는 저장된 PDF를 페이지별 JPEG로 렌더링해 General 도메인 API Gateway Invoke URL로 multipart 전송하고, 응답의 OCR 좌표를 기존 1단/2단 reflow 파이프라인으로 재구성합니다. CLOVA가 단일 언어 중심이라 한국어 문서 우선 provider로 사용합니다. 표 인식 옵션은 별도 과금 때문에 요청하지 않습니다. 프론트는 OCR을 한 번의 긴 요청으로 보내지 않고 `start_page`/`page_count=1` 단위로 순차 호출해 Render 인스턴스 메모리 사용량을 낮춥니다.
 - RapidOCR: 영어 fallback까지 운영하려면 OCR 활성화 배포에서 `requirements-ocr.txt`를 추가 설치해야 합니다. Render buildCommand 예: `pip install -r requirements.txt && pip install -r requirements-ocr.txt && pip uninstall -y opencv-python && pip install --force-reinstall --no-deps "opencv-python-headless>=4.9"`. 무료/소형 Render 인스턴스의 메모리 초과를 줄이기 위해 기본 OCR 한도는 10페이지·150dpi이며, 서버는 페이지 렌더링을 약 100만 픽셀 이하 RGB/alpha 없음 pixmap으로 낮춥니다. RapidOCR 엔진은 요청 프로세스에 전역 캐시로 남기지 않고 페이지별 자식 프로세스에서 실행한 뒤 종료하며, 페이지당 자식 프로세스 상한은 60초입니다.
 - 프론트: 추출 품질이 낮고 PDF가 연결된 경우 원문 패널에 "OCR로 다시 시도" 버튼이 뜹니다.
