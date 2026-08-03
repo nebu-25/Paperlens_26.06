@@ -1566,6 +1566,18 @@ def _ocr_provider_unavailable_reason(provider: str) -> str:
     return ""
 
 
+def _is_clova_retryable_error(error: str | None) -> bool:
+    if not error:
+        return False
+    lowered = error.casefold()
+    return (
+        "timed out" in lowered
+        or "timeout" in lowered
+        or "time out" in lowered
+        or "연결하지 못했습니다" in error
+    )
+
+
 def _ocr_text_quality_score(text: str, page_count: int) -> int:
     return int(_extraction_quality(text, page_count).get("score") or 0)
 
@@ -1604,7 +1616,8 @@ def _ocr_document_text(
 
     attempts: list[tuple[str, str, int]] = []
     errors: list[str] = []
-    for provider in _ocr_provider_order(document):
+    provider_order = _ocr_provider_order(document)
+    for provider in provider_order:
         unavailable = _ocr_provider_unavailable_reason(provider)
         if unavailable:
             errors.append(f"{provider}: {unavailable}")
@@ -1618,6 +1631,14 @@ def _ocr_document_text(
             text, error = "", str(exc)
         if error:
             errors.append(f"{provider}: {error}")
+            if (
+                provider == "clova"
+                and settings.ocr_provider_normalized == "clova"
+                and settings.rapidocr_ready
+                and "rapidocr" not in provider_order
+                and _is_clova_retryable_error(error)
+            ):
+                provider_order.append("rapidocr")
         if not text.strip():
             continue
         score = _ocr_text_quality_score(text, len(page_indexes))

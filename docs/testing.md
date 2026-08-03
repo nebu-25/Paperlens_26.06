@@ -976,3 +976,24 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 127 passed.
 - `git diff --check`: 통과.
+
+### 2026-08-04 CLOVA timeout 시 RapidOCR fallback
+
+증상:
+
+- 운영 `/api/diagnostics`에서 OCR은 `provider=clova`, `providers.rapidocr=true`, `dpi=90`, `timeout_sec=30`이었다.
+- OCR 요청이 `clova: CLOVA OCR API에 연결하지 못했습니다. <urlopen error timed out>`로 실패했다.
+- `OCR_PROVIDER=clova`는 기존에 CLOVA만 시도하므로, RapidOCR가 설치되어 있어도 CLOVA timeout을 복구하지 못했다.
+
+반영한 범위:
+
+- `OCR_PROVIDER=clova`에서도 CLOVA timeout/연결 지연 오류일 때만 RapidOCR가 준비되어 있으면 같은 페이지를 RapidOCR로 재시도한다.
+- CLOVA 401/400 같은 설정 오류는 RapidOCR로 숨기지 않고 기존처럼 명확히 반환한다.
+- 운영 문서에 `clova` provider의 timeout fallback 동작과 `rapidocr` 임시 우회 옵션을 갱신했다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestOcrReflow -q`: 20 passed.
+- `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 129 passed.
+- `git diff --check`: 통과.

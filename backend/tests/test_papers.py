@@ -1224,6 +1224,71 @@ class TestOcrReflow:
 
         assert papers._ocr_provider_order(_Doc()) == ["rapidocr", "clova"]
 
+    def test_clova_provider_falls_back_to_rapidocr_on_clova_timeout(self, monkeypatch):
+        class _Doc:
+            page_count = 1
+
+        calls = []
+
+        monkeypatch.setattr(papers.settings, "ocr_enabled", True)
+        monkeypatch.setattr(papers.settings, "ocr_provider", "clova")
+        monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "https://example.com/ocr")
+        monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "secret")
+        monkeypatch.setattr(
+            type(papers.settings),
+            "rapidocr_ready",
+            property(lambda _self: True),
+        )
+        monkeypatch.setattr(
+            papers,
+            "_ocr_text_with_clova",
+            lambda *_args, **_kwargs: (
+                "",
+                "CLOVA OCR API에 연결하지 못했습니다. <urlopen error timed out>",
+            ),
+        )
+
+        def fake_rapidocr(*_args, **_kwargs):
+            calls.append("rapidocr")
+            return "RapidOCR fallback text", None
+
+        monkeypatch.setattr(papers, "_ocr_text_with_rapidocr", fake_rapidocr)
+
+        out, err = papers._ocr_document_text(_Doc(), dpi=90, max_pages=1)
+
+        assert err is None
+        assert out == "RapidOCR fallback text"
+        assert calls == ["rapidocr"]
+
+    def test_clova_provider_does_not_fallback_to_rapidocr_on_configuration_error(self, monkeypatch):
+        class _Doc:
+            page_count = 1
+
+        monkeypatch.setattr(papers.settings, "ocr_enabled", True)
+        monkeypatch.setattr(papers.settings, "ocr_provider", "clova")
+        monkeypatch.setattr(papers.settings, "clova_ocr_invoke_url", "https://example.com/ocr")
+        monkeypatch.setattr(papers.settings, "clova_ocr_secret_key", "secret")
+        monkeypatch.setattr(
+            type(papers.settings),
+            "rapidocr_ready",
+            property(lambda _self: True),
+        )
+        monkeypatch.setattr(
+            papers,
+            "_ocr_text_with_clova",
+            lambda *_args, **_kwargs: ("", "CLOVA OCR API가 401 응답을 반환했습니다."),
+        )
+
+        def fail_rapidocr(*_args, **_kwargs):
+            raise AssertionError("RapidOCR should not be called for CLOVA configuration errors")
+
+        monkeypatch.setattr(papers, "_ocr_text_with_rapidocr", fail_rapidocr)
+
+        out, err = papers._ocr_document_text(_Doc(), dpi=90, max_pages=1)
+
+        assert out == ""
+        assert err == "clova: CLOVA OCR API가 401 응답을 반환했습니다."
+
     def test_ocr_skips_unavailable_rapidocr_in_auto_mode(self, monkeypatch):
         class _Doc:
             page_count = 1
