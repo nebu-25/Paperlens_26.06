@@ -1063,8 +1063,8 @@ def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
 
 
 # --- OCR fallback (opt-in, NAVER CLOVA OCR API + RapidOCR) ----------------
-MAX_OCR_RENDER_PIXELS = 3_000_000
-MIN_OCR_RENDER_DPI = 100
+MAX_OCR_RENDER_PIXELS = 1_500_000
+MIN_OCR_RENDER_DPI = 90
 
 
 def _ocr_line_dict(text: str, vertices: list[dict[str, object]]) -> dict[str, object] | None:
@@ -1124,7 +1124,13 @@ def _ocr_page_render_dpi(page, requested_dpi: int) -> int:
 
 
 def _ocr_page_pixmap(page, *, dpi: int):
-    return page.get_pixmap(dpi=_ocr_page_render_dpi(page, dpi))
+    render_dpi = _ocr_page_render_dpi(page, dpi)
+    try:
+        import fitz
+
+        return page.get_pixmap(dpi=render_dpi, colorspace=fitz.csRGB, alpha=False)
+    except TypeError:
+        return page.get_pixmap(dpi=render_dpi)
 
 
 def _call_clova_ocr(image_bytes: bytes, *, image_format: str, image_name: str) -> dict[str, object]:
@@ -1335,15 +1341,23 @@ def _ocr_text_with_clova(document, *, dpi: int, page_indexes: list[int]) -> tupl
     for page_index in page_indexes:
         page = document[page_index]
         pix = _ocr_page_pixmap(page, dpi=dpi)
+        image_bytes = None
+        response = None
+        lines = None
         try:
+            image_bytes = pix.tobytes("png")
             response = _call_clova_ocr(
-                pix.tobytes("png"), image_format="png", image_name=f"page-{page_index + 1}"
+                image_bytes, image_format="png", image_name=f"page-{page_index + 1}"
             )
             lines = _clova_lines_from_response(response)
             if lines:
                 paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
         finally:
+            image_bytes = None
+            response = None
+            lines = None
             pix = None
+            gc.collect()
     return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
 
 
@@ -1357,13 +1371,21 @@ def _ocr_text_with_rapidocr(document, *, dpi: int, page_indexes: list[int]) -> t
         for page_index in page_indexes:
             page = document[page_index]
             pix = _ocr_page_pixmap(page, dpi=dpi)
+            image_bytes = None
+            result = None
+            lines = None
             try:
-                result, _ = engine(pix.tobytes("png"))
+                image_bytes = pix.tobytes("png")
+                result, _ = engine(image_bytes)
                 lines = _rapidocr_lines_from_result(result)
                 if lines:
                     paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
             finally:
+                image_bytes = None
+                result = None
+                lines = None
                 pix = None
+                gc.collect()
         return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
     finally:
         engine = None

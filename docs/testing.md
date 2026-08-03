@@ -913,3 +913,23 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 121 passed.
 - `git diff --check`: 통과.
+
+### 2026-08-04 Render OCR 메모리 초과 완화
+
+증상:
+
+- Render에서 백엔드 메모리 제한 초과 알림이 발생했다.
+- OCR 재인식은 페이지 단위 요청이지만, `OCR_PROVIDER=auto`에서 CLOVA 실패 후 RapidOCR fallback이 이어지면 PyMuPDF pixmap/PNG bytes와 RapidOCR ONNX 모델 메모리가 같은 프로세스에 겹칠 수 있었다.
+
+반영한 범위:
+
+- OCR 페이지 렌더 상한을 약 300만 픽셀에서 150만 픽셀로 낮추고, 최소 DPI는 90으로 조정했다.
+- PyMuPDF pixmap은 RGB/alpha 없음으로 생성해 불필요한 alpha 채널 메모리를 줄였다.
+- CLOVA/RapidOCR 양쪽에서 페이지별 PNG bytes, OCR 응답/result, line list 참조를 처리 직후 해제하고 페이지마다 `gc.collect()`를 실행한다.
+- 운영 문서에 Render 메모리 초과 시 `OCR_PROVIDER=clova`로 RapidOCR 모델 로딩을 막는 회피책을 명시했다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestOcrReflow -q`: 14 passed.
+- `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 123 passed.

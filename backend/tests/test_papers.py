@@ -1060,7 +1060,7 @@ class TestOcrReflow:
         assert papers._ocr_page_render_dpi(_Page(), 200) < 200
         assert papers._ocr_page_render_dpi(_Page(), 200) >= papers.MIN_OCR_RENDER_DPI
 
-    def test_ocr_render_dpi_keeps_small_pages(self):
+    def test_ocr_render_dpi_caps_standard_pages_at_150_dpi(self):
         class _Rect:
             width = 612
             height = 792
@@ -1068,7 +1068,36 @@ class TestOcrReflow:
         class _Page:
             rect = _Rect()
 
-        assert papers._ocr_page_render_dpi(_Page(), 150) == 150
+        assert papers._ocr_page_render_dpi(_Page(), 150) == 126
+
+    def test_ocr_render_dpi_keeps_standard_pages_at_120_dpi(self):
+        class _Rect:
+            width = 612
+            height = 792
+
+        class _Page:
+            rect = _Rect()
+
+        assert papers._ocr_page_render_dpi(_Page(), 120) == 120
+
+    def test_ocr_pixmap_uses_rgb_without_alpha(self):
+        calls = []
+
+        class _Rect:
+            width = 612
+            height = 792
+
+        class _Page:
+            rect = _Rect()
+
+            def get_pixmap(self, **kwargs):
+                calls.append(kwargs)
+                return object()
+
+        papers._ocr_page_pixmap(_Page(), dpi=150)
+
+        assert calls[0]["alpha"] is False
+        assert "colorspace" in calls[0]
 
     def test_auto_ocr_falls_back_to_rapidocr_for_non_latin_documents(self, monkeypatch):
         class _Doc:
