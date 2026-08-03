@@ -893,3 +893,23 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 121 passed.
 - `cd frontend && npm run lint`: 통과.
 - `cd frontend && npm run build`: 통과.
+
+### 2026-08-04 CLOVA timeout 후 RapidOCR fallback 시간 상한
+
+증상:
+
+- `CLOVA_OCR_TIMEOUT_SEC=90`, `OCR_PROVIDER=auto`, RapidOCR 준비 상태에서 OCR 요청이 브라우저에서 `서버 연결이 끊겼습니다`로 실패했다.
+- `auto` 모드는 CLOVA가 timeout될 때까지 기다린 뒤 RapidOCR fallback을 시도하므로, CLOVA 90초 대기 + RapidOCR 렌더/모델 로딩 시간이 한 요청 안에서 이어져 프론트 120초 제한 또는 Render 연결 제한에 걸릴 수 있었다.
+
+반영한 범위:
+
+- RapidOCR fallback이 준비된 `auto` 모드에서는 CLOVA 1회 요청 timeout을 최대 30초로 제한한다.
+- CLOVA가 느리거나 timeout되더라도 같은 페이지 요청 안에서 RapidOCR fallback이 시작될 시간을 확보한다.
+- 운영에서 CLOVA 자체가 계속 불안정하면 `OCR_PROVIDER=rapidocr`로 임시 전환해 CLOVA를 완전히 우회할 수 있음을 `docs/deployment.md`에 명시했다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestOcrReflow -q`: 12 passed.
+- `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 121 passed.
+- `git diff --check`: 통과.
