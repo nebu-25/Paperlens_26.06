@@ -1052,7 +1052,7 @@ class TestOcrReflow:
         out, err = papers._ocr_document_text(_Doc(), dpi=200, max_pages=20)
         assert out == "" and err is not None
 
-    def test_clova_timeout_is_capped_when_rapidocr_fallback_ready(self, monkeypatch):
+    def test_clova_timeout_is_capped_in_auto_when_rapidocr_fallback_ready(self, monkeypatch):
         monkeypatch.setattr(papers.settings, "ocr_provider", "auto")
         monkeypatch.setattr(papers.settings, "clova_ocr_timeout_sec", 90)
         monkeypatch.setattr(
@@ -1061,7 +1061,18 @@ class TestOcrReflow:
             property(lambda _self: True),
         )
 
-        assert papers._clova_request_timeout_sec() == 30
+        assert papers._clova_request_timeout_sec() == papers.CLOVA_FALLBACK_TIMEOUT_SEC
+
+    def test_clova_timeout_is_capped_in_clova_when_rapidocr_fallback_ready(self, monkeypatch):
+        monkeypatch.setattr(papers.settings, "ocr_provider", "clova")
+        monkeypatch.setattr(papers.settings, "clova_ocr_timeout_sec", 30)
+        monkeypatch.setattr(
+            type(papers.settings),
+            "rapidocr_ready",
+            property(lambda _self: True),
+        )
+
+        assert papers._clova_request_timeout_sec() == papers.CLOVA_FALLBACK_TIMEOUT_SEC
 
     def test_clova_timeout_keeps_configured_value_without_fallback(self, monkeypatch):
         monkeypatch.setattr(papers.settings, "ocr_provider", "clova")
@@ -1069,7 +1080,7 @@ class TestOcrReflow:
         monkeypatch.setattr(
             type(papers.settings),
             "rapidocr_ready",
-            property(lambda _self: True),
+            property(lambda _self: False),
         )
 
         assert papers._clova_request_timeout_sec() == 30

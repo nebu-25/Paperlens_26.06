@@ -997,3 +997,23 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 129 passed.
 - `git diff --check`: 통과.
+
+### 2026-08-04 OCR 요청 120초 프론트 timeout 회피
+
+증상:
+
+- CLOVA timeout fallback 이후 프론트가 `OCR 처리가 오래 걸려 요청을 중단했습니다`를 표시했다.
+- 기존 시간 예산은 CLOVA 30초 timeout 뒤 RapidOCR 자식 프로세스 최대 90초라, 한 페이지 요청이 프론트의 120초 제한에 정확히 걸릴 수 있었다.
+
+반영한 범위:
+
+- RapidOCR 자식 프로세스 timeout을 90초에서 60초로 낮췄다.
+- RapidOCR fallback이 준비된 `auto`/`clova` 모드에서는 CLOVA 1회 대기 시간을 15초로 제한한다.
+- 따라서 CLOVA timeout 후 RapidOCR fallback을 타도 서버 쪽 페이지 요청 예산이 약 75초 안에서 끝나도록 조정했다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestOcrReflow -q`: 21 passed.
+- `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 130 passed.
+- `git diff --check`: 통과.

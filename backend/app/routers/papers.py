@@ -1068,7 +1068,8 @@ def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
 # --- OCR fallback (opt-in, NAVER CLOVA OCR API + RapidOCR) ----------------
 MAX_OCR_RENDER_PIXELS = 1_000_000
 MIN_OCR_RENDER_DPI = 72
-RAPIDOCR_PROCESS_TIMEOUT_SEC = 90
+RAPIDOCR_PROCESS_TIMEOUT_SEC = 60
+CLOVA_FALLBACK_TIMEOUT_SEC = 15
 CLOVA_IMAGE_FORMAT = "jpg"
 CLOVA_JPEG_QUALITY = 82
 
@@ -1152,8 +1153,8 @@ def _clova_multipart_payload(
 
 def _clova_request_timeout_sec() -> int:
     timeout = max(1, settings.clova_ocr_timeout_sec)
-    if settings.ocr_provider_normalized == "auto" and settings.rapidocr_ready:
-        return min(timeout, 30)
+    if settings.rapidocr_ready and settings.ocr_provider_normalized in {"auto", "clova"}:
+        return min(timeout, CLOVA_FALLBACK_TIMEOUT_SEC)
     return timeout
 
 
