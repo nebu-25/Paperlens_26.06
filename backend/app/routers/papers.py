@@ -1069,6 +1069,8 @@ def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
 MAX_OCR_RENDER_PIXELS = 1_000_000
 MIN_OCR_RENDER_DPI = 72
 RAPIDOCR_PROCESS_TIMEOUT_SEC = 90
+CLOVA_IMAGE_FORMAT = "jpg"
+CLOVA_JPEG_QUALITY = 82
 
 
 def _ocr_line_dict(text: str, vertices: list[dict[str, object]]) -> dict[str, object] | None:
@@ -1090,11 +1092,23 @@ def _ocr_line_dict(text: str, vertices: list[dict[str, object]]) -> dict[str, ob
     }
 
 
-def _clova_request_payload(image_bytes: bytes, *, image_format: str, image_name: str) -> bytes:
-    payload = {
+def _clova_request_message(*, image_format: str, image_name: str) -> dict[str, object]:
+    return {
         "version": "V2",
         "requestId": str(uuid.uuid4()),
         "timestamp": int(time.time() * 1000),
+        "images": [
+            {
+                "format": image_format,
+                "name": image_name,
+            }
+        ],
+    }
+
+
+def _clova_request_payload(image_bytes: bytes, *, image_format: str, image_name: str) -> bytes:
+    payload = {
+        **_clova_request_message(image_format=image_format, image_name=image_name),
         "images": [
             {
                 "format": image_format,
@@ -1104,6 +1118,36 @@ def _clova_request_payload(image_bytes: bytes, *, image_format: str, image_name:
         ],
     }
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+
+def _clova_multipart_payload(
+    image_bytes: bytes, *, image_format: str, image_name: str
+) -> tuple[bytes, str]:
+    boundary = f"paperlens-{uuid.uuid4().hex}"
+    message = json.dumps(
+        _clova_request_message(image_format=image_format, image_name=image_name),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    content_type = "image/jpeg" if image_format in {"jpg", "jpeg"} else "image/png"
+    filename = f"{image_name}.{image_format}"
+    body = b"".join(
+        [
+            f"--{boundary}\r\n".encode("ascii"),
+            b'Content-Disposition: form-data; name="message"\r\n',
+            b"Content-Type: application/json; charset=utf-8\r\n\r\n",
+            message,
+            b"\r\n",
+            f"--{boundary}\r\n".encode("ascii"),
+            f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode(
+                "utf-8"
+            ),
+            f"Content-Type: {content_type}\r\n\r\n".encode("ascii"),
+            image_bytes,
+            b"\r\n",
+            f"--{boundary}--\r\n".encode("ascii"),
+        ]
+    )
+    return body, f"multipart/form-data; boundary={boundary}"
 
 
 def _clova_request_timeout_sec() -> int:
@@ -1137,19 +1181,29 @@ def _ocr_page_pixmap(page, *, dpi: int):
         return page.get_pixmap(dpi=render_dpi)
 
 
+def _pixmap_image_bytes(pix, *, image_format: str) -> bytes:
+    if image_format in {"jpg", "jpeg"}:
+        try:
+            return pix.tobytes(image_format, jpg_quality=CLOVA_JPEG_QUALITY)
+        except TypeError:
+            return pix.tobytes(image_format)
+    return pix.tobytes(image_format)
+
+
 def _call_clova_ocr(image_bytes: bytes, *, image_format: str, image_name: str) -> dict[str, object]:
     invoke_url = settings.clova_ocr_invoke_url.strip()
     secret_key = settings.clova_ocr_secret_key.strip()
     if not invoke_url or not secret_key:
         raise RuntimeError("CLOVA OCR Invoke URL 또는 Secret Key가 설정되지 않았습니다.")
 
+    body, content_type = _clova_multipart_payload(
+        image_bytes, image_format=image_format, image_name=image_name
+    )
     request = urllib.request.Request(
         invoke_url,
-        data=_clova_request_payload(
-            image_bytes, image_format=image_format, image_name=image_name
-        ),
+        data=body,
         headers={
-            "Content-Type": "application/json; charset=utf-8",
+            "Content-Type": content_type,
             "X-OCR-SECRET": secret_key,
         },
         method="POST",
@@ -1425,9 +1479,11 @@ def _ocr_text_with_clova(document, *, dpi: int, page_indexes: list[int]) -> tupl
         response = None
         lines = None
         try:
-            image_bytes = pix.tobytes("png")
+            image_bytes = _pixmap_image_bytes(pix, image_format=CLOVA_IMAGE_FORMAT)
             response = _call_clova_ocr(
-                image_bytes, image_format="png", image_name=f"page-{page_index + 1}"
+                image_bytes,
+                image_format=CLOVA_IMAGE_FORMAT,
+                image_name=f"page-{page_index + 1}",
             )
             lines = _clova_lines_from_response(response)
             if lines:

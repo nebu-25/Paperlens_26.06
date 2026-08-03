@@ -1011,6 +1011,29 @@ class TestOcrReflow:
 
         assert papers._clova_lines_from_response(response)[0]["text"] == "PaperLens OCR"
 
+    def test_clova_multipart_payload_sends_file_without_base64_data(self):
+        body, content_type = papers._clova_multipart_payload(
+            b"jpg-bytes", image_format="jpg", image_name="page-1"
+        )
+
+        assert content_type.startswith("multipart/form-data; boundary=paperlens-")
+        assert b'name="message"' in body
+        assert b'name="file"; filename="page-1.jpg"' in body
+        assert b'"format": "jpg"' in body
+        assert b'"data"' not in body
+        assert b"jpg-bytes" in body
+
+    def test_pixmap_image_bytes_uses_jpeg_quality_for_clova(self):
+        calls = []
+
+        class _Pixmap:
+            def tobytes(self, *args, **kwargs):
+                calls.append((args, kwargs))
+                return b"image"
+
+        assert papers._pixmap_image_bytes(_Pixmap(), image_format="jpg") == b"image"
+        assert calls == [(("jpg",), {"jpg_quality": papers.CLOVA_JPEG_QUALITY})]
+
     def test_rapidocr_lines_sorted_and_cleaned(self):
         result = [
             [[[10, 40], [90, 40], [90, 60], [10, 60]], "second line", 0.9],

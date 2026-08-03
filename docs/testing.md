@@ -955,3 +955,24 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 125 passed.
 - `git diff --check`: 통과.
+
+### 2026-08-04 CLOVA OCR 전송 payload 축소
+
+증상:
+
+- 운영 `/api/diagnostics` 기준 OCR은 `provider=clova`, `dpi=120`, `max_pages=5`로 설정되어 있었다.
+- RapidOCR를 우회하는 설정에서도 브라우저가 "OCR 처리 중 서버 연결이 끊겼습니다"를 표시했다.
+- CLOVA 호출 경로는 렌더된 PNG bytes를 base64로 JSON에 넣어 보내므로, 이미지 bytes/base64 문자열/JSON bytes가 한 요청 안에 겹쳐 Render 메모리 피크를 키울 수 있었다.
+
+반영한 범위:
+
+- CLOVA 전송 이미지를 PNG 대신 JPEG(`jpg_quality=82`)로 생성한다.
+- CLOVA 요청을 base64 JSON 대신 `multipart/form-data`로 보내 `images.data` base64 확장을 제거한다.
+- CLOVA General OCR이 지원하는 `jpg` 파일 형식을 사용하며, `message`에는 이미지 메타데이터만 넣고 실제 bytes는 `file` 파트로 전송한다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestOcrReflow -q`: 18 passed.
+- `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 127 passed.
+- `git diff --check`: 통과.
