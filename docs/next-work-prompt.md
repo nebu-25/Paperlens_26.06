@@ -6,15 +6,19 @@
 
 다음 세션에서는 아래 순서로 진행한다.
 
-1. 운영 배포 확인: 최신 Pages 번들, Production smoke, `/api/diagnostics`, 로그인 후 `/api/notes`, 샘플 PDF, PDF 원본 보기까지 확인한다.
-2. PDF 추출 개선 운영 확인: 한국어/2단/혼합형 PDF 샘플을 다시 업로드해 추출 품질 경고, 섹션 아웃라인, 원문 보존, 직접 편집 저장 복원을 확인한다. 특히 페이지 경계에서 끊긴 미완성 문단이 다음 페이지 첫 문단과 자연스럽게 이어지는지 확인한다.
-3. 랜딩 polish: 모바일 랜딩 페이지 전체 구성 깨짐, 모바일 nav, 랜딩 warm-up 호출을 점검한다. 모바일 로그인 모달 폭/간격/스크롤 잠금은 2026-08-01 수동 확인 기준 문제 없음.
-4. 저장/인증 견고화: 인증 서버 장애, 토큰 만료, fallback cache TTL, 사용자 안내 문구를 점검한다.
+1. 이번 모바일 랜딩 nav 변경 배포 확인: Pages deploy, Production smoke, 최신 Pages bundle asset, 모바일 메뉴 열기/닫기와 섹션 링크 동작을 운영에서 확인한다.
+2. 운영 브라우저 로그인 smoke: 로그인 후 `/api/notes`, skeleton 로딩, 샘플 PDF, 샘플 PDF 재클릭 중복 방지, PDF 원본 blob preview, 로그아웃 후 `/service_home/` 접근을 확인한다.
+3. PDF 추출 개선 운영 확인: 한국어/2단/혼합형 PDF 샘플을 다시 업로드해 추출 품질 경고, 섹션 아웃라인, 원문 보존, 직접 편집 저장 복원을 확인한다. 특히 페이지 경계에서 끊긴 미완성 문단이 다음 페이지 첫 문단과 자연스럽게 이어지는지 확인한다.
+4. 데모 설문 수동 QA: 리뷰 노트/라이브러리/연구 질문 내보내기 후 설문 모달, 로그아웃 반복 노출, 세션 숨김, 참여 완료 차단을 확인한다.
 5. 번역 보기 UX 설계: 원문 하이라이트 영역은 `notranslate`로 유지하고, 별도 번역 보기 패널/탭 설계를 검토한다.
 6. 스키마 분리 운영 검증: 운영 PostgreSQL 백업 후 분리 테이블, 기존 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소를 확인한다.
 
 최근 완료:
 
+- 2026-08-03 세션에서 운영 배포 상태를 확인함. 공개 smoke 통과, 최신 Actions Production smoke run `30702980569`가 인증 notes와 demo session notes check 포함 통과, Pages 루트/`service_home`/asset 200, Render diagnostics에서 Supabase Auth/PostgreSQL/OCR ready 확인. AI는 enabled이나 Redis/비용 한도/runbook 설정 경고로 `ready: false`.
+- 2026-08-03 세션에서 PDF 추출 1차 검증을 수행함. `test_pdf_extraction_regression.py` 3 passed, `test_papers.py` 115 passed, 관련 ruff 통과. 로컬 API에서 `2604.04977v1.pdf` 업로드와 arXiv PDF URL 등록 모두 5페이지/본문 30591자/quality `good`/100/figure refs 3개로 확인했고, 저장 PDF 재조회도 200 `application/pdf`로 통과.
+- 2026-08-03 세션에서 서비스 화면 관련 자동 검증을 수행함. `useReviewPersistence`, `figureIndex`, `surveyPrompt`, `PaperSidebar`, `useReviewStore`, 저장/오류 처리 테스트가 순차 실행 기준 통과했고, `npm run lint`, `npm run build` 통과. 로컬에 브라우저 실행 파일이 없어 운영 화면 기준 QA는 남김.
+- 모바일 랜딩 nav를 보강함. 좁은 화면에서 숨겨지던 섹션 링크를 `Menu`/`X` 아이콘 버튼으로 열 수 있게 하고, 링크 클릭 시 메뉴를 닫도록 수정함. 랜딩 H1의 음수 letter-spacing도 `tracking-normal`로 정리함. `LandingPage.test.tsx`에 모바일 메뉴 테스트 추가, `npm test -- --run src/components/LandingPage.test.tsx --pool=threads --maxWorkers=1`, `npm run lint`, `npm run build` 통과.
 - 원문/PDF 선택 툴바에 선택 영역과 겹치는 기존 하이라이트를 바로 제거하는 `하이라이트 해제` 버튼을 추가함. 원문에서 동일 구간에 여러 색 하이라이트가 겹치면 문장 끝에 작은 색상 점 목록으로 함께 표시함. `npm run lint`, `npm run build`, `npm test -- --run src/hooks/useReviewStore.test.ts --pool=threads --maxWorkers=1` 통과.
 - 모바일 PDF 뷰어 툴바가 좁은 화면에서 여러 줄로 안정적으로 접히도록 수정했고, 페이지/줌 컨트롤 그룹과 `폭 맞춤` compact 아이콘 버튼을 적용함. `cd frontend && npm run lint`, `cd frontend && npm run build` 통과 후 `bb22d08`로 push 완료.
 - PDF 추출 reflow에서 페이지 경계로 끊긴 미완성 문단을 다음 페이지 첫 문단과 병합하도록 개선함. 섹션 헤딩, Abstract/Keywords/References/한국어 주요 헤딩은 병합 대상에서 제외하며, `backend/tests/test_papers.py::TestReflowDocument`에 회귀 테스트를 추가함. `ruff`, `TestReflowDocument`, `tests/test_papers.py` 전체 통과.

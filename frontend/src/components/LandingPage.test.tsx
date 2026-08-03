@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { User } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LandingPage } from './LandingPage';
@@ -88,5 +88,24 @@ describe('LandingPage demo start CTA', () => {
 
     expect(createDemoSessionIdMock).not.toHaveBeenCalled();
     expect(onEnterService).toHaveBeenCalledTimes(1);
+  });
+
+  it('모바일 메뉴에서 섹션 링크를 열고 닫는다', () => {
+    render(
+      <LandingPage
+        authEnabled
+        authReady
+        user={null}
+        onEnterService={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '메뉴 열기' }));
+
+    const mobileNav = screen.getByRole('navigation', { name: '모바일 섹션 이동' });
+    expect(mobileNav).toBeTruthy();
+    fireEvent.click(within(mobileNav).getByRole('link', { name: '사용 방법' }));
+
+    expect(screen.queryByRole('navigation', { name: '모바일 섹션 이동' })).toBeNull();
   });
 });

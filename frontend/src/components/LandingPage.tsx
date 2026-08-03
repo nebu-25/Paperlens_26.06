@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, Menu, X } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 import { API_BASE, DEMO_AUTH_ENABLED, DEMO_EMAIL, DEMO_PASSWORD } from '../constants';
 import { AuthControls } from './AuthControls';
@@ -191,6 +191,7 @@ export function LandingPage({
 }: LandingPageProps) {
   const [active, setActive] = useState(3);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [serviceLinkCopied, setServiceLinkCopied] = useState(false);
   // 'demo': 데모 계정 프리필(신규 체험 CTA) · 'personal': 빈 폼(기존 사용자 로그인)
   const [loginMode, setLoginMode] = useState<'demo' | 'personal'>('demo');
@@ -279,6 +280,15 @@ export function LandingPage({
           <div className="flex items-center gap-3.5">
             <button
               type="button"
+              className="inline-flex size-9 items-center justify-center rounded-full border border-[#a2cbcd] text-[#0e4749] md:hidden"
+              aria-label={mobileNavOpen ? '메뉴 닫기' : '메뉴 열기'}
+              aria-expanded={mobileNavOpen}
+              onClick={() => setMobileNavOpen((open) => !open)}
+            >
+              {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+            <button
+              type="button"
               className="text-sm text-[#283338] hover:text-[#1c5d5f]"
               onClick={() => (user ? onEnterService() : openLogin('personal'))}
             >
@@ -293,6 +303,26 @@ export function LandingPage({
             </button>
           </div>
         </div>
+        {mobileNavOpen && (
+          <nav className="border-t border-[#e4f0f1] px-5 py-3 md:hidden" aria-label="모바일 섹션 이동">
+            <div className="mx-auto grid max-w-[560px] grid-cols-3 gap-2">
+              {[
+                ['#why', '왜 만들었나'],
+                ['#how', '사용 방법'],
+                ['#templates', '목적 템플릿'],
+              ].map(([href, label]) => (
+                <a
+                  key={href}
+                  href={href}
+                  className="rounded border border-[#d7e6e6] bg-white px-2 py-2 text-center text-[12px] font-semibold text-[#0e4749]"
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  {label}
+                </a>
+              ))}
+            </div>
+          </nav>
+        )}
       </div>
 
       <div className="border-b border-[#d7e6e6] bg-white px-5 py-3 md:hidden">
@@ -327,7 +357,7 @@ export function LandingPage({
               <span className="text-[13px] text-[#1c5d5f]">✦</span>
               <span className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#0e4749]">요약은 당신, 잡무는 도구</span>
             </div>
-            <h1 className="mb-[22px] max-w-[532px] font-serif text-[44px] font-normal leading-[1.12] tracking-[-0.01em] sm:text-[51px]">
+            <h1 className="mb-[22px] max-w-[532px] font-serif text-[44px] font-normal leading-[1.12] tracking-normal sm:text-[51px]">
               AI가 요약해주는 도구는 많죠.
               <br />
               우리는 <span className="font-semibold text-[#1c5d5f]">당신이 직접 읽게</span> 돕습니다.

@@ -774,3 +774,58 @@ GitHub Actions `Reset demo account` workflow는 수동 실행과 cron 실행을 
 - `npm run build`: 통과.
 - `npm test -- --run src/hooks/useReviewStore.test.ts`: worker 시작 timeout으로 실패(테스트 실행 전).
 - `npm test -- --run src/hooks/useReviewStore.test.ts --pool=threads --maxWorkers=1`: 13 passed.
+
+### 2026-08-03 운영 배포 확인, PDF 추출 1차 검증, 랜딩 모바일 nav
+
+운영 확인:
+
+- 공개 endpoint smoke 통과: `Production deployment smoke passed in 2.1s (public endpoints only)`.
+- 최신 GitHub Actions Production smoke run `30702980569` 통과: 인증 notes와 demo session notes check 포함, 31.7초.
+- 최신 커밋 `6633928 Improve highlight removal and overlap display` 기준 CI, Pages deploy, Production smoke가 모두 성공 상태임을 확인.
+- Pages 루트 200, `/service_home` 301 -> `/service_home/`, `/service_home/` 200.
+- Pages HTML이 참조하는 `/assets/index-DqLcD_QS.js`, `/assets/index-DblcuDAn.css` 200.
+- Render `/api/diagnostics`:
+  - `auth.mode: supabase`, `auth.ready: true`, `auth.warnings: []`
+  - `database.mode: postgresql`
+  - `ocr.enabled: true`, `ocr.provider: auto`, `ocr.ready: true`, `ocr.warnings: []`
+  - `ai.enabled: true`, `ai.model: openai/gpt-4o-mini`, `ai.ready: false`
+- AI diagnostics 경고는 Redis 공유 rate limit, 비용 한도/단가, provider 지출 한도/결제 알림, key rotation runbook URL 미설정.
+
+PDF 추출 확인:
+
+- `backend/tests/test_pdf_extraction_regression.py`: 3 passed.
+- `backend/tests/test_papers.py`: 115 passed.
+- 관련 ruff check 통과.
+- 로컬 `/api/papers/extract-text`에 `2604.04977v1.pdf` 업로드:
+  - 5페이지, 본문 30591자, extraction quality `good`/100, scanned `false`, notice 없음, figure refs 3개.
+- 로컬 `/api/papers/extract-url`에 `https://arxiv.org/pdf/2604.04977v1` 등록:
+  - 업로드 경로와 동일하게 5페이지, 본문 30591자, extraction quality `good`/100, figure refs 3개.
+- `paper_id=local-smoke-2604`로 추출 후 `/api/papers/local-smoke-2604/pdf` 재조회:
+  - 200 OK, `content-type: application/pdf`, `content-length: 679118`.
+
+서비스 화면 관련 자동 검증:
+
+- 로컬 환경에서 Chromium/Chrome/Edge 실행 파일은 확인되지 않음.
+- `useReviewPersistence.test.ts`: 5 passed.
+- `figureIndex.test.ts` + `surveyPrompt.test.ts`: 9 passed.
+- `PaperSidebar.test.tsx`: 9 passed.
+- `useReviewStore.test.ts`: 13 passed.
+- 프론트 lint 통과.
+- 프론트 production build 통과. 메인 `index` chunk는 약 399.81 kB이며 Vite 500 kB chunk 경고 없음.
+
+랜딩 polish:
+
+- 모바일에서 숨겨지던 랜딩 섹션 링크를 열 수 있도록 `Menu`/`X` 아이콘 토글 버튼과 모바일 섹션 이동 nav를 추가.
+- 모바일 nav 링크 클릭 시 메뉴가 닫히도록 처리.
+- 랜딩 H1의 음수 letter-spacing을 `tracking-normal`로 정리.
+- `LandingPage.test.tsx`에 모바일 메뉴 열기/링크 클릭 후 닫힘 테스트 추가.
+
+추가 저장/인증 검증:
+
+- `backend/tests/test_auth.py backend/tests/test_diagnostics.py backend/tests/test_db.py`: 37 passed, 8 skipped.
+- `useReviewPersistence.test.ts useReviewStore.test.ts localReviewCache.test.ts apiErrors.test.ts`: 4 files / 23 passed.
+
+제한:
+
+- 실제 한국어 2단/혼합형 문제 PDF 원본이 로컬에 없어 운영 업로드 기반의 추출 품질 경고, 섹션 아웃라인, 페이지 경계 문단 병합은 화면 기준으로 확인하지 못했다.
+- 운영 브라우저 로그인 화면, 모바일 레이아웃, PDF iframe blob preview, 샘플 PDF 버튼 재클릭 UI, 설문 모달 반복 노출은 브라우저 실행 파일 부재로 화면 기준 확인을 완료하지 못했다.
