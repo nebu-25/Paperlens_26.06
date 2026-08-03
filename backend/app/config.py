@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     ocr_dpi: int = 150
     clova_ocr_invoke_url: str = ""
     clova_ocr_secret_key: str = ""
-    clova_ocr_timeout_sec: int = 30
+    clova_ocr_timeout_sec: int = 75
     # RapidOCR loads ONNX models and can exceed small Render memory limits.
     # Keep automatic fallback opt-in; OCR_PROVIDER=rapidocr still runs RapidOCR explicitly.
     ocr_allow_rapidocr_fallback: bool = False

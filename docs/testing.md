@@ -1041,3 +1041,23 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m ruff check backend/app/config.py backend/app/routers/papers.py backend/tests/test_papers.py backend/tests/test_diagnostics.py`: 통과.
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py backend/tests/test_diagnostics.py -q`: 136 passed.
 - `git diff --check`: 통과.
+
+### 2026-08-04 CLOVA-only timeout 기본값 상향
+
+증상:
+
+- RapidOCR 자동 fallback을 끈 뒤 메모리 초과 위험은 줄었지만, CLOVA 요청이 `clova: CLOVA OCR API에 연결하지 못했습니다. <urlopen error timed out>`로 실패했다.
+- 운영 `/api/diagnostics`의 `ocr.timeout_sec`가 30으로 남아 있었다.
+
+반영한 범위:
+
+- `CLOVA_OCR_TIMEOUT_SEC` 코드 기본값과 `.env.example` 값을 30초에서 75초로 올렸다.
+- RapidOCR fallback이 켜져 있을 때는 기존처럼 CLOVA 대기를 15초로 제한해 fallback 시간 예산을 보존한다.
+- 배포 문서에 `/api/diagnostics`에서 `ocr.timeout_sec=30`이면 Render 환경변수를 75로 올리라는 운영 지침을 추가했다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestOcrReflow backend/tests/test_diagnostics.py -q`: 31 passed.
+- `backend/.venv/bin/python -m ruff check backend/app/config.py backend/app/routers/papers.py backend/tests/test_papers.py backend/tests/test_diagnostics.py`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py backend/tests/test_diagnostics.py -q`: 140 passed.
+- `git diff --check`: 통과.
