@@ -1390,7 +1390,7 @@ def _ocr_provider_order(document) -> list[str]:
         return ["clova"]
     if _looks_latin_dominant_document(document):
         return ["rapidocr", "clova"]
-    return ["clova"]
+    return ["clova", "rapidocr"]
 
 
 def _ocr_provider_unavailable_reason(provider: str) -> str:

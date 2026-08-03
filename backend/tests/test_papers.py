@@ -1070,7 +1070,7 @@ class TestOcrReflow:
 
         assert papers._ocr_page_render_dpi(_Page(), 150) == 150
 
-    def test_auto_ocr_uses_clova_only_for_non_latin_documents(self, monkeypatch):
+    def test_auto_ocr_falls_back_to_rapidocr_for_non_latin_documents(self, monkeypatch):
         class _Doc:
             page_count = 1
 
@@ -1090,7 +1090,7 @@ class TestOcrReflow:
             property(lambda _self: True),
         )
 
-        assert papers._ocr_provider_order(_Doc()) == ["clova"]
+        assert papers._ocr_provider_order(_Doc()) == ["clova", "rapidocr"]
 
     def test_auto_ocr_keeps_rapidocr_for_latin_documents(self, monkeypatch):
         class _Doc:
