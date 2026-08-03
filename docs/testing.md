@@ -849,3 +849,24 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py -q`: 116 passed.
 - `backend/.venv/bin/python -m pytest backend/tests/test_pdf_extraction_regression.py -q`: 3 passed.
+
+### 2026-08-03 이메일 front matter에 남은 문장 꼬리 후처리
+
+잔류 증상:
+
+- 운영 적용 후에도 최종 원문에서 `Korea. E-mail: sjko@cup.ac.kr 목적이 있다.`가 남고, `I. 서론` 뒤 긴 본문 문단은 `... 신뢰성을 높이는데 그`에서 끝나는 사례가 확인됐다.
+- 이는 컬럼 시작점 보정만으로는 부족하며, reflow/raw 선택 이후 최종 선택 텍스트 자체에 이메일 front matter와 오른쪽 컬럼 꼬리가 결합된 상태가 남는 경우다.
+
+반영한 범위:
+
+- `_repair_email_attached_purpose_tail` 후처리를 추가했다.
+- 최종 선택 텍스트에서 이메일 또는 `@`가 포함된 front matter 문단에 `목적이 있다.`가 붙어 있고, 뒤쪽 본문 문단이 `... 그`로 끝나면 꼬리를 이메일 문단에서 제거해 해당 본문 문단 끝으로 이동한다.
+- `_choose_extracted_text`의 모든 반환 경로에 이 후처리를 적용했다.
+- `TestChooseExtractedText`에 캡처와 같은 최종 원문 형태(`E-mail ... 목적이 있다.` + `I. 서론` + 본문 `... 그`)를 회귀 테스트로 추가했다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestChooseExtractedText backend/tests/test_papers.py::TestReflowDocument -q`: 16 passed.
+- `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py -q`: 117 passed.
+- `backend/.venv/bin/python -m pytest backend/tests/test_pdf_extraction_regression.py -q`: 3 passed.

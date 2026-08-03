@@ -455,6 +455,26 @@ class TestChooseExtractedText:
 
         assert papers._choose_extracted_text(reflowed, raw) == reflowed
 
+    def test_repairs_purpose_tail_attached_to_email_in_selected_text(self):
+        reflowed = (
+            "Key Words: MTF, PSNR, MSE\n\n"
+            "Received 03 May 2017 * Corresponding Author\n\n"
+            "Seong-Jin Ko, Dept. of Radiological Science, Catholic University of Pusan,\n\n"
+            "Korea. E-mail: sjko@cup.ac.kr 목적이 있다.\n\n"
+            "I. 서론\n\n"
+            "그러므로 본 논문에서는 ‘영상의 질’의 척도를 나타내는 선예도를 평가하고 "
+            "기초자료로서의 활용 및 연구의 신뢰성을 높이는데 그\n\n"
+            "II. 재료 및 방법"
+        )
+        raw = reflowed
+
+        text = papers._choose_extracted_text(reflowed, raw)
+
+        assert "E-mail: sjko@cup.ac.kr 목적이 있다." not in text
+        assert "E-mail: sjko@cup.ac.kr\n\nI. 서론" in text
+        assert "신뢰성을 높이는데 그 목적이 있다." in text
+        assert text.index("신뢰성을 높이는데 그 목적이 있다.") < text.index("II. 재료 및 방법")
+
 
 class TestNoiseBlock:
     def test_page_number_is_noise(self):

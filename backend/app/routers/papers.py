@@ -781,12 +781,53 @@ def _raw_has_column_tail_order_error(raw: str, reflowed: str) -> bool:
     )
 
 
+_EMAIL_ATTACHED_PURPOSE_TAIL = re.compile(
+    r"(?P<prefix>(?:[^\n]*?(?:e-?mail|@)[^\n]*?))\s+목적이\s+있다\.",
+    re.IGNORECASE,
+)
+
+
+def _repair_email_attached_purpose_tail(text: str) -> str:
+    """이메일 front matter에 잘못 붙은 한국어 문장 꼬리를 본문 문단으로 되돌린다."""
+    paragraphs = text.split("\n\n")
+    if len(paragraphs) < 2:
+        return text
+
+    tail = "목적이 있다."
+    source_index: int | None = None
+    for index, paragraph in enumerate(paragraphs):
+        if _EMAIL_ATTACHED_PURPOSE_TAIL.search(paragraph):
+            source_index = index
+            break
+    if source_index is None:
+        return text
+
+    target_index: int | None = None
+    for index in range(source_index + 1, len(paragraphs)):
+        candidate = paragraphs[index].strip()
+        if not candidate or _is_numbered_section_heading_line(candidate):
+            continue
+        if re.search(r"(?:높이는데\s*)?그$", candidate):
+            target_index = index
+            break
+    if target_index is None:
+        return text
+
+    paragraphs[source_index] = _tidy_spacing(
+        _EMAIL_ATTACHED_PURPOSE_TAIL.sub(lambda match: match.group("prefix").rstrip(), paragraphs[source_index])
+    )
+    paragraphs[target_index] = _tidy_spacing(
+        _join_column_continuation(paragraphs[target_index], tail)
+    )
+    return "\n\n".join(paragraph for paragraph in paragraphs if paragraph.strip())
+
+
 def _choose_extracted_text(reflowed: str, raw: str) -> str:
     """문단 재구성 결과와 기본 추출 결과 중 더 보존적인 텍스트를 고른다."""
     if not reflowed.strip():
-        return raw
+        return _repair_email_attached_purpose_tail(raw)
     if not raw.strip():
-        return reflowed
+        return _repair_email_attached_purpose_tail(reflowed)
 
     reflow_stats = _text_quality_stats(reflowed)
     raw_stats = _text_quality_stats(raw)
@@ -795,12 +836,12 @@ def _choose_extracted_text(reflowed: str, raw: str) -> str:
     if raw_total >= 120 and reflow_total < raw_total * 0.45:
         return raw
     if _raw_has_column_tail_order_error(raw, reflowed):
-        return reflowed
+        return _repair_email_attached_purpose_tail(reflowed)
     if len(_front_matter_missing_from(reflowed, raw)) >= 2:
-        return raw
+        return _repair_email_attached_purpose_tail(raw)
     if float(raw_stats["broken_ratio"]) + 0.03 < float(reflow_stats["broken_ratio"]):
-        return raw
-    return reflowed
+        return _repair_email_attached_purpose_tail(raw)
+    return _repair_email_attached_purpose_tail(reflowed)
 
 
 # 구두점 앞 공백 정리(스팬 분리로 생긴 "있다 ." → "있다.") 및 닫는 괄호/따옴표 앞 공백 제거.
