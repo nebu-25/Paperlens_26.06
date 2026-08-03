@@ -933,3 +933,25 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestOcrReflow -q`: 14 passed.
 - `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 123 passed.
+
+### 2026-08-04 Render RapidOCR 프로세스 격리 보강
+
+증상:
+
+- Render에서 OCR 중 백엔드 메모리 제한 초과 알림이 이어졌다.
+- 이전 완화로 렌더 이미지 크기는 줄였지만, RapidOCR ONNX 모델 메모리가 요청 프로세스에 남거나 CLOVA fallback 흐름과 겹칠 여지가 있었다.
+
+반영한 범위:
+
+- OCR 페이지 렌더 상한을 약 100만 픽셀로 더 낮추고, 최소 DPI를 72로 낮췄다.
+- RapidOCR 실행을 페이지별 자식 프로세스로 분리해 모델 메모리가 처리 후 OS 레벨에서 회수되도록 했다.
+- 자식 프로세스에는 `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`, `NUMEXPR_NUM_THREADS` 기본값을 1로 지정해 ONNX/OpenCV 계열 스레드 폭증 가능성을 낮췄다.
+- 렌더된 PNG는 임시 파일로 넘기고, OCR 결과도 임시 JSON 파일로 돌려받는다. 큰 결과를 `multiprocessing.Queue`로 전달할 때 생길 수 있는 join 대기 문제를 피하기 위해서다.
+- `docs/deployment.md`의 RapidOCR 운영 설명을 현재 구현(100만 픽셀, 자식 프로세스 격리)에 맞췄다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestOcrReflow -q`: 16 passed.
+- `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 125 passed.
+- `git diff --check`: 통과.

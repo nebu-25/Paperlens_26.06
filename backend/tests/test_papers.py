@@ -3,6 +3,8 @@
 DOI 추출, 메타 정규화, 섹션 헤딩 자동 분류(#6), arXiv 메타·reflow noise 로직을 검증한다.
 """
 
+from pathlib import Path
+
 import pytest
 from fastapi import HTTPException
 
@@ -1068,9 +1070,9 @@ class TestOcrReflow:
         class _Page:
             rect = _Rect()
 
-        assert papers._ocr_page_render_dpi(_Page(), 150) == 126
+        assert papers._ocr_page_render_dpi(_Page(), 150) == 103
 
-    def test_ocr_render_dpi_keeps_standard_pages_at_120_dpi(self):
+    def test_ocr_render_dpi_caps_standard_pages_at_120_dpi(self):
         class _Rect:
             width = 612
             height = 792
@@ -1078,7 +1080,17 @@ class TestOcrReflow:
         class _Page:
             rect = _Rect()
 
-        assert papers._ocr_page_render_dpi(_Page(), 120) == 120
+        assert papers._ocr_page_render_dpi(_Page(), 120) == 103
+
+    def test_ocr_render_dpi_keeps_standard_pages_at_90_dpi(self):
+        class _Rect:
+            width = 612
+            height = 792
+
+        class _Page:
+            rect = _Rect()
+
+        assert papers._ocr_page_render_dpi(_Page(), 90) == 90
 
     def test_ocr_pixmap_uses_rgb_without_alpha(self):
         calls = []
@@ -1098,6 +1110,52 @@ class TestOcrReflow:
 
         assert calls[0]["alpha"] is False
         assert "colorspace" in calls[0]
+
+    def test_rapidocr_page_uses_temporary_file_and_removes_it(self, monkeypatch):
+        seen_paths = []
+
+        class _Rect:
+            width = 612
+            height = 792
+
+        class _Pixmap:
+            width = 612
+
+            def tobytes(self, _format):
+                return b"png-bytes"
+
+        class _Page:
+            rect = _Rect()
+
+            def get_pixmap(self, **_kwargs):
+                return _Pixmap()
+
+        class _Doc:
+            def __getitem__(self, _index):
+                return _Page()
+
+        def fake_rapidocr(path):
+            seen_paths.append(path)
+            assert Path(path).exists()
+            return [
+                {
+                    "text": "temporary file OCR",
+                    "x0": 10,
+                    "x1": 200,
+                    "y0": 10,
+                    "y1": 30,
+                    "size": 20,
+                }
+            ]
+
+        monkeypatch.setattr(papers, "_rapidocr_lines_from_image_file", fake_rapidocr)
+
+        text, error = papers._ocr_text_with_rapidocr(_Doc(), dpi=90, page_indexes=[0])
+
+        assert error is None
+        assert text == "temporary file OCR"
+        assert seen_paths
+        assert not Path(seen_paths[0]).exists()
 
     def test_auto_ocr_falls_back_to_rapidocr_for_non_latin_documents(self, monkeypatch):
         class _Doc:

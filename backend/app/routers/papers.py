@@ -2,8 +2,11 @@ import base64
 import gc
 import json
 import math
+import multiprocessing
+import os
 import re
 import statistics
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -1063,8 +1066,9 @@ def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
 
 
 # --- OCR fallback (opt-in, NAVER CLOVA OCR API + RapidOCR) ----------------
-MAX_OCR_RENDER_PIXELS = 1_500_000
-MIN_OCR_RENDER_DPI = 90
+MAX_OCR_RENDER_PIXELS = 1_000_000
+MIN_OCR_RENDER_DPI = 72
+RAPIDOCR_PROCESS_TIMEOUT_SEC = 90
 
 
 def _ocr_line_dict(text: str, vertices: list[dict[str, object]]) -> dict[str, object] | None:
@@ -1307,6 +1311,82 @@ def _create_rapidocr_engine():
     return RapidOCR()
 
 
+def _rapidocr_image_file_worker(
+    image_path: str,
+    rec_model_path: str,
+    rec_keys_path: str,
+    output_path: str,
+) -> None:
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    os.environ.setdefault("MKL_NUM_THREADS", "1")
+    os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+    try:
+        from rapidocr_onnxruntime import RapidOCR  # lazy: 선택 의존성
+
+        if rec_model_path and rec_keys_path:
+            engine = RapidOCR(rec_model_path=rec_model_path, rec_keys_path=rec_keys_path)
+        else:
+            engine = RapidOCR()
+        try:
+            with open(image_path, "rb") as image_file:
+                result, _ = engine(image_file.read())
+            payload = {"ok": True, "lines": _rapidocr_lines_from_result(result)}
+            Path(output_path).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        finally:
+            engine = None
+            gc.collect()
+    except BaseException as exc:  # pragma: no cover - subprocess/runtime dependency failures
+        payload = {"ok": False, "error": str(exc)}
+        Path(output_path).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def _rapidocr_lines_from_image_file(image_path: str) -> list[dict[str, object]]:
+    if not settings.rapidocr_ready:
+        raise RuntimeError(settings.rapidocr_unavailable_reason)
+
+    ctx = multiprocessing.get_context("spawn")
+    try:
+        with tempfile.NamedTemporaryFile(
+            prefix="paperlens-rapidocr-", suffix=".json", delete=False
+        ) as output_file:
+            output_path = output_file.name
+        process = ctx.Process(
+            target=_rapidocr_image_file_worker,
+            args=(
+                image_path,
+                settings.rapidocr_rec_model_path.strip(),
+                settings.rapidocr_rec_keys_path.strip(),
+                output_path,
+            ),
+        )
+        process.start()
+        process.join(RAPIDOCR_PROCESS_TIMEOUT_SEC)
+        if process.is_alive():
+            process.terminate()
+            process.join(5)
+            raise RuntimeError("RapidOCR 처리 시간이 초과되었습니다.")
+
+        try:
+            raw = Path(output_path).read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            code = process.exitcode
+            raise RuntimeError(f"RapidOCR 프로세스가 결과 없이 종료되었습니다(exit={code}).") from exc
+        if not raw.strip():
+            code = process.exitcode
+            raise RuntimeError(f"RapidOCR 프로세스가 빈 결과로 종료되었습니다(exit={code}).")
+        payload = json.loads(raw)
+        if not payload.get("ok"):
+            raise RuntimeError(str(payload.get("error") or "RapidOCR 처리에 실패했습니다."))
+        lines = payload.get("lines")
+        return lines if isinstance(lines, list) else []
+    finally:
+        try:
+            os.unlink(output_path)
+        except (FileNotFoundError, UnboundLocalError):
+            pass
+
+
 def _rapidocr_lines_from_result(result) -> list[dict[str, object]]:
     """RapidOCR 박스 결과를 reflow 파이프라인이 쓰는 line dict로 변환한다."""
     lines: list[dict[str, object]] = []
@@ -1362,34 +1442,38 @@ def _ocr_text_with_clova(document, *, dpi: int, page_indexes: list[int]) -> tupl
 
 
 def _ocr_text_with_rapidocr(document, *, dpi: int, page_indexes: list[int]) -> tuple[str, str | None]:
-    try:
-        engine = _create_rapidocr_engine()
-    except Exception as exc:  # pragma: no cover - 선택 의존성/모델 로딩 실패
-        return "", f"RapidOCR를 사용할 수 없습니다. 환경 메시지: {exc}"
     paragraphs: list[str] = []
-    try:
-        for page_index in page_indexes:
-            page = document[page_index]
-            pix = _ocr_page_pixmap(page, dpi=dpi)
+    for page_index in page_indexes:
+        page = document[page_index]
+        pix = _ocr_page_pixmap(page, dpi=dpi)
+        image_bytes = None
+        image_path = ""
+        lines = None
+        try:
+            image_bytes = pix.tobytes("png")
+            with tempfile.NamedTemporaryFile(
+                prefix="paperlens-ocr-", suffix=".png", delete=False
+            ) as image_file:
+                image_file.write(image_bytes)
+                image_path = image_file.name
             image_bytes = None
-            result = None
+
+            lines = _rapidocr_lines_from_image_file(image_path)
+            if lines:
+                paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
+        except Exception as exc:  # pragma: no cover - 선택 의존성/모델 로딩 실패
+            return "", f"RapidOCR를 사용할 수 없습니다. 환경 메시지: {exc}"
+        finally:
+            image_bytes = None
             lines = None
-            try:
-                image_bytes = pix.tobytes("png")
-                result, _ = engine(image_bytes)
-                lines = _rapidocr_lines_from_result(result)
-                if lines:
-                    paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
-            finally:
-                image_bytes = None
-                result = None
-                lines = None
-                pix = None
-                gc.collect()
-        return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
-    finally:
-        engine = None
-        gc.collect()
+            pix = None
+            if image_path:
+                try:
+                    os.unlink(image_path)
+                except FileNotFoundError:
+                    pass
+            gc.collect()
+    return "\n\n".join(_tidy_spacing(p) for p in paragraphs if p), None
 
 
 def _looks_latin_dominant_document(document) -> bool:
