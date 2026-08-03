@@ -327,6 +327,11 @@ class TestTextQualityNotice:
         assert "깨짐 위치 예" in notice
         assert "A = □□□" in notice
 
+    def test_formula_notice_points_to_ocr_retry(self):
+        notice = papers._text_quality_notice("수식 A = □□□ 때문에 추출이 깨졌습니다.")
+        assert notice
+        assert "OCR로 다시 시도" in notice
+
 
 class TestExtractionQualityWarnings:
     def test_warns_without_dropping_empty_text(self):

@@ -132,6 +132,7 @@ export function SourcePanel() {
   const metadataNoticeExpanded = metadataNoticeKey ? expandedPaperNotices.has(metadataNoticeKey) : false;
   const extractionQuality = paper?.extractionQuality;
   const extractionQualityText = extractionQualityLabel(extractionQuality);
+  const canRunOcr = Boolean(paper?.pdfUrl && ocrAvailable);
   const shouldShowTextStatusNotice = Boolean(
     paper
       && (
@@ -218,6 +219,20 @@ export function SourcePanel() {
                 PDF
               </button>
             </div>
+            {canRunOcr && (
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded border border-line bg-white px-2 py-1 text-xs font-semibold text-muted hover:border-action hover:text-action disabled:opacity-60"
+                disabled={ocrRunning}
+                title="저장된 PDF 원본을 OCR로 다시 읽어 수식·특수기호·스캔 텍스트를 복구합니다"
+                onClick={() => {
+                  void ocrPaper();
+                }}
+              >
+                <ScanText size={13} />
+                {ocrRunning ? 'OCR 중…' : 'OCR 재시도'}
+              </button>
+            )}
             <span className="rounded bg-paper px-2 py-1 text-xs text-muted">AI 없이 동작</span>
           </div>
         </div>
@@ -320,7 +335,7 @@ export function SourcePanel() {
                 </ul>
               </>
             )}
-            {metadataNoticeExpanded && paper.pdfUrl && ocrAvailable && (
+            {metadataNoticeExpanded && canRunOcr && (
               <button
                 type="button"
                 className="mt-3 inline-flex items-center gap-1 rounded bg-action px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"

@@ -870,3 +870,26 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py -q`: 117 passed.
 - `backend/.venv/bin/python -m pytest backend/tests/test_pdf_extraction_regression.py -q`: 3 passed.
+
+### 2026-08-04 수식/특수기호 OCR 재시도 접근성 개선
+
+증상:
+
+- 수식·특수기호가 PDF 텍스트 레이어에서 깨지거나 누락되어도 추출 품질이 `good`으로 판정되면 원문 상태 알림이 뜨지 않아 `OCR로 다시 시도` 버튼에 접근하기 어려웠다.
+- 기존 수식 경고 문구도 PDF 원본 확인만 안내해, OCR이 활성화된 서버에서 사용자가 OCR 재시도 흐름을 기대하기 어려웠다.
+
+반영한 범위:
+
+- 수식·특수기호 깨짐 경고 문구를 “저장된 PDF 원본이 있으면 OCR로 다시 시도”하도록 수정했다.
+- 원문 패널 헤더에 PDF 원본이 연결되어 있고 OCR이 활성화된 경우 항상 `OCR 재시도` 버튼을 표시한다. 품질 경고가 없거나 접혀 있어도 수식/스캔 텍스트 재인식을 직접 실행할 수 있다.
+- `SourcePanel.test.tsx`를 추가해 PDF 연결 + OCR 가능 상태에서 헤더 OCR 버튼이 노출되고 `ocrPaper`가 호출되는지 검증한다.
+- `TestTextQualityNotice`에 수식 깨짐 안내가 OCR 재시도를 포함하는 회귀 테스트를 추가했다.
+
+실행한 검증:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py::TestTextQualityNotice -q`: 5 passed.
+- `backend/.venv/bin/python -m ruff check backend/app/routers/papers.py backend/tests/test_papers.py`: 통과.
+- `cd frontend && npm test -- --run src/components/workspace/SourcePanel.test.tsx --pool=threads --maxWorkers=1`: 1 passed.
+- `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py -q`: 121 passed.
+- `cd frontend && npm run lint`: 통과.
+- `cd frontend && npm run build`: 통과.

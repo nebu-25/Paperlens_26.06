@@ -936,7 +936,7 @@ def _text_quality_notice(text: str) -> str | None:
         )
     return (
         "PDF의 수식·특수기호 일부가 텍스트로 정확히 추출되지 않았습니다. "
-        "본문 문장 하이라이트는 사용할 수 있지만, 수식은 PDF 원본 보기에서 확인해 주세요."
+        "저장된 PDF 원본이 있으면 OCR로 다시 시도하고, 결과가 부족하면 PDF 원본 보기에서 확인해 주세요."
         f"{sample_notice}"
     )
 
