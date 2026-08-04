@@ -1,6 +1,7 @@
 import base64
 import gc
 import json
+import logging
 import math
 import multiprocessing
 import os
@@ -28,6 +29,7 @@ from app.services import pdf_security as _pdf_security
 from app.services.figure_images import detect_figure_images as _detect_figure_images
 
 router = APIRouter(prefix="/papers", tags=["papers"])
+logger = logging.getLogger(__name__)
 
 # 입력 가드 (기획서 FS-01)
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50MB
@@ -1628,6 +1630,13 @@ def _ocr_document_text(
         if unavailable:
             errors.append(f"{provider}: {unavailable}")
             continue
+        started_at = time.perf_counter()
+        logger.info(
+            "OCR provider attempt started: provider=%s pages=%s dpi=%s",
+            provider,
+            len(page_indexes),
+            dpi,
+        )
         try:
             if provider == "clova":
                 text, error = _ocr_text_with_clova(document, dpi=dpi, page_indexes=page_indexes)
@@ -1635,8 +1644,16 @@ def _ocr_document_text(
                 text, error = _ocr_text_with_rapidocr(document, dpi=dpi, page_indexes=page_indexes)
         except Exception as exc:  # pragma: no cover - 런타임 OCR/API 실패
             text, error = "", str(exc)
+        elapsed = time.perf_counter() - started_at
         if error:
             errors.append(f"{provider}: {error}")
+            logger.warning(
+                "OCR provider attempt failed: provider=%s pages=%s elapsed_sec=%.2f error=%s",
+                provider,
+                len(page_indexes),
+                elapsed,
+                error,
+            )
             if (
                 provider == "clova"
                 and settings.ocr_provider_normalized == "clova"
@@ -1647,8 +1664,21 @@ def _ocr_document_text(
             ):
                 provider_order.append("rapidocr")
         if not text.strip():
+            logger.warning(
+                "OCR provider attempt returned no text: provider=%s pages=%s elapsed_sec=%.2f",
+                provider,
+                len(page_indexes),
+                elapsed,
+            )
             continue
         score = _ocr_text_quality_score(text, len(page_indexes))
+        logger.info(
+            "OCR provider attempt completed: provider=%s pages=%s elapsed_sec=%.2f quality_score=%s",
+            provider,
+            len(page_indexes),
+            elapsed,
+            score,
+        )
         attempts.append((provider, text, score))
         if score >= 55 or settings.ocr_provider_normalized != "auto":
             return text, None
