@@ -177,4 +177,27 @@ describe('SourcePanel OCR action', () => {
     expect(screen.getByRole('button', { name: 'PDF p.6' })).toBeTruthy();
     expect(screen.getByText('본문 텍스트')).toBeTruthy();
   });
+
+  it('keeps PDF area notes in additional exploration instead of highlights', () => {
+    renderSourcePanel({
+      note: {
+        ...baseStore().note,
+        pdfAreaNotes: [
+          {
+            id: 'area-1',
+            page: 3,
+            rect: { x: 72, y: 120, width: 300, height: 180 },
+            kind: 'table',
+            memo: '표본 수와 제외 기준을 다시 확인한다.',
+            color: 'blue',
+          },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByText('추가 탐색 도구'));
+    expect(screen.getByText('PDF 영역 메모 1건')).toBeTruthy();
+    expect(screen.getByDisplayValue('표본 수와 제외 기준을 다시 확인한다.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'PDF p.3' })).toBeTruthy();
+  });
 });

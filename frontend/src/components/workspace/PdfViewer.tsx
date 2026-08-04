@@ -23,7 +23,7 @@ import type { TextLayer } from 'pdfjs-dist/types/src/display/text_layer';
 import { HIGHLIGHT_COLORS } from '../../constants';
 import { authHeaders } from '../../lib/authHeaders';
 import { isChunkLoadError } from '../../lib/chunkLoad';
-import type { Highlight, HighlightColor, PdfAreaAnnotationKind } from '../../types';
+import type { Highlight, HighlightColor, PdfAreaAnnotationKind, PdfAreaNote } from '../../types';
 import { bandIndexOf, isHorizontalRect, mergeColumnBands, type XSpan } from './pdfHighlightColumns';
 import {
   AddTermButton,
@@ -51,6 +51,7 @@ type PdfPendingHighlight = {
 };
 type PdfActiveHighlight = {
   id: string;
+  source: 'highlight' | 'area-note';
   color: HighlightColor;
   text: string;
   annotationKind?: PdfAreaAnnotationKind;
@@ -86,6 +87,7 @@ interface PdfViewerProps {
   accessToken: string | null;
   demoSessionId: string | null;
   highlights: Highlight[];
+  areaNotes: PdfAreaNote[];
   highlightColor: HighlightColor;
   onSelectHighlightColor: (color: HighlightColor) => void;
   onAddHighlight: (highlight: {
@@ -98,6 +100,8 @@ interface PdfViewerProps {
   }) => void;
   onRemoveHighlight: (id: string) => void;
   onRemoveHighlights?: (ids: string[]) => void;
+  onAddAreaNote: (note: Omit<PdfAreaNote, 'id'>) => void;
+  onRemoveAreaNote: (id: string) => void;
   onAddTerm: (text: string) => void;
   // 외부(그림 네비게이터 등)에서 요청한 페이지로 이동 (M5b). 처리 후 콜백으로 소거한다.
   requestedPage?: number | null;
@@ -292,11 +296,14 @@ export function PdfViewer({
   accessToken,
   demoSessionId,
   highlights,
+  areaNotes,
   highlightColor,
   onSelectHighlightColor,
   onAddHighlight,
   onRemoveHighlight,
   onRemoveHighlights,
+  onAddAreaNote,
+  onRemoveAreaNote,
   onAddTerm,
   requestedPage = null,
   onRequestedPageHandled,
@@ -685,6 +692,17 @@ export function PdfViewer({
 
   const applyPendingHighlight = () => {
     if (!pendingHighlight) return;
+    if (pendingHighlight.annotationKind) {
+      onAddAreaNote({
+        color: pendingHighlight.color,
+        page: pendingHighlight.page,
+        rect: pendingHighlight.rects[0],
+        kind: pendingHighlight.annotationKind,
+        memo: pendingHighlight.memo ?? '',
+      });
+      clearPendingHighlight();
+      return;
+    }
     onAddHighlight({
       color: pendingHighlight.color,
       page: pendingHighlight.page,
@@ -718,6 +736,7 @@ export function PdfViewer({
     window.getSelection()?.removeAllRanges();
     setActiveHighlight({
       id: highlight.id,
+      source: 'highlight',
       color: highlight.color ?? 'yellow',
       text: highlight.text,
       annotationKind: highlight.annotationKind,
@@ -727,9 +746,27 @@ export function PdfViewer({
     });
   };
 
+  const openAreaNote = (areaNote: PdfAreaNote, event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setPendingHighlight(null);
+    window.getSelection()?.removeAllRanges();
+    setActiveHighlight({
+      id: areaNote.id,
+      source: 'area-note',
+      color: areaNote.color,
+      text: 'PDF 영역 메모',
+      annotationKind: areaNote.kind,
+      memo: areaNote.memo,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
+
   const removeActiveHighlight = () => {
     if (!activeHighlight) return;
-    onRemoveHighlight(activeHighlight.id);
+    if (activeHighlight.source === 'area-note') onRemoveAreaNote(activeHighlight.id);
+    else onRemoveHighlight(activeHighlight.id);
     setActiveHighlight(null);
   };
 
@@ -746,6 +783,7 @@ export function PdfViewer({
       }
     : undefined;
   const pageHighlights = highlights.filter((highlight) => highlight.pdf?.page === pageNumber);
+  const pageAreaNotes = areaNotes.filter((areaNote) => areaNote.page === pageNumber);
   const pendingOverlapHighlightIds = pendingHighlight
     ? pageHighlights
         .filter((highlight) =>
@@ -978,6 +1016,23 @@ export function PdfViewer({
                     />
                   )),
                 )}
+                {pageAreaNotes.map((areaNote) => (
+                  <div
+                    key={areaNote.id}
+                    className="pointer-events-auto absolute cursor-pointer border border-dashed border-action bg-action/20 hover:bg-action/30"
+                    style={{
+                      left: `${areaNote.rect.x * scale}px`,
+                      top: `${areaNote.rect.y * scale}px`,
+                      width: `${areaNote.rect.width * scale}px`,
+                      height: `${areaNote.rect.height * scale}px`,
+                    }}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                    onClick={(event) => openAreaNote(areaNote, event)}
+                  />
+                ))}
               </div>
             </div>
           </div>
@@ -1025,7 +1080,12 @@ export function PdfViewer({
                   <option value="figure">그림</option>
                   <option value="formula">수식</option>
                 </select>
-                <button type="button" className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-semibold text-ink hover:bg-paper" onClick={applyPendingHighlight}>
+                <button
+                  type="button"
+                  className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-semibold text-ink hover:bg-paper disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={!pendingHighlight.memo?.trim()}
+                  onClick={applyPendingHighlight}
+                >
                   메모 저장
                 </button>
               </>
@@ -1062,7 +1122,7 @@ export function PdfViewer({
         >
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-xs font-semibold text-ink">
-              {activeHighlight.annotationKind ? '적용된 PDF 영역 메모' : '적용된 PDF 하이라이트'}
+              {activeHighlight.source === 'area-note' ? '적용된 PDF 영역 메모' : '적용된 PDF 하이라이트'}
             </span>
             <button
               type="button"

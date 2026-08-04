@@ -39,6 +39,7 @@ import type {
   Highlight,
   HighlightColor,
   PdfAreaAnnotationKind,
+  PdfAreaNote,
   Paper,
   ReviewNote,
   SamplePhase,
@@ -1280,6 +1281,30 @@ export function useReviewStore({
     window.getSelection()?.removeAllRanges();
   }
 
+  function addPdfAreaNote({
+    color,
+    page,
+    rect,
+    kind,
+    memo,
+  }: Omit<PdfAreaNote, 'id'>) {
+    const normalizedMemo = memo.trim();
+    const normalizedRect = {
+      x: Number(rect.x.toFixed(2)),
+      y: Number(rect.y.toFixed(2)),
+      width: Number(rect.width.toFixed(2)),
+      height: Number(rect.height.toFixed(2)),
+    };
+    if (!normalizedMemo || normalizedRect.width <= 0 || normalizedRect.height <= 0) return;
+    setNote((current) => ({
+      ...current,
+      pdfAreaNotes: [
+        ...(current.pdfAreaNotes ?? []),
+        { id: uid(), color, page, rect: normalizedRect, kind, memo: normalizedMemo },
+      ],
+    }));
+  }
+
   function addTerm() {
     if (!selection) return;
     setNote((n) => ({
@@ -1576,6 +1601,7 @@ export function useReviewStore({
     addHighlight,
     removeSelectionHighlights,
     addPdfHighlight,
+    addPdfAreaNote,
     addTerm,
     addTermText,
     explainTerm,

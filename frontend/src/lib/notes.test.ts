@@ -102,6 +102,34 @@ describe('normalizeNote', () => {
     });
     expect(note.templateAnswers).toEqual({ t4_critical: { q3: '한계' } });
   });
+
+  it('moves legacy PDF area annotations out of citation highlights', () => {
+    const note = normalizeNote({
+      highlights: [
+        {
+          id: 'area-1',
+          text: 'PDF 영역 메모',
+          color: 'blue',
+          annotationKind: 'table',
+          memo: '표본 수가 작아 일반화에 한계가 있다.',
+          pdf: { page: 3, rects: [{ x: 72, y: 120, width: 300, height: 180 }] },
+        },
+        { id: 'text-1', text: '인용할 본문 문장', color: 'yellow' },
+      ],
+    });
+
+    expect(note.highlights).toEqual([{ id: 'text-1', text: '인용할 본문 문장', color: 'yellow' }]);
+    expect(note.pdfAreaNotes).toEqual([
+      {
+        id: 'area-1',
+        page: 3,
+        rect: { x: 72, y: 120, width: 300, height: 180 },
+        kind: 'table',
+        memo: '표본 수가 작아 일반화에 한계가 있다.',
+        color: 'blue',
+      },
+    ]);
+  });
 });
 
 describe('searchableText', () => {

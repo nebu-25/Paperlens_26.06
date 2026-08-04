@@ -37,6 +37,7 @@ export function SourcePanel() {
     highlightColor,
     setHighlightColor,
     addPdfHighlight,
+    addPdfAreaNote,
     addTermText,
     signalScanEnabled,
     setSignalScanEnabled,
@@ -85,6 +86,7 @@ export function SourcePanel() {
   }, [paper?.figureImages]);
   const tableStructures = paper?.tableStructures ?? [];
   const formulaCandidates = paper?.formulaCandidates ?? [];
+  const pdfAreaNotes = note.pdfAreaNotes ?? [];
   const openPdfAtPage = (pageNo: number) => {
     setPaperViewMode('pdf');
     setRequestedPdfPage(pageNo);
@@ -484,7 +486,7 @@ export function SourcePanel() {
               </div>
             )}
           </section>
-        {!sourceEditOpen && (figureCaptions.length > 0 || figurePages.length > 0 || tableStructures.length > 0 || formulaCandidates.length > 0 || paper.text) && (
+        {!sourceEditOpen && (figureCaptions.length > 0 || figurePages.length > 0 || tableStructures.length > 0 || formulaCandidates.length > 0 || pdfAreaNotes.length > 0 || paper.text) && (
             <SectionCard
               title="추가 탐색 도구"
               icon={<ScanSearch size={16} />}
@@ -691,6 +693,53 @@ export function SourcePanel() {
                     </p>
                   </div>
                 )}
+                {pdfAreaNotes.length > 0 && (
+                  <div className="border-t border-line pt-3">
+                    <div className="mb-2 flex items-center gap-1 text-[11px] font-semibold text-muted">
+                      <PencilLine size={12} />
+                      PDF 영역 메모 {pdfAreaNotes.length}건
+                    </div>
+                    <div className="space-y-2">
+                      {pdfAreaNotes.map((areaNote) => (
+                        <div key={areaNote.id} className="rounded bg-white/70 px-2 py-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[11px] font-semibold text-ink">
+                              {areaNote.kind === 'table' ? '표' : areaNote.kind === 'figure' ? '그림' : areaNote.kind === 'formula' ? '수식' : '영역'}
+                            </span>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={!paperPdfUrl}
+                              onClick={() => openPdfAtPage(areaNote.page)}
+                            >
+                              <FileText size={11} />
+                              PDF p.{areaNote.page}
+                            </button>
+                            <button
+                              type="button"
+                              className="ml-auto text-[10px] text-muted hover:text-rose-700"
+                              aria-label="PDF 영역 메모 삭제"
+                              onClick={() => updateNote('pdfAreaNotes', pdfAreaNotes.filter((item) => item.id !== areaNote.id))}
+                            >
+                              삭제
+                            </button>
+                          </div>
+                          <textarea
+                            aria-label={`PDF ${areaNote.kind} 메모`}
+                            className="mt-1 min-h-14 w-full resize-y rounded border border-line bg-white p-2 text-xs outline-none focus:border-action"
+                            value={areaNote.memo}
+                            onChange={(event) =>
+                              updateNote(
+                                'pdfAreaNotes',
+                                pdfAreaNotes.map((item) => item.id === areaNote.id ? { ...item, memo: event.target.value } : item),
+                              )
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {paper.text && (
                   <div className={`${figureCaptions.length > 0 || figurePages.length > 0 ? 'border-t border-line pt-3' : ''}`}>
                     <div className="flex flex-wrap items-center gap-2">
@@ -821,9 +870,11 @@ export function SourcePanel() {
                 accessToken={accessToken}
                 demoSessionId={demoSessionId}
                 highlights={note.highlights}
+                areaNotes={pdfAreaNotes}
                 highlightColor={highlightColor}
                 onSelectHighlightColor={setHighlightColor}
                 onAddHighlight={addPdfHighlight}
+                onAddAreaNote={addPdfAreaNote}
                 onRemoveHighlight={(highlightId) =>
                   updateNote(
                     'highlights',
@@ -837,6 +888,9 @@ export function SourcePanel() {
                     note.highlights.filter((highlight) => !ids.has(highlight.id)),
                   );
                 }}
+                onRemoveAreaNote={(areaNoteId) =>
+                  updateNote('pdfAreaNotes', pdfAreaNotes.filter((areaNote) => areaNote.id !== areaNoteId))
+                }
                 onAddTerm={addTermText}
                 requestedPage={requestedPdfPage}
                 onRequestedPageHandled={() => setRequestedPdfPage(null)}

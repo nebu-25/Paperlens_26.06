@@ -71,6 +71,14 @@ export interface Paper {
 
 export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'orange' | 'violet';
 export type PdfAreaAnnotationKind = 'general' | 'table' | 'figure' | 'formula';
+export interface PdfAreaNote {
+  id: string;
+  page: number;
+  rect: { x: number; y: number; width: number; height: number };
+  kind: PdfAreaAnnotationKind;
+  memo: string;
+  color: HighlightColor;
+}
 export type CitationUse =
   | 'premise'
   | 'method'
@@ -170,4 +178,6 @@ export interface ReviewNote {
   templateAnswers?: Record<string, Record<string, string>>;
   // 그림/표 메모 (FR-27): 캡션 정규화 키(lib/figureIndex.ts) -> 사용자가 쓴 메모.
   figureNotes?: Record<string, string>;
+  // PDF 원본 위의 표·그림·수식·임의 영역 메모. 인용 목적 분류와 분리한다.
+  pdfAreaNotes?: PdfAreaNote[];
 }

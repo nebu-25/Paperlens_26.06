@@ -19,7 +19,7 @@ import type { ExportOptions } from '../../lib/export';
 import { highlightStyle } from '../../lib/format';
 import { buildReadingRoadmap } from '../../lib/readingRoadmap';
 import { PURPOSE_TEMPLATES, getPurposeAnswers, resolvePurposeTemplate } from '../../lib/templates';
-import type { CitationUse, HighlightColor, ManualSummaryItem, PdfAreaAnnotationKind, ReviewNote } from '../../types';
+import type { CitationUse, HighlightColor, ManualSummaryItem, ReviewNote } from '../../types';
 import { AiDraftButton } from '../AiDraftButton';
 import { NoticeBanner } from '../NoticeBanner';
 import { QuestionsCard } from '../QuestionsCard';
@@ -36,13 +36,6 @@ const EXPORT_OPTION_LABELS: { key: keyof ExportOptions; label: string }[] = [
   { key: 'citationBoard', label: '인용 후보' },
   { key: 'figures', label: '그림/표 메모' },
 ];
-
-const PDF_AREA_LABELS: Record<PdfAreaAnnotationKind, string> = {
-  general: 'PDF 영역',
-  table: 'PDF 표',
-  figure: 'PDF 그림',
-  formula: 'PDF 수식',
-};
 
 export function ReviewNotePanel() {
   const { store, requestSurveyPrompt } = useWorkspace();
@@ -552,26 +545,9 @@ export function ReviewNotePanel() {
                   >
                     <span className="min-w-0">
                       <span className="mb-1 inline-flex rounded bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-muted">
-                        {h.annotationKind ? PDF_AREA_LABELS[h.annotationKind] : style.label}
+                        {style.label}
                       </span>
-                      <span className="block">{h.memo ? h.memo : `“${h.text}”`}</span>
-                      {h.memo && <span className="mt-1 block text-[11px] text-muted">{h.text}</span>}
-                      {h.annotationKind && (
-                        <textarea
-                          aria-label={`${PDF_AREA_LABELS[h.annotationKind]} 메모`}
-                          className="mt-2 min-h-16 w-full resize-y rounded border border-line bg-white/80 p-2 text-xs text-ink outline-none focus:border-action"
-                          placeholder="이 영역에서 확인한 내용을 기록하세요"
-                          value={h.memo ?? ''}
-                          onChange={(event) =>
-                            updateNote(
-                              'highlights',
-                              note.highlights.map((item) =>
-                                item.id === h.id ? { ...item, memo: event.target.value || undefined } : item,
-                              ),
-                            )
-                          }
-                        />
-                      )}
+                      <span className="block">“{h.text}”</span>
                     </span>
                     <div className="flex shrink-0 items-start gap-2">
                       <select
