@@ -334,6 +334,7 @@ export function useReviewPersistence({
               sections: data.paper.sections ?? cur.sections,
               figureImages: data.paper.figureImages ?? cur.figureImages,
               tableStructures: data.paper.tableStructures ?? cur.tableStructures,
+              formulaCandidates: data.paper.formulaCandidates ?? cur.formulaCandidates,
             },
           };
         });

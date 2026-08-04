@@ -155,4 +155,26 @@ describe('SourcePanel OCR action', () => {
     expect(screen.getByText('Condition')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'PDF p.1' })).toBeTruthy();
   });
+
+  it('lists formula candidates as PDF review locations without changing source text', () => {
+    renderSourcePanel({
+      paper: basePaper({
+        formulaCandidates: [
+          {
+            id: 'formula-6-1',
+            page: 6,
+            bbox: [72, 240, 310, 258],
+            text: 'Kwj = kdf(KdID, SNj, dID, pID)',
+            reason: 'standalone_assignment',
+          },
+        ],
+      }),
+    });
+
+    fireEvent.click(screen.getByText('추가 탐색 도구'));
+    expect(screen.getByText('PDF 수식 후보 1건')).toBeTruthy();
+    expect(screen.getByText('Kwj = kdf(KdID, SNj, dID, pID)')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'PDF p.6' })).toBeTruthy();
+    expect(screen.getByText('본문 텍스트')).toBeTruthy();
+  });
 });

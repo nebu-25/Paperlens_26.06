@@ -35,6 +35,7 @@ import type {
   AppNotice,
   DetectedSection,
   FigureImageRef,
+  FormulaCandidate,
   Highlight,
   HighlightColor,
   Paper,
@@ -314,8 +315,9 @@ export function useReviewStore({
         const data = (await res.json()) as {
           figure_images?: FigureImageRef[];
           table_structures?: TableStructure[];
+          formula_candidates?: FormulaCandidate[];
         };
-        if (cancelled || (!Array.isArray(data.figure_images) && !Array.isArray(data.table_structures))) return;
+        if (cancelled || (!Array.isArray(data.figure_images) && !Array.isArray(data.table_structures) && !Array.isArray(data.formula_candidates))) return;
         setLibrary((lib) => {
           const current = lib[paper.id];
           if (!current) return lib;
@@ -325,6 +327,7 @@ export function useReviewStore({
               ...current,
               figureImages: data.figure_images ?? current.figureImages,
               tableStructures: data.table_structures ?? current.tableStructures,
+              formulaCandidates: data.formula_candidates ?? current.formulaCandidates,
             },
           };
         });
@@ -690,6 +693,7 @@ export function useReviewStore({
         sections?: DetectedSection[];
         figure_images?: FigureImageRef[];
         table_structures?: TableStructure[];
+        formula_candidates?: FormulaCandidate[];
         suggested_tags?: string[];
         metadata_source?: string;
         metadata_confidence?: string;
@@ -735,6 +739,7 @@ export function useReviewStore({
               sections: data.sections ?? current.sections,
               figureImages: data.figure_images ?? current.figureImages,
               tableStructures: data.table_structures ?? current.tableStructures,
+              formulaCandidates: data.formula_candidates ?? current.formulaCandidates,
               text: data.text || current.text,
             },
           };
@@ -778,6 +783,7 @@ export function useReviewStore({
           sections: data.sections ?? [],
           figureImages: data.figure_images ?? [],
           tableStructures: data.table_structures ?? [],
+          formulaCandidates: data.formula_candidates ?? [],
           text: data.text || '',
         }, suggestedTags, uploadPaperId);
       }
@@ -1000,6 +1006,7 @@ export function useReviewStore({
           sections?: DetectedSection[];
           figure_images?: FigureImageRef[];
           table_structures?: TableStructure[];
+          formula_candidates?: FormulaCandidate[];
           suggested_tags?: string[];
           metadata_source?: string;
           metadata_confidence?: string;
@@ -1036,6 +1043,7 @@ export function useReviewStore({
           sections: data.sections ?? [],
           figureImages: data.figure_images ?? [],
           tableStructures: data.table_structures ?? [],
+          formulaCandidates: data.formula_candidates ?? [],
           text: data.text || '',
         }, suggestedTags, uploadPaperId);
         setUploadNotice({

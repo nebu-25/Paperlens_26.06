@@ -29,6 +29,14 @@ export interface TableStructure {
   rows: string[][];
 }
 
+export interface FormulaCandidate {
+  id: string;
+  page: number;
+  bbox: number[];
+  text: string;
+  reason: 'standalone_assignment';
+}
+
 export type ExtractionQualityStatus = 'good' | 'review' | 'poor' | 'failed';
 export type ExtractionQualitySource = 'auto' | 'user_edited' | 'ocr';
 
@@ -57,6 +65,7 @@ export interface Paper {
   sections?: DetectedSection[];
   figureImages?: FigureImageRef[];
   tableStructures?: TableStructure[];
+  formulaCandidates?: FormulaCandidate[];
   text: string;
 }
 

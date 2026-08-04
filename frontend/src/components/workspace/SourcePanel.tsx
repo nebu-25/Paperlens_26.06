@@ -1,4 +1,4 @@
-import { FileText, Highlighter, Image, ListTree, PencilLine, ScanSearch, ScanText, TableProperties, Upload } from 'lucide-react';
+import { FileText, Highlighter, Image, ListTree, PencilLine, ScanSearch, ScanText, Sigma, TableProperties, Upload } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { resolveApiUrl } from '../../constants';
 import { scrollToTextOffset } from '../../lib/domText';
@@ -84,6 +84,7 @@ export function SourcePanel() {
       .map(([pageNo, count]) => ({ page: pageNo, count }));
   }, [paper?.figureImages]);
   const tableStructures = paper?.tableStructures ?? [];
+  const formulaCandidates = paper?.formulaCandidates ?? [];
   const openPdfAtPage = (pageNo: number) => {
     setPaperViewMode('pdf');
     setRequestedPdfPage(pageNo);
@@ -483,7 +484,7 @@ export function SourcePanel() {
               </div>
             )}
           </section>
-        {!sourceEditOpen && (figureCaptions.length > 0 || figurePages.length > 0 || tableStructures.length > 0 || paper.text) && (
+        {!sourceEditOpen && (figureCaptions.length > 0 || figurePages.length > 0 || tableStructures.length > 0 || formulaCandidates.length > 0 || paper.text) && (
             <SectionCard
               title="추가 탐색 도구"
               icon={<ScanSearch size={16} />}
@@ -660,6 +661,34 @@ export function SourcePanel() {
                         </details>
                       ))}
                     </div>
+                  </div>
+                )}
+                {formulaCandidates.length > 0 && (
+                  <div className="border-t border-line pt-3">
+                    <div className="mb-2 flex items-center gap-1 text-[11px] font-semibold text-muted">
+                      <Sigma size={12} />
+                      PDF 수식 후보 {formulaCandidates.length}건
+                    </div>
+                    <ul className="space-y-1">
+                      {formulaCandidates.map((candidate) => (
+                        <li key={candidate.id} className="flex flex-wrap items-center gap-2 rounded bg-white/70 px-2 py-1">
+                          <code className="min-w-0 flex-1 break-words text-[11px] text-ink">{candidate.text}</code>
+                          <button
+                            type="button"
+                            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-line bg-white px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={!paperPdfUrl}
+                            title={paperPdfUrl ? `PDF ${candidate.page}페이지에서 수식 원문을 확인합니다` : 'PDF 원본이 연결되면 사용할 수 있습니다'}
+                            onClick={() => openPdfAtPage(candidate.page)}
+                          >
+                            <FileText size={11} />
+                            PDF p.{candidate.page}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-[11px] leading-relaxed text-muted">
+                      텍스트 레이어에서 감지한 후보입니다. 실제 수식의 기호와 줄바꿈은 PDF 원문에서 확인하세요.
+                    </p>
                   </div>
                 )}
                 {paper.text && (

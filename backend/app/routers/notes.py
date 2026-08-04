@@ -32,6 +32,7 @@ class PaperIn(BaseModel):
     sections: list[dict] = Field(default_factory=list)
     figureImages: list[dict] = Field(default_factory=list)
     tableStructures: list[dict] = Field(default_factory=list)
+    formulaCandidates: list[dict] = Field(default_factory=list)
 
 
 class NoteIn(BaseModel):

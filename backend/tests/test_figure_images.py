@@ -266,6 +266,9 @@ class TestStructureIndexPersistence:
             "tableStructures": [
                 {"id": "table-2-1", "page": 2, "bbox": [72.0, 120.0, 520.0, 480.0], "rows": [["A", "B"]]}
             ],
+            "formulaCandidates": [
+                {"id": "formula-2-1", "page": 2, "bbox": [72.0, 120.0, 280.0, 140.0], "text": "K = kdf(x)", "reason": "standalone_assignment"}
+            ],
         }
         put = client.put("/api/notes/p1", json={"paper": paper, "note": {}})
         assert put.status_code == 200
@@ -274,14 +277,16 @@ class TestStructureIndexPersistence:
         assert got["sections"] == paper["sections"]
         assert got["figureImages"] == paper["figureImages"]
         assert got["tableStructures"] == paper["tableStructures"]
+        assert got["formulaCandidates"] == paper["formulaCandidates"]
 
         # 본문 없는 경량 저장(자동 저장 경로)은 구조 인덱스를 덮어쓰지 않는다.
-        light = {**paper, "text": "", "sections": [], "figureImages": [], "tableStructures": []}
+        light = {**paper, "text": "", "sections": [], "figureImages": [], "tableStructures": [], "formulaCandidates": []}
         client.put("/api/notes/p1", json={"paper": light, "note": {}})
         kept = client.get("/api/notes/p1").json()["paper"]
         assert kept["sections"] == paper["sections"]
         assert kept["figureImages"] == paper["figureImages"]
         assert kept["tableStructures"] == paper["tableStructures"]
+        assert kept["formulaCandidates"] == paper["formulaCandidates"]
 
         # 목록(경량) 조회에는 구조 인덱스가 포함되지 않는다.
         listed = client.get("/api/notes").json()["library"]["p1"]
