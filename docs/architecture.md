@@ -20,10 +20,11 @@ OpenRouter AI only when AI_API_KEY is set
 - `frontend/src/components/workspace/`: 워크스페이스 패널 분해
   - `WorkspaceContext.ts`: store를 공유하는 Context와 `useWorkspace()` 훅 (prop drilling 방지)
   - `WorkspaceHeader.tsx` · `UploadBar.tsx` · `PaperSidebar.tsx` · `SelectionToolbar.tsx`
-  - `SourcePanel.tsx`: 원문/PDF 보기 토글, 원문 직접 편집, PDF 미리보기 로드 (패널 전용 상태·이펙트 보유)
+  - `SourcePanel.tsx`: 원문/PDF 보기 토글, 원문 직접 편집, 그림·표·수식 인덱스와 PDF 영역 메모를 포함한 추가 탐색 도구
+  - `PdfViewer.tsx`: pdf.js 캔버스·텍스트 레이어, 문장 하이라이트, 표·그림·수식용 좌표 영역 메모, 페이지·확대·이동 제어
   - `ReviewNotePanel.tsx`: 메타정보, 리뷰 로드맵, 수동 요약, 하이라이트, 인용 후보 보드, 용어 사전, 내보내기
 - `frontend/src/components/LandingPage.tsx`: 서비스 소개, 데모 로그인 진입 화면, Render 백엔드 warm-up용 `/api/health` 백그라운드 호출
-- `frontend/src/hooks/useReviewStore.tsx`: 등록, 업로드, 하이라이트, 용어 추가, AI 설명, 내보내기 액션 (`ReviewStore` 타입 export)
+- `frontend/src/hooks/useReviewStore.tsx`: 등록, 업로드, 하이라이트, PDF 영역 메모, 용어 추가, AI 설명, 내보내기 액션 (`ReviewStore` 타입 export)
 - `frontend/src/hooks/useReviewPersistence.ts`: 서버 저장, IndexedDB/localStorage 폴백, 재동기화, 수동 저장
 - `frontend/src/lib/localReviewCache.ts`: 계정별 브라우저 임시 캐시. 노트/메타 스냅샷과 원문 텍스트를 분리 저장하고, IndexedDB 사용 불가 시 localStorage fallback
 - `frontend/src/hooks/useAuthSession.ts`: Supabase session 구독
@@ -82,6 +83,7 @@ GitHub Pages 배포의 경로 구성은 아래와 같습니다.
 - 라틴어 줄바꿈과 하이픈을 보정하고, CJK 줄바꿈은 불필요한 공백을 줄입니다.
 - 페이지 번호, 반복 헤더/푸터, 측면 arXiv 스탬프를 노이즈로 제거합니다.
 - 수식/특수기호 깨짐이 의심되면 경고와 샘플을 반환합니다.
+- 벡터 표는 `table_structures`에 `page`·`bbox`·`rows`로 저장하고, 텍스트 레이어의 독립 대입식은 `formula_candidates`에 PDF 좌표와 함께 저장합니다. 두 인덱스는 원본 PDF의 서식·병합 셀·수식 조판을 대체하지 않습니다.
 - 섹션 감지는 `backend/app/services/paper_sections.py`에서 수행합니다. 영문 `Abstract`/`Introduction`/`Conclusion`뿐 아니라 `요약`/`초록`, `서론`, `본론`/`고찰`, `결론`, `참고문헌`을 같은 canonical 섹션으로 정규화하며, `Ⅰ. 서론`, `1. 서론` 같은 번호 헤딩도 인식합니다. 프론트엔드 아웃라인, 섹션 요약 카드, 시그널 스캐너는 이 canonical 값을 공유합니다.
 
 ## Metadata Strategy
@@ -107,10 +109,12 @@ DOI 입력은 메타데이터 등록용입니다. DOI만으로는 원문 PDF를 
 
 - `paper_metadata`: 제목, 저자, DOI, source key, 메타데이터 경고, PDF 파일명 등 목록/검색에 필요한 가벼운 정보
 - `paper_texts`: 원문 텍스트. 목록 조회에서는 읽지 않고 단일 노트 조회에서만 지연 로드
-- `review_notes`: 리뷰 노트 JSON. 하이라이트, 태그, 질문, 템플릿 답변을 저장
+- `review_notes`: 리뷰 노트 JSON. 문장 하이라이트, 태그, 질문, 템플릿 답변, 캡션 메모와 `pdfAreaNotes`를 저장
 - `paper_files`: PDF 파일명과 PDF 바이너리
 
 기존 단일 `papers` 테이블이 있는 DB는 앱 시작 시 위 분리 테이블로 복사됩니다. 레거시 테이블은 즉시 삭제하지 않아 백업/롤백 여지를 남깁니다. 하이라이트/태그/리뷰 섹션의 관계형 정규화는 후속 단계로 남겨둡니다.
+
+`pdfAreaNotes`는 `{page, rect, kind, memo, color}` 형태의 PDF 좌표 메모다. 인용 목적을 분류하는 문장 `highlights`와 별도 컬렉션으로 유지해 표·그림·수식의 관찰 기록이 인용 후보 보드에 자동 유입되지 않게 한다. 이전 버전의 `highlights.annotationKind` 데이터는 프런트 복원 시 `pdfAreaNotes`로 이전한다.
 
 SQLite는 WAL 저널 모드와 `busy_timeout`을 사용해 자동 저장 중 잠금 충돌을 줄입니다. WAL을 지원하지 않는 파일시스템에서는 기존 모드로 안전하게 동작합니다.
 

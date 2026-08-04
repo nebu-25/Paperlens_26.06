@@ -1083,3 +1083,10 @@ PDF 추출 확인:
 - `backend/.venv/bin/python -m ruff check backend/app/config.py backend/app/routers/papers.py backend/tests/test_papers.py backend/tests/test_diagnostics.py`: 통과.
 - `backend/.venv/bin/python -m pytest backend/tests/test_papers.py backend/tests/test_pdf_extraction_regression.py backend/tests/test_diagnostics.py -q`: 140 passed.
 - `git diff --check`: 통과.
+
+# 2026-08-05 PDF 수식 후보와 영역 메모 정책
+
+- PDF 텍스트 레이어의 독립 대입식 행을 수식 후보로만 인덱싱하고, 본문 속 수식 표현이나 문장형 행은 제외한다. 후보는 PDF 페이지·좌표와 함께 표시하며 원문/OCR을 대체하지 않는다.
+- PDF 뷰어의 `영역 메모 모드`에서 표·그림·수식·임의 영역을 드래그한 뒤 유형과 메모를 저장한다. 메모는 PDF 좌표 오버레이로 남는다.
+- 영역 메모는 인용 목적을 가진 문장 하이라이트가 아니라 `pdfAreaNotes`에 저장한다. 추가 탐색 도구에서 수정·삭제·PDF 페이지 이동을 제공하고, 기존 `highlights.annotationKind` 데이터는 복원 시 이전한다.
+- 검증: `npm run lint`, `npm run build`, `npm test -- --run src/lib/notes.test.ts --reporter=verbose`(15 passed), `npm test -- --run src/components/workspace/SourcePanel.test.tsx --reporter=verbose`(6 passed), GitHub Actions CI run `30929123637` 성공.
