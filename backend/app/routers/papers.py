@@ -29,6 +29,7 @@ from app.services import paper_metadata as _paper_metadata
 from app.services import paper_sections as _paper_sections
 from app.services import pdf_security as _pdf_security
 from app.services.figure_images import detect_figure_images as _detect_figure_images
+from app.services.table_structures import detect_table_structures as _detect_table_structures
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 logger = logging.getLogger(__name__)
@@ -1998,6 +1999,7 @@ def _extract_pdf_content(
 
     sections = [] if scanned else _detect_sections(text)
     figure_images = _detect_figure_images(document)
+    table_structures = _detect_table_structures(document)
 
     # 메타정보 추출: ① DOI(CrossRef) → ② arXiv API → ③ 첫 페이지 레이아웃 → ④ PDF 내장 → ⑤ 파일명
     cross: dict[str, object] | None = None
@@ -2057,6 +2059,7 @@ def _extract_pdf_content(
         "doi": (cross or {}).get("doi") or detected_doi,
         "sections": sections,
         "figure_images": figure_images,
+        "table_structures": table_structures,
         "suggested_tags": suggested_tags,
         "metadata_source": metadata_source,
         "metadata_confidence": metadata_confidence,
@@ -2153,13 +2156,19 @@ def refresh_structure_index(paper_id: str, user_id: str = Depends(current_user_i
         raise HTTPException(status_code=400, detail="암호로 보호된 PDF입니다.")
 
     figure_images = _detect_figure_images(document)
+    table_structures = _detect_table_structures(document)
     existing = db.get_note(user_id, paper_id)
     if existing is not None:
         paper = existing.get("paper")
         note = existing.get("note")
         if isinstance(paper, dict) and isinstance(note, dict):
-            db.upsert_note(user_id, paper_id, {**paper, "figureImages": figure_images}, note)
-    return {"figure_images": figure_images}
+            db.upsert_note(
+                user_id,
+                paper_id,
+                {**paper, "figureImages": figure_images, "tableStructures": table_structures},
+                note,
+            )
+    return {"figure_images": figure_images, "table_structures": table_structures}
 
 
 @router.post("/{paper_id}/ocr")

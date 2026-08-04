@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
-from app.routers.papers import _detect_figure_images
+from app.routers.papers import _detect_figure_images, _detect_table_structures
 
 
 def _png_bytes(width: int = 60, height: int = 60) -> bytes:
@@ -112,6 +112,20 @@ class TestCaptionImageMatching:
         ]
 
 
+class TestTableStructures:
+    def test_extracts_vector_table_rows_and_pdf_location(self):
+        tables = _detect_table_structures(
+            fitz.open(stream=_caption_only_table_pdf(), filetype="pdf")
+        )
+
+        assert len(tables) == 1
+        assert tables[0]["id"] == "table-1-1"
+        assert tables[0]["page"] == 1
+        assert tables[0]["rows"] == [["Condition", "Score"], ["A", "0.92"]]
+        x0, y0, x1, y1 = tables[0]["bbox"]
+        assert x1 > x0 and y1 > y0
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "database_path", str(tmp_path / "test.db"))
@@ -172,6 +186,16 @@ class TestStructureIndexPersistence:
             }
         ]
 
+    def test_extract_response_includes_vector_table_structure(self, client):
+        res = client.post(
+            "/api/papers/extract-text",
+            files={"file": ("table.pdf", _caption_only_table_pdf(), "application/pdf")},
+        )
+        assert res.status_code == 200
+        tables = res.json()["table_structures"]
+        assert tables[0]["page"] == 1
+        assert tables[0]["rows"] == [["Condition", "Score"], ["A", "0.92"]]
+
     def test_structure_index_refresh_updates_existing_note(self, client):
         put = client.put(
             "/api/notes/p-table",
@@ -198,6 +222,7 @@ class TestStructureIndexPersistence:
 
         got = client.get("/api/notes/p-table").json()["paper"]
         assert got["figureImages"] == images
+        assert got["tableStructures"][0]["rows"] == [["Condition", "Score"], ["A", "0.92"]]
 
     def test_caption_ids_roundtrip_via_notes(self, client):
         paper = {
@@ -238,6 +263,9 @@ class TestStructureIndexPersistence:
             "text": "서론 본문",
             "sections": [{"title": "서론", "canonical": "Introduction", "start": 0}],
             "figureImages": [{"page": 2, "bbox": [72.0, 120.0, 520.0, 480.0]}],
+            "tableStructures": [
+                {"id": "table-2-1", "page": 2, "bbox": [72.0, 120.0, 520.0, 480.0], "rows": [["A", "B"]]}
+            ],
         }
         put = client.put("/api/notes/p1", json={"paper": paper, "note": {}})
         assert put.status_code == 200
@@ -245,14 +273,16 @@ class TestStructureIndexPersistence:
         got = client.get("/api/notes/p1").json()["paper"]
         assert got["sections"] == paper["sections"]
         assert got["figureImages"] == paper["figureImages"]
+        assert got["tableStructures"] == paper["tableStructures"]
 
         # 본문 없는 경량 저장(자동 저장 경로)은 구조 인덱스를 덮어쓰지 않는다.
-        light = {**paper, "text": "", "sections": [], "figureImages": []}
+        light = {**paper, "text": "", "sections": [], "figureImages": [], "tableStructures": []}
         client.put("/api/notes/p1", json={"paper": light, "note": {}})
         kept = client.get("/api/notes/p1").json()["paper"]
         assert kept["sections"] == paper["sections"]
         assert kept["figureImages"] == paper["figureImages"]
+        assert kept["tableStructures"] == paper["tableStructures"]
 
         # 목록(경량) 조회에는 구조 인덱스가 포함되지 않는다.
         listed = client.get("/api/notes").json()["library"]["p1"]
-        assert "sections" not in listed and "figureImages" not in listed
+        assert "sections" not in listed and "figureImages" not in listed and "tableStructures" not in listed

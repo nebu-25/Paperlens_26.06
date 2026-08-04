@@ -42,6 +42,7 @@ import type {
   SamplePhase,
   SectionSummary,
   UploadPhase,
+  TableStructure,
 } from '../types';
 import { usePaperBodyNodes } from './usePaperBodyNodes';
 import { useReviewPersistence } from './useReviewPersistence';
@@ -310,8 +311,11 @@ export function useReviewStore({
           headers: authHeaders,
         });
         if (!res.ok) return;
-        const data = (await res.json()) as { figure_images?: FigureImageRef[] };
-        if (cancelled || !Array.isArray(data.figure_images)) return;
+        const data = (await res.json()) as {
+          figure_images?: FigureImageRef[];
+          table_structures?: TableStructure[];
+        };
+        if (cancelled || (!Array.isArray(data.figure_images) && !Array.isArray(data.table_structures))) return;
         setLibrary((lib) => {
           const current = lib[paper.id];
           if (!current) return lib;
@@ -319,7 +323,8 @@ export function useReviewStore({
             ...lib,
             [paper.id]: {
               ...current,
-              figureImages: data.figure_images,
+              figureImages: data.figure_images ?? current.figureImages,
+              tableStructures: data.table_structures ?? current.tableStructures,
             },
           };
         });
@@ -684,6 +689,7 @@ export function useReviewStore({
         doi?: string;
         sections?: DetectedSection[];
         figure_images?: FigureImageRef[];
+        table_structures?: TableStructure[];
         suggested_tags?: string[];
         metadata_source?: string;
         metadata_confidence?: string;
@@ -728,6 +734,7 @@ export function useReviewStore({
               pageCount: data.page_count ?? current.pageCount,
               sections: data.sections ?? current.sections,
               figureImages: data.figure_images ?? current.figureImages,
+              tableStructures: data.table_structures ?? current.tableStructures,
               text: data.text || current.text,
             },
           };
@@ -770,6 +777,7 @@ export function useReviewStore({
           pageCount: data.page_count,
           sections: data.sections ?? [],
           figureImages: data.figure_images ?? [],
+          tableStructures: data.table_structures ?? [],
           text: data.text || '',
         }, suggestedTags, uploadPaperId);
       }
@@ -991,6 +999,7 @@ export function useReviewStore({
           doi?: string;
           sections?: DetectedSection[];
           figure_images?: FigureImageRef[];
+          table_structures?: TableStructure[];
           suggested_tags?: string[];
           metadata_source?: string;
           metadata_confidence?: string;
@@ -1026,6 +1035,7 @@ export function useReviewStore({
           pageCount: data.page_count,
           sections: data.sections ?? [],
           figureImages: data.figure_images ?? [],
+          tableStructures: data.table_structures ?? [],
           text: data.text || '',
         }, suggestedTags, uploadPaperId);
         setUploadNotice({

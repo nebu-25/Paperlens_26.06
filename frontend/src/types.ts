@@ -21,6 +21,14 @@ export interface FigureImageRef {
   captionOnly?: boolean;
 }
 
+// PDF 벡터 표에서 추출한 행/셀 구조. 테두리·병합·글꼴은 PDF 원본이 기준이다.
+export interface TableStructure {
+  id: string;
+  page: number;
+  bbox: number[];
+  rows: string[][];
+}
+
 export type ExtractionQualityStatus = 'good' | 'review' | 'poor' | 'failed';
 export type ExtractionQualitySource = 'auto' | 'user_edited' | 'ocr';
 
@@ -48,6 +56,7 @@ export interface Paper {
   pdfFilename?: string;
   sections?: DetectedSection[];
   figureImages?: FigureImageRef[];
+  tableStructures?: TableStructure[];
   text: string;
 }
 

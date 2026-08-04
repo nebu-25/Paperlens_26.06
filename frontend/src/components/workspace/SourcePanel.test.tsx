@@ -135,4 +135,24 @@ describe('SourcePanel OCR action', () => {
     expect(screen.getByText('OCR 후보 자동 적용 차단')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'OCR 결과 적용' })).toHaveProperty('disabled', true);
   });
+
+  it('shows extracted vector table cells separately from the source text', () => {
+    renderSourcePanel({
+      paper: basePaper({
+        tableStructures: [
+          {
+            id: 'table-1-1',
+            page: 1,
+            bbox: [72, 140, 520, 260],
+            rows: [['Condition', 'Score'], ['A', '0.92']],
+          },
+        ],
+      }),
+    });
+
+    fireEvent.click(screen.getByText('추가 탐색 도구'));
+    expect(screen.getByText('PDF 표 구조 1건')).toBeTruthy();
+    expect(screen.getByText('Condition')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'PDF p.1' })).toBeTruthy();
+  });
 });

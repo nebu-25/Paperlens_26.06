@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS paper_texts (
   text          TEXT NOT NULL DEFAULT '',
   sections      TEXT NOT NULL DEFAULT '[]',
   figure_images TEXT NOT NULL DEFAULT '[]',
+  table_structures TEXT NOT NULL DEFAULT '[]',
   updated_at    TEXT NOT NULL
 );
 
@@ -179,6 +180,10 @@ class SQLiteNotesRepository:
             conn.execute(
                 "ALTER TABLE paper_texts ADD COLUMN figure_images TEXT NOT NULL DEFAULT '[]'"
             )
+        if "table_structures" not in text_columns:
+            conn.execute(
+                "ALTER TABLE paper_texts ADD COLUMN table_structures TEXT NOT NULL DEFAULT '[]'"
+            )
 
     def _migrate_from_legacy_papers(self, conn: sqlite3.Connection) -> None:
         conn.execute(
@@ -247,6 +252,7 @@ class SQLiteNotesRepository:
                 """
                 SELECT m.*, t.text, t.sections AS sections_json,
                        t.figure_images AS figure_images_json,
+                       t.table_structures AS table_structures_json,
                        f.filename AS stored_pdf_filename
                 FROM paper_metadata m
                 LEFT JOIN paper_texts t ON t.paper_id = m.id AND t.user_id = m.user_id
@@ -321,11 +327,12 @@ class SQLiteNotesRepository:
                 # 구조 인덱스(섹션·그림 이미지)는 원문과 함께 추출되므로 원문 저장 시에만 갱신한다.
                 conn.execute(
                     """
-                    INSERT INTO paper_texts (paper_id, user_id, text, sections, figure_images, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO paper_texts (paper_id, user_id, text, sections, figure_images, table_structures, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(paper_id) DO UPDATE SET
                       text=excluded.text, sections=excluded.sections,
-                      figure_images=excluded.figure_images, updated_at=excluded.updated_at
+                      figure_images=excluded.figure_images,
+                      table_structures=excluded.table_structures, updated_at=excluded.updated_at
                     WHERE paper_texts.user_id = excluded.user_id
                     """,
                     (
@@ -334,6 +341,7 @@ class SQLiteNotesRepository:
                         text,
                         json.dumps(paper.get("sections") or [], ensure_ascii=False),
                         json.dumps(paper.get("figureImages") or [], ensure_ascii=False),
+                        json.dumps(paper.get("tableStructures") or [], ensure_ascii=False),
                         now,
                     ),
                 )
@@ -522,9 +530,9 @@ class SQLiteNotesRepository:
             conn.execute(
                 """
                 INSERT OR IGNORE INTO paper_texts (
-                  paper_id, user_id, text, sections, figure_images, updated_at
+                  paper_id, user_id, text, sections, figure_images, table_structures, updated_at
                 )
-                SELECT ? || paper_id, ?, text, sections, figure_images, ?
+                SELECT ? || paper_id, ?, text, sections, figure_images, table_structures, ?
                 FROM paper_texts
                 WHERE user_id = ?
                 """,
@@ -648,6 +656,11 @@ class SQLiteNotesRepository:
                 "figureImages": (
                     json.loads(row["figure_images_json"] or "[]")
                     if "figure_images_json" in keys
+                    else []
+                ),
+                "tableStructures": (
+                    json.loads(row["table_structures_json"] or "[]")
+                    if "table_structures_json" in keys
                     else []
                 ),
             }

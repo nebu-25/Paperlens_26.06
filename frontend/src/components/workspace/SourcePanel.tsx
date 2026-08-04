@@ -1,4 +1,4 @@
-import { FileText, Highlighter, Image, ListTree, PencilLine, ScanSearch, ScanText, Upload } from 'lucide-react';
+import { FileText, Highlighter, Image, ListTree, PencilLine, ScanSearch, ScanText, TableProperties, Upload } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { resolveApiUrl } from '../../constants';
 import { scrollToTextOffset } from '../../lib/domText';
@@ -83,6 +83,7 @@ export function SourcePanel() {
       .sort((a, b) => a[0] - b[0])
       .map(([pageNo, count]) => ({ page: pageNo, count }));
   }, [paper?.figureImages]);
+  const tableStructures = paper?.tableStructures ?? [];
   const openPdfAtPage = (pageNo: number) => {
     setPaperViewMode('pdf');
     setRequestedPdfPage(pageNo);
@@ -482,7 +483,7 @@ export function SourcePanel() {
               </div>
             )}
           </section>
-          {!sourceEditOpen && (figureCaptions.length > 0 || figurePages.length > 0 || paper.text) && (
+        {!sourceEditOpen && (figureCaptions.length > 0 || figurePages.length > 0 || tableStructures.length > 0 || paper.text) && (
             <SectionCard
               title="추가 탐색 도구"
               icon={<ScanSearch size={16} />}
@@ -613,6 +614,52 @@ export function SourcePanel() {
                         );
                       })}
                     </ul>
+                  </div>
+                )}
+                {tableStructures.length > 0 && (
+                  <div className="border-t border-line pt-3">
+                    <div className="mb-2 flex items-center gap-1 text-[11px] font-semibold text-muted">
+                      <TableProperties size={12} />
+                      PDF 표 구조 {tableStructures.length}건
+                    </div>
+                    <div className="space-y-2">
+                      {tableStructures.map((table, index) => (
+                        <details key={table.id} className="border border-line bg-white">
+                          <summary className="cursor-pointer px-2 py-1.5 text-[11px] font-semibold text-ink">
+                            <span>표 {index + 1}</span>
+                            <span className="font-normal text-muted">
+                              {table.rows.length}행 x {Math.max(0, ...table.rows.map((row) => row.length))}열
+                            </span>
+                          </summary>
+                          <div className="overflow-x-auto border-t border-line">
+                            <div className="flex justify-end border-b border-line px-2 py-1">
+                              <button
+                                type="button"
+                                className="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[10px] text-muted hover:border-action hover:text-action disabled:cursor-not-allowed disabled:opacity-50"
+                                disabled={!paperPdfUrl}
+                                onClick={() => openPdfAtPage(table.page)}
+                              >
+                                <FileText size={11} />
+                                PDF p.{table.page}
+                              </button>
+                            </div>
+                            <table className="min-w-full border-collapse text-left text-[11px] text-ink">
+                              <tbody>
+                                {table.rows.map((row, rowIndex) => (
+                                  <tr key={`${table.id}-${rowIndex}`} className="border-b border-line last:border-b-0">
+                                    {row.map((cell, cellIndex) => (
+                                      <td key={cellIndex} className="min-w-24 border-r border-line px-2 py-1 align-top last:border-r-0">
+                                        {cell}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {paper.text && (

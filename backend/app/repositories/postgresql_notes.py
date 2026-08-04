@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS paper_texts (
   text          TEXT NOT NULL DEFAULT '',
   sections      JSONB NOT NULL DEFAULT '[]'::jsonb,
   figure_images JSONB NOT NULL DEFAULT '[]'::jsonb,
+  table_structures JSONB NOT NULL DEFAULT '[]'::jsonb,
   updated_at    TIMESTAMPTZ NOT NULL
 );
 
@@ -144,6 +145,9 @@ class PostgreSQLNotesRepository:
             conn.execute(
                 "ALTER TABLE paper_texts ADD COLUMN IF NOT EXISTS figure_images JSONB NOT NULL DEFAULT '[]'::jsonb"
             )
+            conn.execute(
+                "ALTER TABLE paper_texts ADD COLUMN IF NOT EXISTS table_structures JSONB NOT NULL DEFAULT '[]'::jsonb"
+            )
             self._migrate_from_legacy_papers(conn)
 
     def _migrate_from_legacy_papers(self, conn) -> None:
@@ -217,6 +221,7 @@ class PostgreSQLNotesRepository:
                 """
                 SELECT m.*, t.text, t.sections AS sections_json,
                        t.figure_images AS figure_images_json,
+                       t.table_structures AS table_structures_json,
                        f.filename AS stored_pdf_filename
                 FROM paper_metadata m
                 LEFT JOIN paper_texts t ON t.paper_id = m.id AND t.user_id = m.user_id
@@ -274,11 +279,12 @@ class PostgreSQLNotesRepository:
                 # 구조 인덱스(섹션·그림 이미지)는 원문과 함께 추출되므로 원문 저장 시에만 갱신한다.
                 conn.execute(
                     """
-                    INSERT INTO paper_texts (paper_id, user_id, text, sections, figure_images, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO paper_texts (paper_id, user_id, text, sections, figure_images, table_structures, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT(paper_id) DO UPDATE SET
                       text=excluded.text, sections=excluded.sections,
-                      figure_images=excluded.figure_images, updated_at=excluded.updated_at
+                      figure_images=excluded.figure_images,
+                      table_structures=excluded.table_structures, updated_at=excluded.updated_at
                     WHERE paper_texts.user_id = excluded.user_id
                     """,
                     (
@@ -287,6 +293,7 @@ class PostgreSQLNotesRepository:
                         text,
                         Jsonb(paper.get("sections") or []),
                         Jsonb(paper.get("figureImages") or []),
+                        Jsonb(paper.get("tableStructures") or []),
                         now,
                     ),
                 )
@@ -456,9 +463,9 @@ class PostgreSQLNotesRepository:
             conn.execute(
                 """
                 INSERT INTO paper_texts (
-                  paper_id, user_id, text, sections, figure_images, updated_at
+                  paper_id, user_id, text, sections, figure_images, table_structures, updated_at
                 )
-                SELECT %s || paper_id, %s, text, sections, figure_images, %s
+                SELECT %s || paper_id, %s, text, sections, figure_images, table_structures, %s
                 FROM paper_texts
                 WHERE user_id = %s
                 ON CONFLICT (paper_id) DO NOTHING
@@ -547,6 +554,7 @@ class PostgreSQLNotesRepository:
             {
                 "sections": row.get("sections_json") or [],
                 "figureImages": row.get("figure_images_json") or [],
+                "tableStructures": row.get("table_structures_json") or [],
             }
             if include_text
             else {}

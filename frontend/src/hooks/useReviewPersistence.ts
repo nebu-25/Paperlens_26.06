@@ -325,7 +325,7 @@ export function useReviewPersistence({
         setLibrary((lib) => {
           const cur = lib[id];
           if (!cur || cur.text || !data.paper.text) return lib;
-          // 원문과 함께 캐시된 구조 인덱스(섹션·그림 이미지)도 복원한다 (M5b).
+          // 원문과 함께 캐시된 구조 인덱스(섹션·그림·표)도 복원한다.
           return {
             ...lib,
             [id]: {
@@ -333,6 +333,7 @@ export function useReviewPersistence({
               text: data.paper.text,
               sections: data.paper.sections ?? cur.sections,
               figureImages: data.paper.figureImages ?? cur.figureImages,
+              tableStructures: data.paper.tableStructures ?? cur.tableStructures,
             },
           };
         });
