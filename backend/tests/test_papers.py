@@ -1035,6 +1035,18 @@ class TestOcrReflow:
 
         assert papers._clova_lines_from_response(response)[0]["text"] == "PaperLens OCR"
 
+    def test_clova_korean_word_boxes_preserve_inter_word_space(self):
+        tokens = [
+            {"text": "의료", "x0": 10, "x1": 30, "y0": 10, "y1": 25},
+            {"text": "영상", "x0": 40, "x1": 60, "y0": 10, "y1": 25},
+            {"text": "처리", "x0": 61, "x1": 81, "y0": 10, "y1": 25},
+        ]
+
+        assert papers._join_ocr_tokens(tokens) == "의료 영상처리"
+
+    def test_ocr_line_join_keeps_korean_word_spacing(self):
+        assert papers._join_ocr_lines(["의료 영상", "처리 연구"]) == "의료 영상 처리 연구"
+
     def test_clova_multipart_payload_sends_file_without_base64_data(self):
         body, content_type = papers._clova_multipart_payload(
             b"jpg-bytes", image_format="jpg", image_name="page-1"

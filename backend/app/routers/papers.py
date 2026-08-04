@@ -16,6 +16,7 @@ import uuid
 import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
+from typing import Callable
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import FileResponse, Response as FastAPIResponse
@@ -607,7 +608,11 @@ def _detect_running_lines(pages_lines: list[list[dict[str, object]]], page_count
     return {norm for norm, count in counts.items() if count >= threshold}
 
 
-def _reflow_lines(lines: list[dict[str, object]]) -> list[str]:
+def _reflow_lines(
+    lines: list[dict[str, object]],
+    *,
+    join_lines: Callable[[list[str]], str] = _join_lines,
+) -> list[str]:
     if not lines:
         return []
 
@@ -633,12 +638,12 @@ def _reflow_lines(lines: list[dict[str, object]]) -> list[str]:
             small_indent = line_h * 0.4 <= indent <= line_h * 2.0
             start_new = big_gap or heading or small_indent
         if start_new and current:
-            paragraphs.append(_join_lines(current))
+            paragraphs.append(join_lines(current))
             current = []
         current.append(str(line["text"]))
         prev = line
     if current:
-        paragraphs.append(_join_lines(current))
+        paragraphs.append(join_lines(current))
     return [_tidy_spacing(p) for p in paragraphs if p]
 
 
@@ -1285,17 +1290,44 @@ def _clova_token_from_field(field: dict[str, object]) -> dict[str, object] | Non
 
 def _join_ocr_tokens(tokens: list[dict[str, object]]) -> str:
     out = ""
-    for token in tokens:
+    for index, token in enumerate(tokens):
         text = str(token["text"]).strip()
         if not text:
             continue
         if not out:
             out = text
             continue
+        previous = tokens[index - 1]
         if _is_cjk(out[-1]) and _is_cjk(text[0]):
+            previous_text = str(previous["text"]).strip()
+            previous_width = (float(previous["x1"]) - float(previous["x0"])) / max(
+                1, len(previous_text)
+            )
+            current_width = (float(token["x1"]) - float(token["x0"])) / max(1, len(text))
+            gap = float(token["x0"]) - float(previous["x1"])
+            # CLOVA fields preserve word boxes. A gap around half a glyph width is
+            # an inter-word space; touching boxes are a single split word.
+            out += " " if gap >= max(1.0, min(previous_width, current_width) * 0.45) else ""
             out += text
         else:
             out += f" {text}"
+    return _tidy_spacing(out)
+
+
+def _join_ocr_lines(parts: list[str]) -> str:
+    """OCR line wraps do not reliably preserve Korean word-boundary whitespace."""
+    out = ""
+    for raw in parts:
+        line = raw.strip()
+        if not line:
+            continue
+        if not out:
+            out = line
+            continue
+        if len(out) >= 2 and out[-1] == "-" and out[-2].isalpha() and line[0].islower():
+            out = out[:-1] + line
+        else:
+            out += f" {line}"
     return _tidy_spacing(out)
 
 
@@ -1497,7 +1529,7 @@ def _reflow_ocr_page_lines(
 ) -> list[str]:
     paragraphs: list[str] = []
     for group in _split_page_columns(lines, page_width, layout_hint=layout_hint):
-        paragraphs.extend(_reflow_lines(group))
+        paragraphs.extend(_reflow_lines(group, join_lines=_join_ocr_lines))
     return paragraphs
 
 
