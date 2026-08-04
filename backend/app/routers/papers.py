@@ -15,6 +15,7 @@ import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
 from collections import Counter
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Callable
 
@@ -1331,6 +1332,40 @@ def _join_ocr_lines(parts: list[str]) -> str:
     return _tidy_spacing(out)
 
 
+def _restore_ocr_spacing(text: str, reference: str) -> str:
+    """Reuse whitespace from a matching PDF text line when OCR omits word gaps."""
+    ocr_compact = "".join(text.split())
+    reference_compact = "".join(reference.split())
+    if len(ocr_compact) < 8 or len(reference_compact) < 8:
+        return text
+    similarity = SequenceMatcher(None, reference_compact, ocr_compact, autojunk=False).ratio()
+    if similarity < 0.6:
+        return text
+
+    boundaries: list[int] = []
+    count = 0
+    pending_space = False
+    for char in reference:
+        if char.isspace():
+            pending_space = True
+            continue
+        if pending_space and 0 < count < len(reference_compact):
+            boundaries.append(count)
+        count += 1
+        pending_space = False
+
+    mapped_boundaries = {
+        min(len(ocr_compact) - 1, max(1, round(boundary * len(ocr_compact) / len(reference_compact))))
+        for boundary in boundaries
+    }
+    return _tidy_spacing(
+        "".join(
+            (" " if index in mapped_boundaries else "") + char
+            for index, char in enumerate(ocr_compact)
+        )
+    )
+
+
 def _split_ocr_token_row(row: list[dict[str, object]], line_h: float) -> list[list[dict[str, object]]]:
     sorted_row = sorted(row, key=lambda item: float(item["x0"]))
     groups: list[list[dict[str, object]]] = []
@@ -1479,6 +1514,7 @@ def _pdf_guided_ocr_lines(
     guided: list[dict[str, object]] = []
     for line, line_tokens in zip(ordered_source, assigned, strict=True):
         text = _join_ocr_tokens(sorted(line_tokens, key=lambda token: float(token["x0"])))
+        text = _restore_ocr_spacing(text, str(line["text"]))
         if text:
             guided.append({**line, "text": text})
     return guided

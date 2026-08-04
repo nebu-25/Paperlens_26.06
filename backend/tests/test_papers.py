@@ -1083,6 +1083,15 @@ class TestOcrReflow:
     def test_ocr_line_join_keeps_korean_word_spacing(self):
         assert papers._join_ocr_lines(["의료 영상", "처리 연구"]) == "의료 영상 처리 연구"
 
+    def test_pdf_reference_restores_missing_ocr_word_spaces(self):
+        assert (
+            papers._restore_ocr_spacing(
+                "DICOM영상과다양한형식의영상비교",
+                "DICOM 영상과 다양한 형식의 영상 비교",
+            )
+            == "DICOM 영상과 다양한 형식의 영상 비교"
+        )
+
     def test_clova_multipart_payload_sends_file_without_base64_data(self):
         body, content_type = papers._clova_multipart_payload(
             b"jpg-bytes", image_format="jpg", image_name="page-1"
