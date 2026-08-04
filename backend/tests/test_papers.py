@@ -1108,7 +1108,7 @@ class TestOcrReflow:
         class _Page:
             rect = _Rect()
 
-        assert papers._ocr_page_render_dpi(_Page(), 150) == 103
+        assert papers._ocr_page_render_dpi(_Page(), 150) == 150
 
     def test_ocr_render_dpi_caps_standard_pages_at_120_dpi(self):
         class _Rect:
@@ -1118,7 +1118,7 @@ class TestOcrReflow:
         class _Page:
             rect = _Rect()
 
-        assert papers._ocr_page_render_dpi(_Page(), 120) == 103
+        assert papers._ocr_page_render_dpi(_Page(), 120) == 120
 
     def test_ocr_render_dpi_keeps_standard_pages_at_90_dpi(self):
         class _Rect:
@@ -1129,6 +1129,24 @@ class TestOcrReflow:
             rect = _Rect()
 
         assert papers._ocr_page_render_dpi(_Page(), 90) == 90
+
+    def test_rapidocr_keeps_the_lower_render_cap(self):
+        class _Rect:
+            width = 612
+            height = 792
+
+        class _Page:
+            rect = _Rect()
+
+        assert (
+            papers._ocr_page_render_dpi(
+                _Page(),
+                150,
+                max_pixels=papers.RAPIDOCR_MAX_OCR_RENDER_PIXELS,
+                min_dpi=papers.RAPIDOCR_MIN_OCR_RENDER_DPI,
+            )
+            == 103
+        )
 
     def test_ocr_pixmap_uses_rgb_without_alpha(self):
         calls = []

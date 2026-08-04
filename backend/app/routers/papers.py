@@ -1068,8 +1068,15 @@ def _prefer_ocr_text(original: str, ocr_text: str, *, scanned: bool) -> bool:
 
 
 # --- OCR fallback (opt-in, NAVER CLOVA OCR API + RapidOCR) ----------------
-MAX_OCR_RENDER_PIXELS = 1_000_000
-MIN_OCR_RENDER_DPI = 72
+# CLOVA sends a compact JPEG to an external API, so it can retain enough detail
+# for Korean characters and formulas. RapidOCR loads an ONNX model locally and
+# must keep the lower cap used on small Render instances.
+CLOVA_MAX_OCR_RENDER_PIXELS = 3_000_000
+CLOVA_MIN_OCR_RENDER_DPI = 90
+RAPIDOCR_MAX_OCR_RENDER_PIXELS = 1_000_000
+RAPIDOCR_MIN_OCR_RENDER_DPI = 72
+MAX_OCR_RENDER_PIXELS = CLOVA_MAX_OCR_RENDER_PIXELS
+MIN_OCR_RENDER_DPI = CLOVA_MIN_OCR_RENDER_DPI
 RAPIDOCR_PROCESS_TIMEOUT_SEC = 60
 CLOVA_FALLBACK_TIMEOUT_SEC = 15
 CLOVA_IMAGE_FORMAT = "jpg"
@@ -1164,7 +1171,13 @@ def _clova_request_timeout_sec() -> int:
     return timeout
 
 
-def _ocr_page_render_dpi(page, requested_dpi: int) -> int:
+def _ocr_page_render_dpi(
+    page,
+    requested_dpi: int,
+    *,
+    max_pixels: int = MAX_OCR_RENDER_PIXELS,
+    min_dpi: int = MIN_OCR_RENDER_DPI,
+) -> int:
     dpi = max(72, int(requested_dpi))
     try:
         width_pt = max(1.0, float(page.rect.width))
@@ -1172,14 +1185,25 @@ def _ocr_page_render_dpi(page, requested_dpi: int) -> int:
     except Exception:
         return dpi
     estimated_pixels = (width_pt / 72 * dpi) * (height_pt / 72 * dpi)
-    if estimated_pixels <= MAX_OCR_RENDER_PIXELS:
+    if estimated_pixels <= max_pixels:
         return dpi
-    scaled = int(dpi * math.sqrt(MAX_OCR_RENDER_PIXELS / estimated_pixels))
-    return max(MIN_OCR_RENDER_DPI, min(dpi, scaled))
+    scaled = int(dpi * math.sqrt(max_pixels / estimated_pixels))
+    return max(min_dpi, min(dpi, scaled))
 
 
-def _ocr_page_pixmap(page, *, dpi: int):
-    render_dpi = _ocr_page_render_dpi(page, dpi)
+def _ocr_page_pixmap(
+    page,
+    *,
+    dpi: int,
+    max_pixels: int = MAX_OCR_RENDER_PIXELS,
+    min_dpi: int = MIN_OCR_RENDER_DPI,
+):
+    render_dpi = _ocr_page_render_dpi(
+        page,
+        dpi,
+        max_pixels=max_pixels,
+        min_dpi=min_dpi,
+    )
     try:
         import fitz
 
@@ -1481,7 +1505,12 @@ def _ocr_text_with_clova(document, *, dpi: int, page_indexes: list[int]) -> tupl
     paragraphs: list[str] = []
     for page_index in page_indexes:
         page = document[page_index]
-        pix = _ocr_page_pixmap(page, dpi=dpi)
+        pix = _ocr_page_pixmap(
+            page,
+            dpi=dpi,
+            max_pixels=CLOVA_MAX_OCR_RENDER_PIXELS,
+            min_dpi=CLOVA_MIN_OCR_RENDER_DPI,
+        )
         image_bytes = None
         response = None
         lines = None
@@ -1508,7 +1537,12 @@ def _ocr_text_with_rapidocr(document, *, dpi: int, page_indexes: list[int]) -> t
     paragraphs: list[str] = []
     for page_index in page_indexes:
         page = document[page_index]
-        pix = _ocr_page_pixmap(page, dpi=dpi)
+        pix = _ocr_page_pixmap(
+            page,
+            dpi=dpi,
+            max_pixels=RAPIDOCR_MAX_OCR_RENDER_PIXELS,
+            min_dpi=RAPIDOCR_MIN_OCR_RENDER_DPI,
+        )
         image_bytes = None
         image_path = ""
         lines = None
