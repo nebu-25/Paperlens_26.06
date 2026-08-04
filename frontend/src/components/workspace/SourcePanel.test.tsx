@@ -102,7 +102,7 @@ describe('SourcePanel OCR action', () => {
       ocrCandidate: {
         paperId: 'paper-1',
         baseText: '기본 원문',
-        text: 'OCR 후보',
+        text: 'OCR 후보 본문',
         pageCount: 1,
         processedPages: 1,
         canApply: true,
@@ -112,7 +112,7 @@ describe('SourcePanel OCR action', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'OCR 비교' }));
     expect(screen.getByText('기본 추출 원문')).toBeTruthy();
-    expect(screen.getByText('OCR 후보')).toBeTruthy();
+    expect(screen.getByText('OCR 후보 본문')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'OCR 결과 적용' }));
     expect(applyOcrCandidate).toHaveBeenCalledTimes(1);
