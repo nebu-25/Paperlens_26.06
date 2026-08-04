@@ -976,6 +976,30 @@ class TestOcrReflow:
         text = "\n".join(p for g in groups for p in papers._reflow_lines(g))
         assert text.index("왼쪽0") < text.index("오른쪽0")
 
+    def test_ocr_layout_hint_keeps_two_columns_separate(self):
+        lines = []
+        for index in range(4):
+            y = 100 + index * 20
+            lines.extend(
+                [
+                    {"text": f"left-{index}", "x0": 10, "x1": 90, "y0": y, "y1": y + 15, "size": 15},
+                    {"text": f"right-{index}", "x0": 210, "x1": 290, "y0": y, "y1": y + 15, "size": 15},
+                ]
+            )
+
+        paragraphs = papers._reflow_ocr_page_lines(
+            lines,
+            300,
+            layout_hint={
+                "kind": "two_column",
+                "split_x": 150,
+                "first_column_y": 100,
+                "body_pair_start_y": 100,
+            },
+        )
+        text = "\n".join(paragraphs)
+        assert text.index("left-0") < text.index("right-0")
+
     def test_clova_word_fields_join_into_line(self):
         response = {
             "images": [

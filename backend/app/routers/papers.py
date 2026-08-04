@@ -529,7 +529,12 @@ def _detect_column_layout(
     }
 
 
-def _split_page_columns(lines: list[dict[str, object]], page_width: float) -> list[list[dict[str, object]]]:
+def _split_page_columns(
+    lines: list[dict[str, object]],
+    page_width: float,
+    *,
+    layout_hint: dict[str, object] | None = None,
+) -> list[list[dict[str, object]]]:
     """한 페이지의 줄들을 읽기 순서 단위로 나눈다.
 
     PDF 추출 좌표를 y→x로 단순 정렬하면 2단 논문에서 왼쪽/오른쪽 컬럼의 같은 높이 줄이
@@ -539,7 +544,7 @@ def _split_page_columns(lines: list[dict[str, object]], page_width: float) -> li
     if not lines or page_width <= 0:
         return [lines]
 
-    layout = _detect_column_layout(lines, page_width)
+    layout = layout_hint or _detect_column_layout(lines, page_width)
     if not layout:
         return [lines]
 
@@ -1484,11 +1489,33 @@ def _rapidocr_lines_from_result(result) -> list[dict[str, object]]:
     return lines
 
 
-def _reflow_ocr_page_lines(lines: list[dict[str, object]], page_width: float) -> list[str]:
+def _reflow_ocr_page_lines(
+    lines: list[dict[str, object]],
+    page_width: float,
+    *,
+    layout_hint: dict[str, object] | None = None,
+) -> list[str]:
     paragraphs: list[str] = []
-    for group in _split_page_columns(lines, page_width):
+    for group in _split_page_columns(lines, page_width, layout_hint=layout_hint):
         paragraphs.extend(_reflow_lines(group))
     return paragraphs
+
+
+def _scaled_ocr_layout_hint(page, rendered_width: float) -> dict[str, object] | None:
+    """Use readable PDF coordinates to stabilize OCR column ordering when available."""
+    source_width = float(getattr(getattr(page, "rect", None), "width", 0.0))
+    if source_width <= 0 or rendered_width <= 0:
+        return None
+    layout = _detect_column_layout(_page_text_lines(page), source_width)
+    if not layout:
+        return None
+    scale = rendered_width / source_width
+    return {
+        "kind": layout["kind"],
+        "split_x": float(layout["split_x"]) * scale,
+        "first_column_y": float(layout["first_column_y"]) * scale,
+        "body_pair_start_y": float(layout["body_pair_start_y"]) * scale,
+    }
 
 
 def _ocr_page_indexes(document, *, start_page: int = 1, page_count: int | None = None) -> list[int]:
@@ -1523,7 +1550,13 @@ def _ocr_text_with_clova(document, *, dpi: int, page_indexes: list[int]) -> tupl
             )
             lines = _clova_lines_from_response(response)
             if lines:
-                paragraphs.extend(_reflow_ocr_page_lines(lines, float(pix.width)))
+                paragraphs.extend(
+                    _reflow_ocr_page_lines(
+                        lines,
+                        float(pix.width),
+                        layout_hint=_scaled_ocr_layout_hint(page, float(pix.width)),
+                    )
+                )
         finally:
             image_bytes = None
             response = None
