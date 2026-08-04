@@ -6,14 +6,16 @@
 
 다음 세션에서는 아래 순서로 진행한다.
 
-1. 이번 모바일 랜딩 nav 변경 배포 확인: Pages deploy, Production smoke, 최신 Pages bundle asset, 모바일 메뉴 열기/닫기와 섹션 링크 동작을 운영에서 확인한다.
-2. 운영 브라우저 로그인 smoke: 로그인 후 `/api/notes`, skeleton 로딩, 샘플 PDF, 샘플 PDF 재클릭 중복 방지, PDF 원본 blob preview, 로그아웃 후 `/service_home/` 접근을 확인한다.
-3. PDF 추출 개선 운영 확인: 한국어/2단/혼합형 PDF 샘플을 다시 업로드해 추출 품질 경고, 섹션 아웃라인, 원문 보존, 직접 편집 저장 복원을 확인한다. 특히 페이지 경계에서 끊긴 미완성 문단이 다음 페이지 첫 문단과 자연스럽게 이어지는지 확인한다.
-4. 데모 설문 수동 QA: 리뷰 노트/라이브러리/연구 질문 내보내기 후 설문 모달, 로그아웃 반복 노출, 세션 숨김, 참여 완료 차단을 확인한다.
-5. 번역 보기 UX 설계: 원문 하이라이트 영역은 `notranslate`로 유지하고, 별도 번역 보기 패널/탭 설계를 검토한다.
-6. 스키마 분리 운영 검증: 운영 PostgreSQL 백업 후 분리 테이블, 기존 노트 조회, 원문 lazy load, PDF 원본 보기, 자동 저장 payload 축소를 확인한다.
+1. 수식 처리 2단계: PDF 페이지의 수식 후보 영역과 텍스트 추출 결과를 분리해 보관할 데이터 계약을 설계한다. PDF 원본을 수식의 시각적 기준으로 유지하고, 전용 수식 OCR 도입 전에는 일반 OCR 결과를 수식 복원으로 표시하지 않는다.
+2. 대표 corpus(`시연확정.pdf` 포함 3~5개)로 PDF 원본, 평문, 표 구조, OCR 후보를 나란히 점검한다. 제목/초록 순서, 2단 순서, 표 셀, 수식 위치, 문단 경계를 기록한다.
+3. 표 구조 1단계 운영 확인: 새 PDF 업로드와 기존 저장 PDF 재열기에서 `PDF 표 구조`가 표시되고 해당 `PDF p.N` 이동이 동작하는지 확인한다.
+4. 운영 브라우저 로그인 smoke와 배포 상태를 확인한다.
 
 최근 완료:
+
+- 2026-08-04 세션에서 OCR의 역할을 기본 PDF 추출문 보정 후보로 재정의했다. 기본 추출은 자동 교체하지 않고 `OCR 비교` 탭에서만 나란히 보여 주며, 사용자가 명시적으로 적용할 때만 저장한다. 처리 페이지 누락, 원문 대비 80% 미만 길이, 낮은 품질 점수, 구조 지표 저하가 있으면 적용을 막는다. CLOVA OCR 연결·요청 형식·Secret Key 설정은 확인했으나, `시연확정.pdf`에서 제목/초록 순서·한글 어절·2단 구조를 안정적으로 유지하지 못해 OCR은 원문 대체 수단이 아니다.
+- 2026-08-04 세션에서 PDF 표 구조 1단계를 완료했다. PyMuPDF가 인식한 벡터 표를 `page`, `bbox`, `rows`로 저장하고 원문 패널 `PDF 표 구조`에서 셀 값을 확인하거나 PDF 페이지로 이동할 수 있다. SQLite/PostgreSQL 저장소, 기존 PDF 구조 인덱스 갱신, 데모 복사, lazy-load 복원 경로까지 반영했다. 테두리·병합 셀·글꼴·스캔 표는 보존하지 않으며 PDF 원본이 시각적 기준이다. 커밋 `c837f16`, 저장 요청 모델 보완 `945d556`; CI run `30919673927`의 backend pytest와 frontend eslint/vitest/build가 성공했다.
+- PDF 추출의 평문 이점은 검색·하이라이트·요약·읽기 순서 보정에 한정된다. 수식 객체, 표 서식, 글꼴과 정확한 배치는 보존하지 않는다. PDF 탭이 시각적 원문이며, 평문/표 구조/OCR 후보는 이를 대체하지 않는 보조 데이터다.
 
 - 2026-08-03 세션에서 운영 배포 상태를 확인함. 공개 smoke 통과, 최신 Actions Production smoke run `30702980569`가 인증 notes와 demo session notes check 포함 통과, Pages 루트/`service_home`/asset 200, Render diagnostics에서 Supabase Auth/PostgreSQL/OCR ready 확인. AI는 enabled이나 Redis/비용 한도/runbook 설정 경고로 `ready: false`.
 - 2026-08-03 세션에서 PDF 추출 1차 검증을 수행함. `test_pdf_extraction_regression.py` 3 passed, `test_papers.py` 115 passed, 관련 ruff 통과. 로컬 API에서 `2604.04977v1.pdf` 업로드와 arXiv PDF URL 등록 모두 5페이지/본문 30591자/quality `good`/100/figure refs 3개로 확인했고, 저장 PDF 재조회도 200 `application/pdf`로 통과.
