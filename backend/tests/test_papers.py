@@ -1018,6 +1018,7 @@ class TestOcrReflow:
 
         assert content_type.startswith("multipart/form-data; boundary=paperlens-")
         assert b'name="message"' in body
+        assert b"Content-Type: application/json" not in body
         assert b'name="file"; filename="page-1.jpg"' in body
         assert b'"format": "jpg"' in body
         assert b'"data"' not in body

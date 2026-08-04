@@ -1137,7 +1137,7 @@ def _clova_multipart_payload(
         [
             f"--{boundary}\r\n".encode("ascii"),
             b'Content-Disposition: form-data; name="message"\r\n',
-            b"Content-Type: application/json; charset=utf-8\r\n\r\n",
+            b"\r\n",
             message,
             b"\r\n",
             f"--{boundary}\r\n".encode("ascii"),
