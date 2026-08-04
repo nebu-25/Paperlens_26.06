@@ -2,6 +2,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Hand,
+  BoxSelect,
   Maximize2,
   MousePointer2,
   RotateCcw,
@@ -22,7 +23,7 @@ import type { TextLayer } from 'pdfjs-dist/types/src/display/text_layer';
 import { HIGHLIGHT_COLORS } from '../../constants';
 import { authHeaders } from '../../lib/authHeaders';
 import { isChunkLoadError } from '../../lib/chunkLoad';
-import type { Highlight, HighlightColor } from '../../types';
+import type { Highlight, HighlightColor, PdfAreaAnnotationKind } from '../../types';
 import { bandIndexOf, isHorizontalRect, mergeColumnBands, type XSpan } from './pdfHighlightColumns';
 import {
   AddTermButton,
@@ -43,6 +44,8 @@ type PdfPendingHighlight = {
   page: number;
   rects: { x: number; y: number; width: number; height: number }[];
   text: string;
+  annotationKind?: PdfAreaAnnotationKind;
+  memo?: string;
   x: number;
   y: number;
 };
@@ -50,10 +53,18 @@ type PdfActiveHighlight = {
   id: string;
   color: HighlightColor;
   text: string;
+  annotationKind?: PdfAreaAnnotationKind;
+  memo?: string;
   x: number;
   y: number;
 };
-type PdfInteractionMode = 'select' | 'pan';
+type PdfInteractionMode = 'select' | 'area' | 'pan';
+type PdfAreaDraft = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 type ClientRectLike = {
   left: number;
   top: number;
@@ -82,6 +93,8 @@ interface PdfViewerProps {
     page: number;
     rects: { x: number; y: number; width: number; height: number }[];
     text: string;
+    annotationKind?: PdfAreaAnnotationKind;
+    memo?: string;
   }) => void;
   onRemoveHighlight: (id: string) => void;
   onRemoveHighlights?: (ids: string[]) => void;
@@ -132,6 +145,23 @@ function rectToPdfRect(rect: ClientRectLike, pageLayer: HTMLElement, scale: numb
     y: (clipped.top - pageBounds.top) / scale,
     width: clipped.width / scale,
     height: clipped.height / scale,
+  };
+}
+
+function pointerToPdfPoint(event: PointerEvent<HTMLDivElement>, pageLayer: HTMLElement, scale: number) {
+  const bounds = pageLayer.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(bounds.width, event.clientX - bounds.left)) / scale,
+    y: Math.max(0, Math.min(bounds.height, event.clientY - bounds.top)) / scale,
+  };
+}
+
+function areaFromPoints(start: { x: number; y: number }, end: { x: number; y: number }): PdfAreaDraft {
+  return {
+    x: Math.min(start.x, end.x),
+    y: Math.min(start.y, end.y),
+    width: Math.abs(end.x - start.x),
+    height: Math.abs(end.y - start.y),
   };
 }
 
@@ -277,6 +307,7 @@ export function PdfViewer({
   const textLayerRef = useRef<HTMLDivElement | null>(null);
   const panStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
   const panningRef = useRef(false);
+  const areaStartRef = useRef<{ x: number; y: number } | null>(null);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = useState<PDFPageProxy | null>(null);
   const [status, setStatus] = useState<PdfViewerStatus>('idle');
@@ -288,6 +319,7 @@ export function PdfViewer({
   const [interactionMode, setInteractionMode] = useState<PdfInteractionMode>('select');
   const [panning, setPanning] = useState(false);
   const [pendingHighlight, setPendingHighlight] = useState<PdfPendingHighlight | null>(null);
+  const [areaDraft, setAreaDraft] = useState<PdfAreaDraft | null>(null);
   const [activeHighlight, setActiveHighlight] = useState<PdfActiveHighlight | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -307,6 +339,7 @@ export function PdfViewer({
       setPageCount(0);
       setPageSize(null);
       setPendingHighlight(null);
+      setAreaDraft(null);
       setActiveHighlight(null);
       setStatus('idle');
       setMessage('');
@@ -320,6 +353,7 @@ export function PdfViewer({
       setPageCount(0);
       setPageSize(null);
       setPendingHighlight(null);
+      setAreaDraft(null);
       setActiveHighlight(null);
       setStatus('error');
       setMessage('로그인 세션을 확인한 뒤 PDF 원본을 불러옵니다. 잠시 후에도 열리지 않으면 페이지를 새로고침해 주세요.');
@@ -337,6 +371,7 @@ export function PdfViewer({
     setPageCount(0);
     setPageSize(null);
     setPendingHighlight(null);
+    setAreaDraft(null);
     setActiveHighlight(null);
 
     (async () => {
@@ -481,6 +516,8 @@ export function PdfViewer({
 
   useEffect(() => {
     setPendingHighlight(null);
+    setAreaDraft(null);
+    areaStartRef.current = null;
     setActiveHighlight(null);
     window.getSelection()?.removeAllRanges();
   }, [pageNumber, url]);
@@ -491,6 +528,7 @@ export function PdfViewer({
 
   const clearPendingHighlight = () => {
     setPendingHighlight(null);
+    setAreaDraft(null);
     window.getSelection()?.removeAllRanges();
   };
 
@@ -523,6 +561,19 @@ export function PdfViewer({
     if (event.pointerType === 'touch' || status !== 'ready') return;
     const pageLayer = pageLayerRef.current;
     const isOnPage = Boolean(pageLayer && pageLayer.contains(event.target as Node));
+    if (interactionMode === 'area' && event.button === 0 && pageLayer && isOnPage) {
+      const point = pointerToPdfPoint(event, pageLayer, scale);
+      const scrollEl = scrollRef.current;
+      if (!scrollEl) return;
+      event.preventDefault();
+      scrollEl.setPointerCapture(event.pointerId);
+      areaStartRef.current = point;
+      setAreaDraft({ ...point, width: 0, height: 0 });
+      setPendingHighlight(null);
+      setActiveHighlight(null);
+      window.getSelection()?.removeAllRanges();
+      return;
+    }
     const canPan =
       interactionMode === 'pan'
       || event.altKey
@@ -544,6 +595,13 @@ export function PdfViewer({
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const areaStart = areaStartRef.current;
+    const pageLayer = pageLayerRef.current;
+    if (areaStart && pageLayer) {
+      event.preventDefault();
+      setAreaDraft(areaFromPoints(areaStart, pointerToPdfPoint(event, pageLayer, scale)));
+      return;
+    }
     if (!panningRef.current) return;
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
@@ -556,6 +614,26 @@ export function PdfViewer({
   const stopPanning = (event?: PointerEvent<HTMLDivElement>) => {
     if (event && scrollRef.current?.hasPointerCapture(event.pointerId)) {
       scrollRef.current.releasePointerCapture(event.pointerId);
+    }
+    const areaStart = areaStartRef.current;
+    const pageLayer = pageLayerRef.current;
+    if (areaStart && event && pageLayer) {
+      const rect = areaFromPoints(areaStart, pointerToPdfPoint(event, pageLayer, scale));
+      areaStartRef.current = null;
+      setAreaDraft(null);
+      if (rect.width >= 8 / scale && rect.height >= 8 / scale) {
+        setPendingHighlight({
+          color: highlightColor,
+          page: pageNumber,
+          rects: [rect],
+          text: 'PDF 영역 메모',
+          annotationKind: 'general',
+          memo: '',
+          x: event.clientX,
+          y: event.clientY,
+        });
+      }
+      return;
     }
     panningRef.current = false;
     setPanning(false);
@@ -612,6 +690,8 @@ export function PdfViewer({
       page: pendingHighlight.page,
       rects: pendingHighlight.rects,
       text: pendingHighlight.text,
+      annotationKind: pendingHighlight.annotationKind,
+      memo: pendingHighlight.memo,
     });
     clearPendingHighlight();
   };
@@ -619,6 +699,10 @@ export function PdfViewer({
   const selectPendingColor = (color: HighlightColor) => {
     onSelectHighlightColor(color);
     setPendingHighlight((current) => (current ? { ...current, color } : current));
+  };
+
+  const updatePendingArea = (changes: Pick<PdfPendingHighlight, 'annotationKind' | 'memo'>) => {
+    setPendingHighlight((current) => (current ? { ...current, ...changes } : current));
   };
 
   const addPendingTerm = () => {
@@ -636,6 +720,8 @@ export function PdfViewer({
       id: highlight.id,
       color: highlight.color ?? 'yellow',
       text: highlight.text,
+      annotationKind: highlight.annotationKind,
+      memo: highlight.memo,
       x: event.clientX,
       y: event.clientY,
     });
@@ -651,6 +737,7 @@ export function PdfViewer({
   const canGoNext = pageCount > 0 && pageNumber < pageCount;
   const scalePercent = `${Math.round(scale * 100)}%`;
   const isPanMode = interactionMode === 'pan';
+  const isAreaMode = interactionMode === 'area';
   const pageStyle = pageSize
     ? {
         width: `${pageSize.width}px`,
@@ -690,7 +777,7 @@ export function PdfViewer({
             <button
               type="button"
               className={`inline-flex h-7 w-7 items-center justify-center rounded ${
-                interactionMode === 'select' ? 'bg-action text-white' : 'text-muted hover:bg-paper'
+              interactionMode === 'select' ? 'bg-action text-white' : 'text-muted hover:bg-paper'
               }`}
               aria-label="텍스트 선택 모드"
               title="텍스트 선택 모드"
@@ -698,6 +785,21 @@ export function PdfViewer({
               onClick={() => setInteractionMode('select')}
             >
               <MousePointer2 size={14} />
+            </button>
+            <button
+              type="button"
+              className={`inline-flex h-7 w-7 items-center justify-center rounded ${
+                isAreaMode ? 'bg-action text-white' : 'text-muted hover:bg-paper'
+              }`}
+              aria-label="영역 메모 모드"
+              title="영역 메모 모드: 표·그림·수식 영역을 드래그"
+              aria-pressed={isAreaMode}
+              onClick={() => {
+                clearPendingHighlight();
+                setInteractionMode('area');
+              }}
+            >
+              <BoxSelect size={14} />
             </button>
             <button
               type="button"
@@ -790,7 +892,7 @@ export function PdfViewer({
         className={`h-[calc(100vh-21rem)] min-h-[420px] overflow-auto rounded border border-line bg-paper p-2 sm:min-h-[560px] sm:p-3 ${
           status === 'ready' && (isPanMode || panning) ? (panning ? 'cursor-grabbing select-none' : 'cursor-grab') : ''
         }`}
-        title="텍스트 선택 모드: 드래그로 선택, 이동 모드: 드래그로 화면 이동"
+        title="텍스트 선택: 드래그로 선택, 영역 메모: 표·그림·수식 영역 드래그, 이동: 드래그로 화면 이동"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={stopPanning}
@@ -814,7 +916,7 @@ export function PdfViewer({
               />
               <div
                 ref={textLayerRef}
-                className={`pdf-text-layer absolute inset-0 ${isPanMode ? 'pdf-text-layer--pan' : ''}`}
+                className={`pdf-text-layer absolute inset-0 ${isPanMode ? 'pdf-text-layer--pan' : ''} ${isAreaMode ? 'pointer-events-none' : ''}`}
                 data-pdf-text-layer
                 // pdfjs 는 글자 위치/크기를 --total-scale-factor 로 계산한다. 현재 배율을
                 // 넘겨주지 않으면 선택 영역이 본문 글자와 어긋난다.
@@ -844,6 +946,17 @@ export function PdfViewer({
                     }}
                   />
                 ))}
+                {areaDraft && (
+                  <div
+                    className="absolute border border-dashed border-action bg-action/15"
+                    style={{
+                      left: `${areaDraft.x * scale}px`,
+                      top: `${areaDraft.y * scale}px`,
+                      width: `${areaDraft.width * scale}px`,
+                      height: `${areaDraft.height * scale}px`,
+                    }}
+                  />
+                )}
                 {pageHighlights.map((highlight) =>
                   highlight.pdf?.rects.map((rect, index) => (
                     <div
@@ -881,13 +994,12 @@ export function PdfViewer({
             left: Math.max(8, Math.min(pendingHighlight.x, window.innerWidth - 448)),
             top: Math.max(8, Math.min(pendingHighlight.y + 12, window.innerHeight - 128)),
           }}
-          onMouseDown={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
+          onMouseDown={(event) => event.stopPropagation()}
         >
           <div className="mb-2 flex items-center justify-between gap-3">
-            <span className="text-xs font-semibold text-ink">PDF 하이라이트</span>
+            <span className="text-xs font-semibold text-ink">
+              {pendingHighlight.annotationKind ? 'PDF 영역 메모' : 'PDF 하이라이트'}
+            </span>
             <button
               type="button"
               className="inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:bg-paper hover:text-ink"
@@ -900,12 +1012,40 @@ export function PdfViewer({
           </div>
           <div className="flex flex-wrap items-center gap-1">
             <HighlightColorSwatches selected={pendingHighlight.color} onSelect={selectPendingColor} />
-            <HighlightButton onClick={applyPendingHighlight} />
+            {pendingHighlight.annotationKind ? (
+              <>
+                <select
+                  aria-label="영역 종류"
+                  className="h-7 rounded border border-line bg-white px-2 text-xs text-muted outline-none focus:border-action"
+                  value={pendingHighlight.annotationKind}
+                  onChange={(event) => updatePendingArea({ annotationKind: event.target.value as PdfAreaAnnotationKind })}
+                >
+                  <option value="general">영역</option>
+                  <option value="table">표</option>
+                  <option value="figure">그림</option>
+                  <option value="formula">수식</option>
+                </select>
+                <button type="button" className="inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-semibold text-ink hover:bg-paper" onClick={applyPendingHighlight}>
+                  메모 저장
+                </button>
+              </>
+            ) : (
+              <HighlightButton onClick={applyPendingHighlight} />
+            )}
             {pendingOverlapHighlightIds.length > 0 && (
               <RemoveHighlightButton count={pendingOverlapHighlightIds.length} onClick={removePendingOverlaps} />
             )}
-            <AddTermButton onClick={addPendingTerm} />
+            {!pendingHighlight.annotationKind && <AddTermButton onClick={addPendingTerm} />}
           </div>
+          {pendingHighlight.annotationKind && (
+            <textarea
+              aria-label="PDF 영역 메모"
+              className="mt-2 min-h-16 w-full resize-y rounded border border-line p-2 text-xs outline-none focus:border-action"
+              placeholder="이 표·그림·수식에서 확인한 내용을 기록하세요"
+              value={pendingHighlight.memo ?? ''}
+              onChange={(event) => updatePendingArea({ memo: event.target.value })}
+            />
+          )}
         </div>
       )}
       {activeHighlight && (
@@ -921,7 +1061,9 @@ export function PdfViewer({
           }}
         >
           <div className="mb-2 flex items-center justify-between gap-3">
-            <span className="text-xs font-semibold text-ink">적용된 PDF 하이라이트</span>
+            <span className="text-xs font-semibold text-ink">
+              {activeHighlight.annotationKind ? '적용된 PDF 영역 메모' : '적용된 PDF 하이라이트'}
+            </span>
             <button
               type="button"
               className="inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:bg-paper hover:text-ink"
@@ -932,7 +1074,9 @@ export function PdfViewer({
               <X size={14} />
             </button>
           </div>
-          <p className="line-clamp-2 text-xs leading-5 text-muted">{activeHighlight.text}</p>
+          <p className="line-clamp-3 text-xs leading-5 text-muted">
+            {activeHighlight.memo || activeHighlight.text}
+          </p>
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1 rounded bg-paper px-2 py-1 text-[11px] font-medium text-muted">
               <span

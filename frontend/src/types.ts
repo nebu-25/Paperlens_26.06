@@ -70,6 +70,7 @@ export interface Paper {
 }
 
 export type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink' | 'orange' | 'violet';
+export type PdfAreaAnnotationKind = 'general' | 'table' | 'figure' | 'formula';
 export type CitationUse =
   | 'premise'
   | 'method'
@@ -107,6 +108,9 @@ export interface Highlight {
       height: number;
     }[];
   };
+  // 텍스트 선택 없이 PDF 위에서 지정한 표·그림·수식 등의 영역 메모.
+  annotationKind?: PdfAreaAnnotationKind;
+  memo?: string;
 }
 
 export interface Term {

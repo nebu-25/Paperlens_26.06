@@ -38,6 +38,7 @@ import type {
   FormulaCandidate,
   Highlight,
   HighlightColor,
+  PdfAreaAnnotationKind,
   Paper,
   ReviewNote,
   SamplePhase,
@@ -1238,11 +1239,15 @@ export function useReviewStore({
     page,
     rects,
     text,
+    annotationKind,
+    memo,
   }: {
     color: HighlightColor;
     page: number;
     rects: { x: number; y: number; width: number; height: number }[];
     text: string;
+    annotationKind?: PdfAreaAnnotationKind;
+    memo?: string;
   }) {
     const normalizedText = text.replace(/\s+/g, ' ').trim();
     const normalizedRects = rects
@@ -1263,6 +1268,8 @@ export function useReviewStore({
           text: normalizedText,
           color,
           ...citationSuggestionFields(color),
+          annotationKind,
+          memo: memo?.trim() || undefined,
           pdf: {
             page,
             rects: normalizedRects,
