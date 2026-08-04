@@ -28,9 +28,10 @@ class PaperIn(BaseModel):
     pdfUrl: str = ""
     pdfFilename: str = ""
     text: str = ""
-    # 원문 구조 인덱스 (§13: 추출 시 계산해 paper_texts에 캐시) — 섹션 아웃라인·그림 이미지
+    # 원문 구조 인덱스 — 섹션 아웃라인·그림 이미지·벡터 표 셀
     sections: list[dict] = Field(default_factory=list)
     figureImages: list[dict] = Field(default_factory=list)
+    tableStructures: list[dict] = Field(default_factory=list)
 
 
 class NoteIn(BaseModel):
