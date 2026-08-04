@@ -1402,6 +1402,11 @@ def _tokens_to_lines(tokens: list[dict[str, object]]) -> list[dict[str, object]]
 
 def _clova_lines_from_response(response: dict[str, object]) -> list[dict[str, object]]:
     """CLOVA OCR 응답 fields를 reflow 파이프라인이 쓰는 line dict로 변환한다."""
+    return _tokens_to_lines(_clova_tokens_from_response(response))
+
+
+def _clova_tokens_from_response(response: dict[str, object]) -> list[dict[str, object]]:
+    """CLOVA OCR fields를 좌표가 있는 token 목록으로 변환한다."""
     images = response.get("images")
     if not isinstance(images, list):
         return []
@@ -1418,7 +1423,65 @@ def _clova_lines_from_response(response: dict[str, object]) -> list[dict[str, ob
             token = _clova_token_from_field(field)
             if token:
                 tokens.append(token)
-    return _tokens_to_lines(tokens)
+    return tokens
+
+
+def _pdf_guided_ocr_lines(
+    tokens: list[dict[str, object]],
+    source_lines: list[dict[str, object]],
+    *,
+    source_width: float,
+    rendered_width: float,
+) -> list[dict[str, object]]:
+    """Replace PDF line text with OCR tokens while retaining the PDF reading order.
+
+    A damaged PDF text layer can still retain dependable line geometry. For that
+    case, source line positions are a better reading-order guide than OCR boxes
+    around captions, formulas, and two-column body text.
+    """
+    if not tokens or not source_lines or source_width <= 0 or rendered_width <= 0:
+        return []
+    scale = rendered_width / source_width
+    scaled_source = [
+        {
+            **line,
+            "x0": float(line["x0"]) * scale,
+            "x1": float(line["x1"]) * scale,
+            "y0": float(line["y0"]) * scale,
+            "y1": float(line["y1"]) * scale,
+            "size": float(line["size"]) * scale,
+        }
+        for line in source_lines
+    ]
+    ordered_source = [
+        line
+        for group in _split_page_columns(scaled_source, rendered_width)
+        for line in group
+    ]
+    if not ordered_source:
+        return []
+
+    assigned: list[list[dict[str, object]]] = [[] for _ in ordered_source]
+    for token in tokens:
+        token_y = (float(token["y0"]) + float(token["y1"])) / 2
+        token_x = (float(token["x0"]) + float(token["x1"])) / 2
+
+        def score(item: tuple[int, dict[str, object]]) -> float:
+            index, line = item
+            line_y = (float(line["y0"]) + float(line["y1"])) / 2
+            line_x = (float(line["x0"]) + float(line["x1"])) / 2
+            line_h = max(1.0, float(line["y1"]) - float(line["y0"]))
+            return abs(token_y - line_y) / line_h + abs(token_x - line_x) / rendered_width * 0.35
+
+        best_index, _line = min(enumerate(ordered_source), key=score)
+        assigned[best_index].append(token)
+
+    guided: list[dict[str, object]] = []
+    for line, line_tokens in zip(ordered_source, assigned, strict=True):
+        text = _join_ocr_tokens(sorted(line_tokens, key=lambda token: float(token["x0"])))
+        if text:
+            guided.append({**line, "text": text})
+    return guided
 
 
 def _create_rapidocr_engine():
@@ -1580,7 +1643,13 @@ def _ocr_text_with_clova(document, *, dpi: int, page_indexes: list[int]) -> tupl
                 image_format=CLOVA_IMAGE_FORMAT,
                 image_name=f"page-{page_index + 1}",
             )
-            lines = _clova_lines_from_response(response)
+            tokens = _clova_tokens_from_response(response)
+            lines = _pdf_guided_ocr_lines(
+                tokens,
+                _page_text_lines(page),
+                source_width=float(page.rect.width),
+                rendered_width=float(pix.width),
+            ) or _tokens_to_lines(tokens)
             if lines:
                 paragraphs.extend(
                     _reflow_ocr_page_lines(

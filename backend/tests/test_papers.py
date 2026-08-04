@@ -1000,6 +1000,42 @@ class TestOcrReflow:
         text = "\n".join(paragraphs)
         assert text.index("left-0") < text.index("right-0")
 
+    def test_pdf_guided_ocr_lines_keep_source_reading_order(self):
+        source_lines = []
+        tokens = []
+        for index in range(4):
+            y = 20 + index * 20
+            source_lines.extend(
+                [
+                    {"text": "broken", "x0": 10, "x1": 100, "y0": y, "y1": y + 15, "size": 15},
+                    {"text": "broken", "x0": 200, "x1": 290, "y0": y, "y1": y + 15, "size": 15},
+                ]
+            )
+            tokens.extend(
+                [
+                    {"text": f"right-{index}", "x0": 200, "x1": 290, "y0": y, "y1": y + 15},
+                    {"text": f"left-{index}", "x0": 10, "x1": 100, "y0": y, "y1": y + 15},
+                ]
+            )
+
+        guided = papers._pdf_guided_ocr_lines(
+            tokens,
+            source_lines,
+            source_width=300,
+            rendered_width=300,
+        )
+
+        assert [line["text"] for line in guided] == [
+            "left-0",
+            "left-1",
+            "left-2",
+            "left-3",
+            "right-0",
+            "right-1",
+            "right-2",
+            "right-3",
+        ]
+
     def test_clova_word_fields_join_into_line(self):
         response = {
             "images": [
