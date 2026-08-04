@@ -8,7 +8,7 @@ import { extractionQualityLabel } from '../../lib/paperInputs';
 import { SectionCard } from '../SectionCard';
 import { useWorkspace } from './WorkspaceContext';
 
-type PaperViewMode = 'text' | 'pdf';
+type PaperViewMode = 'text' | 'ocr' | 'pdf';
 
 const PdfViewer = lazy(() => import('./PdfViewer').then((module) => ({ default: module.PdfViewer })));
 
@@ -29,6 +29,9 @@ export function SourcePanel() {
     ocrPaper,
     ocrRunning,
     ocrAvailable,
+    ocrCandidate,
+    applyOcrCandidate,
+    dismissOcrCandidate,
     updateNote,
     setSyncNotice,
     highlightColor,
@@ -47,6 +50,7 @@ export function SourcePanel() {
   } = store;
 
   const paperPdfUrl = paper?.pdfUrl ? resolveApiUrl(paper.pdfUrl) : '';
+  const activeOcrCandidate = ocrCandidate?.paperId === paper?.id ? ocrCandidate : null;
   const [paperViewMode, setPaperViewMode] = useState<PaperViewMode>('text');
   // 섹션 아웃라인 (FR-26, pass 1 훑기) — 감지된 섹션이 2개 이상일 때만 표시
   const outline = useMemo(
@@ -205,6 +209,19 @@ export function SourcePanel() {
                 <Highlighter size={13} />
                 원문
               </button>
+              {activeOcrCandidate && (
+                <button
+                  type="button"
+                  className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold ${
+                    paperViewMode === 'ocr' ? 'bg-action text-white' : 'text-muted hover:bg-paper'
+                  }`}
+                  aria-pressed={paperViewMode === 'ocr'}
+                  onClick={() => setPaperViewMode('ocr')}
+                >
+                  <ScanText size={13} />
+                  OCR 비교
+                </button>
+              )}
               <button
                 type="button"
                 className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold ${
@@ -230,7 +247,7 @@ export function SourcePanel() {
                 }}
               >
                 <ScanText size={13} />
-                {ocrRunning ? 'OCR 중…' : 'OCR 재시도'}
+                {ocrRunning ? 'OCR 중…' : 'OCR 비교 생성'}
               </button>
             )}
             <span className="rounded bg-paper px-2 py-1 text-xs text-muted">AI 없이 동작</span>
@@ -654,6 +671,65 @@ export function SourcePanel() {
             </SectionCard>
           )}
           </>
+        ) : paperViewMode === 'ocr' && activeOcrCandidate ? (
+          <section className="space-y-4 rounded border border-line bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-ink">OCR 결과 비교</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
+                  기본 PDF 추출 원문은 유지됩니다. OCR은 깨진 문자·수식·스캔 영역을 확인하는 후보이며, 적용 전에는 저장되지 않습니다.
+                </p>
+              </div>
+              <span className="rounded bg-paper px-2 py-1 text-xs text-muted">
+                {activeOcrCandidate.processedPages}/{activeOcrCandidate.pageCount}페이지
+              </span>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded border border-line bg-paper/40 p-3">
+                <h4 className="text-xs font-semibold text-ink">기본 추출 원문</h4>
+                <pre className="mt-2 max-h-[45vh] overflow-auto whitespace-pre-wrap font-sans text-xs leading-6 text-neutral-700">
+                  {activeOcrCandidate.baseText}
+                </pre>
+              </div>
+              <div className="rounded border border-line bg-paper/40 p-3">
+                <h4 className="text-xs font-semibold text-ink">OCR 후보</h4>
+                <pre className="mt-2 max-h-[45vh] overflow-auto whitespace-pre-wrap font-sans text-xs leading-6 text-neutral-700">
+                  {activeOcrCandidate.text}
+                </pre>
+              </div>
+            </div>
+            {!activeOcrCandidate.canApply && (
+              <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+                <p className="font-semibold">OCR 후보 자동 적용 차단</p>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  {activeOcrCandidate.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded border border-line px-3 py-2 text-xs font-semibold text-muted hover:border-action hover:text-action"
+                onClick={() => {
+                  dismissOcrCandidate();
+                  setPaperViewMode('text');
+                }}
+              >
+                기본 원문 유지
+              </button>
+              <button
+                type="button"
+                className="rounded bg-action px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-45"
+                disabled={!activeOcrCandidate.canApply}
+                onClick={() => {
+                  applyOcrCandidate();
+                  setPaperViewMode('text');
+                }}
+              >
+                OCR 결과 적용
+              </button>
+            </div>
+          </section>
         ) : (
           <section className="rounded border border-line bg-white p-4">
             <Suspense

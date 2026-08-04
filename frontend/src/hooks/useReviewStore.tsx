@@ -60,6 +60,23 @@ const SAMPLE_DOWNLOAD_TIMEOUT_MS = 30_000;
 const PDF_EXTRACT_TIMEOUT_MS = 90_000;
 const SAMPLE_SOURCE_KEYS = new Set(['sample:paperlens', 'demo-session:demo-paperlens-sample-pdf']);
 
+export type OcrCandidate = {
+  paperId: string;
+  baseText: string;
+  text: string;
+  extractionQuality?: ExtractionQualityResponse;
+  pageCount: number;
+  processedPages: number;
+  canApply: boolean;
+  reasons: string[];
+};
+
+function textStructureMetrics(text: string) {
+  const paragraphs = text.split(/\n\s*\n/).filter((part) => part.trim().length >= 12).length;
+  const headings = (text.match(/^(?:\d+(?:\.\d+)*\.?|[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+\.?|abstract|references|참고문헌)\s+/gim) ?? []).length;
+  return { paragraphs, headings };
+}
+
 function highlightTextRange(highlight: Highlight, sourceText: string): { start: number; end: number } | null {
   if (
     typeof highlight.start === 'number'
@@ -148,6 +165,7 @@ export function useReviewStore({
   const [uploading, setUploading] = useState(false);
   const [ocrRunning, setOcrRunning] = useState(false);
   const [ocrAvailable, setOcrAvailable] = useState(false);
+  const [ocrCandidate, setOcrCandidate] = useState<OcrCandidate | null>(null);
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>('idle');
   const [doiLoading, setDoiLoading] = useState(false);
   const [sampleLoading, setSampleLoading] = useState(false);
@@ -404,29 +422,50 @@ export function useReviewStore({
         return;
       }
       const extractionQuality = normalizeExtractionQuality(lastQuality);
-      // OCR이 오래 걸려 그 사이 다른 논문으로 전환됐을 수 있으므로 id 기준으로 반영한다.
-      setLibrary((lib) =>
-        lib[target.id]
-          ? {
-              ...lib,
-              [target.id]: {
-                ...lib[target.id],
-                text: combinedText,
-                sections: [],
-                pageCount: totalPages || lib[target.id].pageCount,
-                extractionQuality,
-              },
-            }
-          : lib,
-      );
-      markDirty(target.id, { includeText: true });
+      const processedPages = chunks.length;
+      const reasons: string[] = [];
+      const baseLength = target.text.trim().length;
+      if (totalPages > processedPages) {
+        reasons.push(`전체 ${totalPages}페이지 중 ${processedPages}페이지만 OCR 처리되었습니다.`);
+      }
+      if (baseLength > 0 && combinedText.length < baseLength * 0.8) {
+        reasons.push('OCR 결과가 기존 원문보다 짧아 구조 보존 기준을 통과하지 못했습니다.');
+      }
+      const baseQuality = target.extractionQuality?.score;
+      if (typeof baseQuality === 'number' && extractionQuality && extractionQuality.score < baseQuality) {
+        reasons.push('OCR 추출 품질 점수가 기존 원문보다 낮습니다.');
+      }
+      const baseStructure = textStructureMetrics(target.text);
+      const ocrStructure = textStructureMetrics(combinedText);
+      if (
+        baseStructure.paragraphs >= 4
+        && ocrStructure.paragraphs < Math.ceil(baseStructure.paragraphs * 0.6)
+      ) {
+        reasons.push('OCR 결과의 문단 구조가 기존 원문보다 크게 줄었습니다.');
+      }
+      if (baseStructure.headings >= 2 && ocrStructure.headings < baseStructure.headings) {
+        reasons.push('OCR 결과에서 기존 원문의 섹션 구조가 일부 누락되었습니다.');
+      }
+      const candidate: OcrCandidate = {
+        paperId: target.id,
+        baseText: target.text,
+        text: combinedText,
+        extractionQuality: lastQuality,
+        pageCount: totalPages || target.pageCount || processedPages,
+        processedPages,
+        canApply: reasons.length === 0,
+        reasons,
+      };
+      setOcrCandidate(candidate);
       setSyncNotice({
-        tone: stoppedByError ? 'warning' : 'success',
-        title: stoppedByError ? 'OCR 일부 반영' : 'OCR 재인식 완료',
+        tone: stoppedByError || !candidate.canApply ? 'warning' : 'success',
+        title: stoppedByError ? 'OCR 후보 일부 생성' : 'OCR 결과 비교 준비됨',
         message: withExtractionQualityMessage(
           stoppedByError
-            ? `앞 ${chunks.length}페이지 OCR 결과를 먼저 반영했습니다. ${stoppedByError.message}`
-            : `OCR로 복구한 원문을 반영했습니다. 최대 ${Math.min(totalPages || maxPages, maxPages)}페이지까지 페이지 단위로 처리했습니다. 인식 오류가 있을 수 있으니 PDF 원본과 대조해 필요하면 편집하세요.`,
+            ? `앞 ${chunks.length}페이지 OCR 결과를 비교 후보로 만들었습니다. ${stoppedByError.message}`
+            : candidate.canApply
+              ? `OCR 결과를 원문과 비교한 뒤 적용할 수 있습니다. 최대 ${Math.min(totalPages || maxPages, maxPages)}페이지까지 페이지 단위로 처리했습니다.`
+              : `OCR 결과는 원문을 덮어쓰지 않았습니다. ${reasons.join(' ')}`,
           extractionQuality,
         ),
       });
@@ -440,6 +479,43 @@ export function useReviewStore({
     } finally {
       setOcrRunning(false);
     }
+  }
+
+  function applyOcrCandidate() {
+    if (!ocrCandidate || !ocrCandidate.canApply) return;
+    const current = libraryRef.current[ocrCandidate.paperId];
+    if (!current || current.text !== ocrCandidate.baseText) {
+      setSyncNotice({
+        tone: 'warning',
+        title: 'OCR 결과 적용 보류',
+        message: '원문이 OCR 실행 후 변경되었습니다. 현재 원문을 기준으로 OCR을 다시 실행해 비교하세요.',
+      });
+      return;
+    }
+    const extractionQuality = normalizeExtractionQuality(ocrCandidate.extractionQuality);
+    const nextPaper = {
+      ...current,
+      text: ocrCandidate.text,
+      sections: [],
+      pageCount: ocrCandidate.pageCount,
+      extractionQuality,
+    };
+    libraryRef.current = { ...libraryRef.current, [ocrCandidate.paperId]: nextPaper };
+    setLibrary((library) => ({
+      ...library,
+      [ocrCandidate.paperId]: nextPaper,
+    }));
+    markDirty(ocrCandidate.paperId, { includeText: true });
+    setOcrCandidate(null);
+    setSyncNotice({
+      tone: 'success',
+      title: 'OCR 결과 적용됨',
+      message: '확인한 OCR 결과를 원문으로 적용했습니다. 저장이 완료된 뒤에도 이 텍스트가 유지됩니다.',
+    });
+  }
+
+  function dismissOcrCandidate() {
+    setOcrCandidate(null);
   }
 
   // ── 논문 등록 (#2: 논문별로 누적, 덮어쓰지 않음) ──
@@ -1458,6 +1534,9 @@ export function useReviewStore({
     ocrPaper,
     ocrRunning,
     ocrAvailable,
+    ocrCandidate,
+    applyOcrCandidate,
+    dismissOcrCandidate,
     updateNote,
     registerPaper,
     openPaper,
