@@ -19,6 +19,7 @@ import os
 import secrets
 import sys
 import time
+import http.client
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -64,10 +65,14 @@ def _request(
                 url=res.geturl(),
             )
     except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read()
+        except (http.client.HTTPException, OSError):
+            body = b""
         return Response(
             status=exc.code,
             headers={key.lower(): value for key, value in exc.headers.items()},
-            body=exc.read(),
+            body=body,
             url=url,
         )
 

@@ -1,4 +1,6 @@
 import json
+import http.client
+import urllib.error
 
 from scripts import smoke_deployment
 
@@ -75,3 +77,30 @@ def test_sample_extract_ocr_smoke_checks_response_and_cleans_up(monkeypatch):
         ("GET", "https://example.test/api/papers/sample-pdf"),
         ("DELETE", "https://example.test/api/notes/smoke-sample-paper"),
     ]
+
+
+def test_request_keeps_retryable_status_when_error_body_is_interrupted(monkeypatch):
+    class BrokenBody:
+        def read(self):
+            raise http.client.IncompleteRead(b"")
+
+        def close(self):
+            pass
+
+    error = urllib.error.HTTPError(
+        "https://example.test/api/papers/extract-text",
+        502,
+        "Bad Gateway",
+        {},
+        BrokenBody(),
+    )
+
+    def raise_http_error(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(smoke_deployment.urllib.request, "urlopen", raise_http_error)
+
+    response = smoke_deployment._request("POST", "https://example.test/api/papers/extract-text")
+
+    assert response.status == 502
+    assert response.body == b""
