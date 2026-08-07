@@ -802,7 +802,9 @@ export function SourcePanel() {
               <div>
                 <h3 className="text-sm font-semibold text-ink">OCR 결과 비교</h3>
                 <p className="mt-1 text-xs leading-relaxed text-muted">
-                  기본 PDF 추출 원문은 유지됩니다. OCR은 깨진 문자·수식·스캔 영역을 확인하는 후보이며, 적용 전에는 저장되지 않습니다.
+                  {activeOcrCandidate.fullReplacement
+                    ? '기본 추출 원문이 비어 있어 OCR 전체를 후보로 제시합니다.'
+                    : '기본 원문은 유지하고, 문맥이 일치하는 깨진 문자·누락 구간만 보완 후보로 만듭니다.'}
                 </p>
               </div>
               <span className="rounded bg-paper px-2 py-1 text-xs text-muted">
@@ -817,7 +819,9 @@ export function SourcePanel() {
                 </pre>
               </div>
               <div className="rounded border border-line bg-paper/40 p-3">
-                <h4 className="text-xs font-semibold text-ink">OCR 후보</h4>
+                <h4 className="text-xs font-semibold text-ink">
+                  {activeOcrCandidate.fullReplacement ? 'OCR 전체 후보' : `안전 보완 결과 (${activeOcrCandidate.patches.length}곳)`}
+                </h4>
                 <pre className="mt-2 max-h-[45vh] overflow-auto whitespace-pre-wrap font-sans text-xs leading-6 text-neutral-700">
                   {activeOcrCandidate.text}
                 </pre>
@@ -851,7 +855,7 @@ export function SourcePanel() {
                   setPaperViewMode('text');
                 }}
               >
-                OCR 결과 적용
+                {activeOcrCandidate.fullReplacement ? 'OCR 전체 적용' : '안전 보완 적용'}
               </button>
             </div>
           </section>

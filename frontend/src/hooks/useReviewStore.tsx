@@ -21,6 +21,8 @@ import { buildKeywordCandidates, scanSignals } from '../lib/signalScanner';
 import type { SignalMatch, SignalType } from '../lib/signalScanner';
 import { buildFigureIndex, mentionCounts } from '../lib/figureIndex';
 import type { FigureMentionLink } from '../lib/figureIndex';
+import { buildOcrPatches } from '../lib/ocrPatches';
+import type { OcrPatch } from '../lib/ocrPatches';
 import { scrollToTextOffset } from '../lib/domText';
 import {
   isLikelyDoi,
@@ -68,18 +70,15 @@ export type OcrCandidate = {
   paperId: string;
   baseText: string;
   text: string;
+  ocrText: string;
+  patches: OcrPatch[];
+  fullReplacement: boolean;
   extractionQuality?: ExtractionQualityResponse;
   pageCount: number;
   processedPages: number;
   canApply: boolean;
   reasons: string[];
 };
-
-function textStructureMetrics(text: string) {
-  const paragraphs = text.split(/\n\s*\n/).filter((part) => part.trim().length >= 12).length;
-  const headings = (text.match(/^(?:\d+(?:\.\d+)*\.?|[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+\.?|abstract|references|참고문헌)\s+/gim) ?? []).length;
-  return { paragraphs, headings };
-}
 
 function highlightTextRange(highlight: Highlight, sourceText: string): { start: number; end: number } | null {
   if (
@@ -435,31 +434,20 @@ export function useReviewStore({
       const processedPages = chunks.length;
       const reasons: string[] = [];
       const baseLength = target.text.trim().length;
+      const patchResult = buildOcrPatches(target.text, combinedText);
       if (totalPages > processedPages) {
         reasons.push(`전체 ${totalPages}페이지 중 ${processedPages}페이지만 OCR 처리되었습니다.`);
       }
-      if (baseLength > 0 && combinedText.length < baseLength * 0.8) {
-        reasons.push('OCR 결과가 기존 원문보다 짧아 구조 보존 기준을 통과하지 못했습니다.');
-      }
-      const baseQuality = target.extractionQuality?.score;
-      if (typeof baseQuality === 'number' && extractionQuality && extractionQuality.score < baseQuality) {
-        reasons.push('OCR 추출 품질 점수가 기존 원문보다 낮습니다.');
-      }
-      const baseStructure = textStructureMetrics(target.text);
-      const ocrStructure = textStructureMetrics(combinedText);
-      if (
-        baseStructure.paragraphs >= 4
-        && ocrStructure.paragraphs < Math.ceil(baseStructure.paragraphs * 0.6)
-      ) {
-        reasons.push('OCR 결과의 문단 구조가 기존 원문보다 크게 줄었습니다.');
-      }
-      if (baseStructure.headings >= 2 && ocrStructure.headings < baseStructure.headings) {
-        reasons.push('OCR 결과에서 기존 원문의 섹션 구조가 일부 누락되었습니다.');
+      if (baseLength > 0 && patchResult.patches.length === 0) {
+        reasons.push('원문과 안전하게 대응되는 깨진 문자 또는 누락 구간을 찾지 못했습니다.');
       }
       const candidate: OcrCandidate = {
         paperId: target.id,
         baseText: target.text,
-        text: combinedText,
+        text: patchResult.text,
+        ocrText: combinedText,
+        patches: patchResult.patches,
+        fullReplacement: patchResult.fullReplacement,
         extractionQuality: lastQuality,
         pageCount: totalPages || target.pageCount || processedPages,
         processedPages,
@@ -474,7 +462,9 @@ export function useReviewStore({
           stoppedByError
             ? `앞 ${chunks.length}페이지 OCR 결과를 비교 후보로 만들었습니다. ${stoppedByError.message}`
             : candidate.canApply
-              ? `OCR 결과를 원문과 비교한 뒤 적용할 수 있습니다. 최대 ${Math.min(totalPages || maxPages, maxPages)}페이지까지 페이지 단위로 처리했습니다.`
+              ? candidate.fullReplacement
+                ? '기존 추출 원문이 비어 있어 OCR 전체를 적용할 수 있습니다.'
+                : `깨진 문자·누락 구간 ${candidate.patches.length}개만 보완할 수 있습니다. 최대 ${Math.min(totalPages || maxPages, maxPages)}페이지까지 페이지 단위로 처리했습니다.`
               : `OCR 결과는 원문을 덮어쓰지 않았습니다. ${reasons.join(' ')}`,
           extractionQuality,
         ),

@@ -103,6 +103,9 @@ describe('SourcePanel OCR action', () => {
         paperId: 'paper-1',
         baseText: '기본 원문',
         text: 'OCR 후보 본문',
+        ocrText: 'OCR 후보 본문',
+        patches: [{ start: 0, end: 0, replacement: 'OCR 후보 본문', kind: 'insert_missing' }],
+        fullReplacement: false,
         pageCount: 1,
         processedPages: 1,
         canApply: true,
@@ -114,7 +117,7 @@ describe('SourcePanel OCR action', () => {
     expect(screen.getByText('기본 추출 원문')).toBeTruthy();
     expect(screen.getByText('OCR 후보 본문')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'OCR 결과 적용' }));
+    fireEvent.click(screen.getByRole('button', { name: '안전 보완 적용' }));
     expect(applyOcrCandidate).toHaveBeenCalledTimes(1);
   });
 
@@ -124,6 +127,9 @@ describe('SourcePanel OCR action', () => {
         paperId: 'paper-1',
         baseText: '기본 원문',
         text: '짧은 OCR 후보',
+        ocrText: '짧은 OCR 후보',
+        patches: [],
+        fullReplacement: false,
         pageCount: 9,
         processedPages: 1,
         canApply: false,
@@ -133,7 +139,7 @@ describe('SourcePanel OCR action', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'OCR 비교' }));
     expect(screen.getByText('OCR 후보 자동 적용 차단')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'OCR 결과 적용' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: '안전 보완 적용' })).toHaveProperty('disabled', true);
   });
 
   it('shows extracted vector table cells separately from the source text', () => {
