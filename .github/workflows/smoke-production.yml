@@ -11,6 +11,11 @@ on:
         description: Render backend base URL
         required: false
         default: https://paperlens-backend-53ki.onrender.com
+      check_ocr:
+        description: Run one-page OCR comparison smoke check (uses the demo account and incurs OCR usage)
+        required: false
+        type: boolean
+        default: false
   workflow_run:
     workflows: ["Deploy frontend to GitHub Pages"]
     types: [completed]
@@ -44,4 +49,5 @@ jobs:
           PAPERLENS_SMOKE_PASSWORD: ${{ secrets.PAPERLENS_SMOKE_PASSWORD }}
           PAPERLENS_DEMO_EMAIL: ${{ secrets.PAPERLENS_DEMO_EMAIL }}
           PAPERLENS_DEMO_PASSWORD: ${{ secrets.PAPERLENS_DEMO_PASSWORD }}
+          PAPERLENS_OCR_SMOKE: ${{ github.event.inputs.check_ocr == 'true' }}
         run: python3 backend/scripts/smoke_deployment.py

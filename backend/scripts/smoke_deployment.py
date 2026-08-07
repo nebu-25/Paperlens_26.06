@@ -9,6 +9,7 @@ Run from repo root or backend/:
   FRONTEND_BASE_URL=https://... API_BASE_URL=https://... python3 backend/scripts/smoke_deployment.py
   PAPERLENS_SMOKE_EMAIL=... PAPERLENS_SMOKE_PASSWORD=... python3 backend/scripts/smoke_deployment.py
   PAPERLENS_DEMO_EMAIL=... PAPERLENS_DEMO_PASSWORD=... python3 backend/scripts/smoke_deployment.py
+  PAPERLENS_OCR_SMOKE=true PAPERLENS_DEMO_EMAIL=... PAPERLENS_DEMO_PASSWORD=... python3 backend/scripts/smoke_deployment.py
 """
 
 from __future__ import annotations
@@ -284,7 +285,7 @@ def _check_authenticated_api(api_base: str, access_token: str) -> None:
     _assert(isinstance(notes_body.get("notes"), dict), "authenticated notes missing notes object")
 
 
-def _check_demo_session_api(api_base: str, access_token: str) -> None:
+def _check_demo_session_api(api_base: str, access_token: str, *, check_ocr: bool = False) -> None:
     demo_session_id = secrets.token_urlsafe(24)
     auth_headers = {
         "Authorization": f"Bearer {access_token}",
@@ -322,10 +323,12 @@ def _check_demo_session_api(api_base: str, access_token: str) -> None:
         any(note_id in notes_map for note_id in sample_ids),
         f"demo session missing sample note with sourceKey {DEMO_SAMPLE_SOURCE_KEY}",
     )
-    _check_sample_pdf_extract_flow(api_base, auth_headers)
+    _check_sample_pdf_extract_flow(api_base, auth_headers, check_ocr=check_ocr)
 
 
-def _check_sample_pdf_extract_flow(api_base: str, auth_headers: dict[str, str]) -> None:
+def _check_sample_pdf_extract_flow(
+    api_base: str, auth_headers: dict[str, str], *, check_ocr: bool = False
+) -> None:
     sample = _request("GET", f"{api_base}/api/papers/sample-pdf", timeout=45)
     _assert(sample.status == 200, f"sample PDF GET expected 200, got {sample.status}")
     _assert(sample.body.startswith(b"%PDF"), "sample PDF response did not start with %PDF")
@@ -358,6 +361,31 @@ def _check_sample_pdf_extract_flow(api_base: str, auth_headers: dict[str, str]) 
         quality = extract_body.get("extraction_quality") or {}
         _assert(isinstance(quality, dict), "extract response missing extraction_quality object")
 
+        if check_ocr:
+            ocr = _request_with_retries(
+                "POST",
+                f"{api_base}/api/papers/{smoke_paper_id}/ocr?page_count=1",
+                headers=auth_headers,
+                timeout=120,
+                attempts=2,
+                retry_statuses={502, 503, 504},
+                label="sample PDF OCR comparison",
+            )
+            _assert(
+                ocr.status == 200,
+                f"sample PDF OCR expected 200, got {ocr.status}: {_response_message(ocr)}",
+            )
+            ocr_body = ocr.json()
+            ocr_text = ocr_body.get("text")
+            _assert(ocr_body.get("ocr") is True, "OCR response did not identify an OCR result")
+            _assert(ocr_body.get("processed_pages") == 1, "OCR response did not process one page")
+            _assert(isinstance(ocr_text, str) and len(ocr_text) > 100, "OCR response text was unexpectedly short")
+            ocr_quality = ocr_body.get("extraction_quality") or {}
+            _assert(
+                isinstance(ocr_quality, dict) and ocr_quality.get("source") == "ocr",
+                "OCR response missing OCR extraction quality",
+            )
+
         stored_pdf = _request_with_retries(
             "GET",
             f"{api_base}/api/papers/{smoke_paper_id}/pdf",
@@ -384,6 +412,7 @@ def main() -> int:
     smoke_password = os.environ.get("PAPERLENS_SMOKE_PASSWORD", "")
     demo_email = os.environ.get("PAPERLENS_DEMO_EMAIL", "").strip()
     demo_password = os.environ.get("PAPERLENS_DEMO_PASSWORD", "")
+    ocr_smoke_enabled = _env_flag("PAPERLENS_OCR_SMOKE")
     if not frontend_base or not api_base:
         print("FRONTEND_BASE_URL and API_BASE_URL are required.", file=sys.stderr)
         return 2
@@ -415,13 +444,15 @@ def main() -> int:
             demo_email,
             demo_password,
         )
-        _check_demo_session_api(api_base, demo_access_token)
+        _check_demo_session_api(api_base, demo_access_token, check_ocr=ocr_smoke_enabled)
     elapsed = time.monotonic() - started
     auth_checks: list[str] = []
     if has_smoke_account:
         auth_checks.append("authenticated notes")
     if has_demo_account:
         auth_checks.append("demo session notes")
+    if has_demo_account and ocr_smoke_enabled:
+        auth_checks.append("OCR comparison")
     auth_label = f"with {', '.join(auth_checks)} check" if auth_checks else "public endpoints only"
     print(f"Production deployment smoke passed in {elapsed:.1f}s ({auth_label}).")
     return 0
