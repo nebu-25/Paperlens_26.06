@@ -321,8 +321,16 @@ GitHub Actions `Reset demo account` workflow는 수동 실행과 cron 실행을 
 후속 조치:
 
 - `시연확정.pdf`의 raw에만 남은 제목처럼 reflow가 빠뜨린 첫 페이지 front matter를 보존하는 fallback 회귀 테스트와 선택 규칙을 보강한다.
-- 스캔형 PDF 2개는 운영 OCR 비교 환경에서 제목·초록·본문 순서와 한국어 어절을 원본과 비교한다. OCR은 자동 대체하지 않고 비교 후 명시적 적용만 허용한다.
+- 스캔형 PDF 2개는 운영 OCR 경로·처리 페이지·후보 품질까지 자동 검증했다. 제목·초록·본문 순서와 한국어 어절의 사람 검수는 OCR 원문을 로그에 남기지 않는 정책상 별도 세션에서 원본과 비교한다. OCR은 자동 대체하지 않고 비교 후 명시적 적용만 허용한다.
 - 수식이 많은 논문이 추가되면 수식 후보의 page/bbox와 원본 수식 표기를 함께 점검한다.
+
+### 2026-08-07 스캔형 PDF 운영 OCR 비교
+
+- 두 스캔형 PDF를 공개 Git 이력에 추가하지 않고 임시 draft release 자산으로만 GitHub Actions에 전달했다. workflow가 자산을 내려받아 데모 세션에 임시 업로드하고, 파일별 첫 페이지 OCR 비교를 수행한 뒤 임시 노트와 draft release 자산을 모두 삭제했다.
+- `치과용DICOMencoder와viewer의특성과개발.pdf`: 기본 추출 0자 → OCR 2,444자, 품질 `good/100`.
+- `프로그램가능전자의료기기의신뢰성평가방법의구축.pdf`: 기본 추출 0자 → OCR 1,620자, 품질 `good/100`.
+- 실행은 122.5초에 성공했다. OCR 원문은 Actions 로그에 남기지 않고 문자 수와 품질 상태만 기록했다.
+- 재현 시 `Production smoke`를 수동 실행하고 `check_ocr=true` 및 임시 draft release tag를 지정한다. 완료 후 해당 draft release는 반드시 삭제한다.
 
 ### 2026-06-26 운영 실행 기록
 
