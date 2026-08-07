@@ -79,17 +79,23 @@ def _blank_pdf() -> bytes:
 
 
 class TestPdfExtractionRegression:
-    def test_layout_title_is_kept_when_reflow_omits_it(self):
-        text = papers._preserve_layout_title(
+    def test_layout_front_matter_is_kept_when_reflow_omits_it(self):
+        text = papers._preserve_layout_front_matter(
             "Journal header\n\nAuthor Name\n\nAbstract\n\nBody text.",
             "한국어 논문 제목",
+            "Keywords: PDF extraction, review",
         )
 
         assert text.startswith("한국어 논문 제목\n\n")
+        assert "Keywords: PDF extraction, review" in text
         assert text.endswith("Body text.")
 
-    def test_layout_title_is_not_duplicated_when_reflow_keeps_it(self):
-        text = papers._preserve_layout_title("한국어 논문 제목\n\n본문", "한국어 논문 제목")
+    def test_layout_front_matter_is_not_duplicated_when_reflow_keeps_it(self):
+        text = papers._preserve_layout_front_matter(
+            "한국어 논문 제목\n\nKeywords: PDF extraction\n\n본문",
+            "한국어 논문 제목",
+            "Keywords: PDF extraction",
+        )
 
         assert text == "한국어 논문 제목\n\n본문"
 

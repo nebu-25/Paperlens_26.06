@@ -327,14 +327,26 @@ def _first_page_metadata(document) -> dict[str, object]:
             break
     authors = re.sub(r"\s*,\s*", ", ", ", ".join(author_parts)).strip(", ")
 
+    # 키워드는 검색·태그 제안에 쓰이는 front matter다. 좌표 reflow가 이 행을
+    # 누락해도 원본에서 읽힌 결과를 보존할 수 있도록 첫 페이지에서 따로 잡는다.
+    keywords = ""
+    for line in top_lines:
+        candidate = _clean_text_line(str(line["text"]))
+        if re.match(r"^(?:key\s*words?|keywords?|키워드)\s*[:：]", candidate, re.IGNORECASE):
+            keywords = candidate
+            break
+
     warnings: list[str] = []
     if title:
         warnings.append("CrossRef DOI 매칭 없이 첫 페이지 레이아웃에서 제목 후보를 추정했습니다.")
     if authors:
         warnings.append("CrossRef DOI 매칭 없이 첫 페이지 레이아웃에서 저자 후보를 추정했습니다.")
+    if keywords:
+        warnings.append("첫 페이지 레이아웃에서 키워드 후보를 추정했습니다.")
     return {
         "title": title,
         "authors": authors,
+        "keywords": keywords,
         "confidence": "low" if (title or authors) else "none",
         "warnings": warnings,
     }
@@ -862,21 +874,22 @@ def _choose_extracted_text(reflowed: str, raw: str) -> str:
     return _repair_email_attached_purpose_tail(reflowed)
 
 
-def _preserve_layout_title(text: str, layout_title: str) -> str:
-    """Keep a first-page title when coordinate reflow accidentally drops it.
+def _preserve_layout_front_matter(text: str, *items: str) -> str:
+    """Keep semantic first-page metadata when coordinate reflow drops it.
 
     Replacing the whole document with raw extraction would reintroduce two-column
-    ordering errors. Add only a title that the layout reader identified but the
-    selected text does not contain.
+    ordering errors. Add only title/keyword lines that the layout reader identified
+    but the selected text does not contain.
     """
-    title = _tidy_spacing(layout_title).strip()
-    if not title:
-        return text
-    normalized_title = "".join(title.split()).casefold()
     normalized_text = "".join(text.split()).casefold()
-    if normalized_title in normalized_text:
-        return text
-    return f"{title}\n\n{text}".strip()
+    missing: list[str] = []
+    for item in items:
+        value = _tidy_spacing(item).strip()
+        normalized_value = "".join(value.split()).casefold()
+        if value and normalized_value not in normalized_text:
+            missing.append(value)
+            normalized_text += normalized_value
+    return "\n\n".join([*missing, text]).strip()
 
 
 # 구두점 앞 공백 정리(스팬 분리로 생긴 "있다 ." → "있다.") 및 닫는 괄호/따옴표 앞 공백 제거.
@@ -1997,9 +2010,10 @@ def _extract_pdf_content(
         raw_text = _raw_document_text(document)
         pdf_meta = document.metadata or {}
         layout_meta = _first_page_metadata(document)
-        text = _preserve_layout_title(
+        text = _preserve_layout_front_matter(
             _choose_extracted_text(reflowed_text, raw_text),
             str(layout_meta.get("title") or ""),
+            str(layout_meta.get("keywords") or ""),
         )
     except Exception as exc:  # pragma: no cover - library-specific parse failures
         raise HTTPException(status_code=422, detail="PDF 텍스트를 추출하지 못했습니다.") from exc
