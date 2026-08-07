@@ -302,6 +302,26 @@ python3 backend/scripts/reset_demo_account.py
 
 GitHub Actions `Reset demo account` workflow는 수동 실행과 cron 실행을 모두 지원합니다.
 
+## 2026-08-07 PDF Corpus Check
+
+로컬 corpus 7개를 PDF 원본, 기본 추출(raw), 좌표 기반 reflow, 표 구조, 수식 후보 기준으로 확인했다. OCR은 이 로컬 환경에서 비활성화되어(`OCR_ENABLED=false`, CLOVA/RapidOCR 미준비) 실행하지 않았으며, 운영 OCR 비교는 별도 환경에서 다시 확인한다.
+
+| 파일 | 페이지 | 추출 결과 | 표 구조 | 수식 후보 | 확인 결과 |
+| --- | ---: | --- | ---: | ---: | --- |
+| `2604.04977v1.pdf` | 5 | reflow 30,590자, 품질 good/100 | 0 | 0 | 샘플 논문 정상 추출 |
+| `시연논문.pdf` | 59 | reflow 33,178자, 품질 good/100 | 5 | 0 | 표 구조는 p.11(5×7), p.39(9×4), p.48(3×3) 등 검출 |
+| `시연확정.pdf` | 9 | reflow 17,900자, 품질 good/100 | 7 | 0 | 원본의 한국어 제목 `DICOM 영상과 다양한 형식의 영상 비교`가 raw에는 있으나 reflow에서 누락됨. 품질 점수만으로는 감지하지 못하는 front matter 보존 회귀로 분류 |
+| `체내이식형의료기기의보안성향상을위한3Tier보안메커니즘설계.pdf` | 9 | reflow 17,398자, 품질 good/100 | 0 | 5 | standalone assignment 후보만 인덱싱; 수식 원본·LaTex 복원은 하지 않음 |
+| `치과용DICOMencoder와viewer의특성과개발.pdf` | 12 | 텍스트 레이어 0자, 품질 failed/0 | 0 | 0 | 스캔형. PDF 원본은 읽을 수 있으나 OCR 또는 직접 입력이 필요 |
+| `치과임상에서디지털기반소프트웨어의료기기의적용.pdf` | 8 | reflow 17,278자, 품질 good/100 | 0 | 0 | 정상 추출 |
+| `프로그램가능전자의료기기의신뢰성평가방법의구축.pdf` | 4 | 텍스트 레이어 0자, 품질 failed/0 | 0 | 0 | 스캔형. OCR 또는 직접 입력이 필요 |
+
+후속 조치:
+
+- `시연확정.pdf`의 raw에만 남은 제목처럼 reflow가 빠뜨린 첫 페이지 front matter를 보존하는 fallback 회귀 테스트와 선택 규칙을 보강한다.
+- 스캔형 PDF 2개는 운영 OCR 비교 환경에서 제목·초록·본문 순서와 한국어 어절을 원본과 비교한다. OCR은 자동 대체하지 않고 비교 후 명시적 적용만 허용한다.
+- 수식이 많은 논문이 추가되면 수식 후보의 page/bbox와 원본 수식 표기를 함께 점검한다.
+
 ### 2026-06-26 운영 실행 기록
 
 실행 환경: Codex workspace, 네트워크 권한 허용 후 실행.
