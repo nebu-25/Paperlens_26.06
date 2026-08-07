@@ -97,7 +97,7 @@ class TestPdfExtractionRegression:
             "Keywords: PDF extraction",
         )
 
-        assert text == "한국어 논문 제목\n\n본문"
+        assert text == "한국어 논문 제목\n\nKeywords: PDF extraction\n\n본문"
 
     def test_mixed_two_column_pdf_preserves_front_matter_and_column_order(self, monkeypatch):
         stored: dict[str, object] = {}
