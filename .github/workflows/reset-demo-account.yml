@@ -16,7 +16,8 @@ concurrency:
 jobs:
   reset:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Render can need time to leave its cold state; the script retries transient failures.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +27,7 @@ jobs:
 
       - name: Reset shared demo account
         env:
+          PYTHONUNBUFFERED: "1"
           API_BASE_URL: https://paperlens-backend-53ki.onrender.com
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}

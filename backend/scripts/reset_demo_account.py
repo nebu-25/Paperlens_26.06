@@ -19,6 +19,9 @@ from typing import Any
 
 
 DEFAULT_API_BASE_URL = "https://paperlens-backend-53ki.onrender.com"
+REQUEST_RETRIES = 2
+RETRYABLE_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
+WARM_UP_TIMEOUT_SECONDS = 45
 DEMO_NOTE_ID = "demo-paperlens-quickstart"
 # 빠른 체험용 샘플 PDF 노트. 프런트 "샘플 PDF" 버튼과 동일한 sourceKey를 써서
 # 중복 등록을 막고, 데모 계정에 항상 실제 PDF를 하나 남겨 둔다.
@@ -55,13 +58,36 @@ def _request(
     data: bytes | None = None,
     headers: dict[str, str] | None = None,
     timeout: int = 45,
+    retries: int = REQUEST_RETRIES,
 ) -> Response:
     req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as res:  # noqa: S310 - configured project URLs
-            return Response(res.status, res.read())
-    except urllib.error.HTTPError as exc:
-        return Response(exc.code, exc.read())
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as res:  # noqa: S310 - configured project URLs
+                response = Response(res.status, res.read())
+        except urllib.error.HTTPError as exc:
+            response = Response(exc.code, exc.read())
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            if attempt >= retries:
+                _fail(f"{method} request failed after {attempt + 1} attempt(s): {exc}")
+            _wait_before_retry(method, url, attempt, retries, f"network error: {exc}")
+            continue
+
+        if response.status not in RETRYABLE_STATUS_CODES or attempt >= retries:
+            return response
+        _wait_before_retry(method, url, attempt, retries, f"HTTP {response.status}")
+
+    raise AssertionError("request retry loop exhausted unexpectedly")
+
+
+def _wait_before_retry(method: str, url: str, attempt: int, retries: int, reason: str) -> None:
+    delay = min(12, 3 * (2**attempt))
+    print(
+        f"{method} {url} failed ({reason}); retrying in {delay}s "
+        f"({attempt + 1}/{retries})...",
+        file=sys.stderr,
+    )
+    time.sleep(delay)
 
 
 def _fail(message: str) -> None:
@@ -97,6 +123,25 @@ def _password_token(supabase_url: str, anon_key: str, email: str, password: str)
 
 def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def _warm_api(api_base: str) -> None:
+    """Warm Render before the reset's authenticated requests without blocking recovery."""
+    print(f"Warming API: {api_base}/api/health")
+    try:
+        response = _request(
+            "GET",
+            f"{api_base}/api/health",
+            timeout=WARM_UP_TIMEOUT_SECONDS,
+        )
+    except RuntimeError as exc:
+        print(f"API warm-up did not complete; continuing with reset: {exc}", file=sys.stderr)
+        return
+    if response.status != 200:
+        print(
+            f"API warm-up returned HTTP {response.status}; continuing with reset.",
+            file=sys.stderr,
+        )
 
 
 def _highlight(item_id: str, item_text: str, color: str, citation_use: str) -> dict[str, object]:
@@ -461,6 +506,7 @@ def main() -> int:
         return 2
 
     started = time.monotonic()
+    _warm_api(api_base)
     token = _password_token(supabase_url, anon_key, email, password)
     deleted = _delete_existing_notes(api_base, token)
     _upsert_demo_note(api_base, token)
