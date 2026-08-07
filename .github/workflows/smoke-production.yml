@@ -16,6 +16,10 @@ on:
         required: false
         type: boolean
         default: false
+      ocr_release_tag:
+        description: Optional draft release tag containing PDF assets for OCR comparison
+        required: false
+        default: ''
   workflow_run:
     workflows: ["Deploy frontend to GitHub Pages"]
     types: [completed]
@@ -39,6 +43,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Download OCR smoke PDF assets
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.check_ocr && inputs.ocr_release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OCR_RELEASE_TAG: ${{ inputs.ocr_release_tag }}
+          OCR_SMOKE_DIR: ${{ runner.temp }}/ocr-smoke
+        run: |
+          mkdir -p "$OCR_SMOKE_DIR"
+          gh release download "$OCR_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.pdf' --dir "$OCR_SMOKE_DIR"
+          test -n "$(find "$OCR_SMOKE_DIR" -maxdepth 1 -type f -name '*.pdf' -print -quit)"
+
       - name: Run production smoke checks
         env:
           FRONTEND_BASE_URL: ${{ github.event.inputs.frontend_base_url || 'https://nebu-25.github.io/Paperlens_26.06' }}
@@ -50,4 +65,5 @@ jobs:
           PAPERLENS_DEMO_EMAIL: ${{ secrets.PAPERLENS_DEMO_EMAIL }}
           PAPERLENS_DEMO_PASSWORD: ${{ secrets.PAPERLENS_DEMO_PASSWORD }}
           PAPERLENS_OCR_SMOKE: ${{ github.event.inputs.check_ocr == 'true' }}
+          PAPERLENS_OCR_SMOKE_DIR: ${{ runner.temp }}/ocr-smoke
         run: python3 backend/scripts/smoke_deployment.py

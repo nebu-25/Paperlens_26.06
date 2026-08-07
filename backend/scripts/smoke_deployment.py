@@ -23,6 +23,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -285,7 +286,13 @@ def _check_authenticated_api(api_base: str, access_token: str) -> None:
     _assert(isinstance(notes_body.get("notes"), dict), "authenticated notes missing notes object")
 
 
-def _check_demo_session_api(api_base: str, access_token: str, *, check_ocr: bool = False) -> None:
+def _check_demo_session_api(
+    api_base: str,
+    access_token: str,
+    *,
+    check_ocr: bool = False,
+    ocr_files: tuple[Path, ...] = (),
+) -> None:
     demo_session_id = secrets.token_urlsafe(24)
     auth_headers = {
         "Authorization": f"Bearer {access_token}",
@@ -323,7 +330,73 @@ def _check_demo_session_api(api_base: str, access_token: str, *, check_ocr: bool
         any(note_id in notes_map for note_id in sample_ids),
         f"demo session missing sample note with sourceKey {DEMO_SAMPLE_SOURCE_KEY}",
     )
-    _check_sample_pdf_extract_flow(api_base, auth_headers, check_ocr=check_ocr)
+    _check_sample_pdf_extract_flow(api_base, auth_headers, check_ocr=check_ocr and not ocr_files)
+    for pdf_path in ocr_files:
+        _check_pdf_ocr_comparison(api_base, auth_headers, pdf_path)
+
+
+def _check_pdf_ocr_comparison(api_base: str, auth_headers: dict[str, str], pdf_path: Path) -> None:
+    content = pdf_path.read_bytes()
+    _assert(content.startswith(b"%PDF"), f"OCR smoke asset is not a PDF: {pdf_path.name}")
+    paper_id = f"smoke-ocr-{secrets.token_hex(8)}"
+    body, content_type = _multipart_form_data(
+        {"paper_id": paper_id},
+        {"file": (pdf_path.name, content, "application/pdf")},
+    )
+    extract = _request_with_retries(
+        "POST",
+        f"{api_base}/api/papers/extract-text",
+        data=body,
+        headers={**auth_headers, "Content-Type": content_type},
+        timeout=120,
+        attempts=4,
+        label=f"OCR smoke upload ({pdf_path.name})",
+    )
+    try:
+        _assert(
+            extract.status == 200,
+            f"OCR smoke upload expected 200 for {pdf_path.name}, got {extract.status}: {_response_message(extract)}",
+        )
+        extract_body = extract.json()
+        _assert(
+            extract_body.get("pdf_url") == f"/api/papers/{paper_id}/pdf",
+            f"OCR smoke upload missing PDF URL for {pdf_path.name}",
+        )
+        _assert(
+            extract_body.get("pdf_filename") == pdf_path.name,
+            f"OCR smoke upload missing filename for {pdf_path.name}",
+        )
+        _assert(isinstance(extract_body.get("text"), str), f"OCR smoke upload missing text for {pdf_path.name}")
+
+        ocr = _request_with_retries(
+            "POST",
+            f"{api_base}/api/papers/{paper_id}/ocr?page_count=1",
+            headers=auth_headers,
+            timeout=120,
+            attempts=2,
+            retry_statuses={502, 503, 504},
+            label=f"OCR comparison ({pdf_path.name})",
+        )
+        _assert(
+            ocr.status == 200,
+            f"OCR comparison expected 200 for {pdf_path.name}, got {ocr.status}: {_response_message(ocr)}",
+        )
+        ocr_body = ocr.json()
+        ocr_text = ocr_body.get("text")
+        _assert(ocr_body.get("ocr") is True, f"OCR response not identified for {pdf_path.name}")
+        _assert(ocr_body.get("processed_pages") == 1, f"OCR response did not process one page for {pdf_path.name}")
+        _assert(isinstance(ocr_text, str) and len(ocr_text) > 100, f"OCR text was unexpectedly short for {pdf_path.name}")
+        ocr_quality = ocr_body.get("extraction_quality") or {}
+        _assert(
+            isinstance(ocr_quality, dict) and ocr_quality.get("source") == "ocr",
+            f"OCR quality metadata missing for {pdf_path.name}",
+        )
+        print(
+            f"OCR asset {pdf_path.name}: raw_chars={len(str(extract_body['text']))}, "
+            f"ocr_chars={len(ocr_text)}, quality={ocr_quality.get('status')}/{ocr_quality.get('score')}",
+        )
+    finally:
+        _request("DELETE", f"{api_base}/api/notes/{paper_id}", headers=auth_headers)
 
 
 def _check_sample_pdf_extract_flow(
@@ -413,6 +486,8 @@ def main() -> int:
     demo_email = os.environ.get("PAPERLENS_DEMO_EMAIL", "").strip()
     demo_password = os.environ.get("PAPERLENS_DEMO_PASSWORD", "")
     ocr_smoke_enabled = _env_flag("PAPERLENS_OCR_SMOKE")
+    ocr_smoke_dir = os.environ.get("PAPERLENS_OCR_SMOKE_DIR", "").strip()
+    ocr_files = tuple(sorted(Path(ocr_smoke_dir).glob("*.pdf"))) if ocr_smoke_dir else ()
     if not frontend_base or not api_base:
         print("FRONTEND_BASE_URL and API_BASE_URL are required.", file=sys.stderr)
         return 2
@@ -444,7 +519,12 @@ def main() -> int:
             demo_email,
             demo_password,
         )
-        _check_demo_session_api(api_base, demo_access_token, check_ocr=ocr_smoke_enabled)
+        _check_demo_session_api(
+            api_base,
+            demo_access_token,
+            check_ocr=ocr_smoke_enabled,
+            ocr_files=ocr_files if ocr_smoke_enabled else (),
+        )
     elapsed = time.monotonic() - started
     auth_checks: list[str] = []
     if has_smoke_account:
@@ -452,7 +532,7 @@ def main() -> int:
     if has_demo_account:
         auth_checks.append("demo session notes")
     if has_demo_account and ocr_smoke_enabled:
-        auth_checks.append("OCR comparison")
+        auth_checks.append(f"OCR comparison ({len(ocr_files) or 1} PDF)")
     auth_label = f"with {', '.join(auth_checks)} check" if auth_checks else "public endpoints only"
     print(f"Production deployment smoke passed in {elapsed:.1f}s ({auth_label}).")
     return 0

@@ -167,6 +167,7 @@ Supabase anon key를 갱신하면 repository secret `SUPABASE_ANON_KEY`와 GitHu
 - demo 계정 secret이 설정되어 있으면 demo session seed 후 quickstart 노트와 sample PDF seed 노트가 모두 복원된다.
 - demo 계정 secret이 설정되어 있으면 샘플 PDF를 실제 GET으로 다운로드하고, 인증된 `/api/papers/extract-text`로 텍스트 추출과 PDF 저장을 확인한 뒤 `/api/papers/{id}/pdf`가 저장 PDF를 반환하는지 검증한다. smoke가 만든 임시 노트는 마지막에 삭제한다.
 - 수동 `Production smoke` 실행에서 `check_ocr=true`를 선택하면, 위 임시 PDF의 첫 페이지에 대해 `/api/papers/{id}/ocr` OCR 비교를 한 번 생성하고 OCR 본문·처리 페이지·품질 source를 검증한 뒤 같은 임시 노트를 삭제한다. 외부 OCR 사용량이 발생하므로 자동 배포 실행에는 포함하지 않는다.
+- 실제 스캔형 PDF는 public Git 이력에 추가하지 않는다. 검증 때만 draft release에 PDF를 올리고, 수동 실행 입력 `ocr_release_tag`에 해당 tag를 지정한다. workflow는 자산을 runner 임시 폴더로 내려받아 파일별 1쪽 OCR 비교를 수행하고, 원문을 로그에 남기지 않은 채 문자 수·품질 상태만 기록한다. 검증이 끝나면 draft release와 자산을 삭제한다.
 
 로그인 세션 필요:
 
