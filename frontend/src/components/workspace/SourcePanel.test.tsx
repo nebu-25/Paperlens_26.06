@@ -199,6 +199,6 @@ describe('SourcePanel OCR action', () => {
     expect(screen.getByText('PDF 영역 메모 1건')).toBeTruthy();
     expect(screen.getByDisplayValue('표본 수와 제외 기준을 다시 확인한다.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'PDF p.3' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'PDF 영역 메모 삭제' })).toHaveTextContent('메모 삭제');
+    expect(screen.getByRole('button', { name: 'PDF 영역 메모 삭제' }).textContent).toBe('메모 삭제');
   });
 });
