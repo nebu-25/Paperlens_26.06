@@ -79,6 +79,20 @@ def _blank_pdf() -> bytes:
 
 
 class TestPdfExtractionRegression:
+    def test_layout_title_is_kept_when_reflow_omits_it(self):
+        text = papers._preserve_layout_title(
+            "Journal header\n\nAuthor Name\n\nAbstract\n\nBody text.",
+            "한국어 논문 제목",
+        )
+
+        assert text.startswith("한국어 논문 제목\n\n")
+        assert text.endswith("Body text.")
+
+    def test_layout_title_is_not_duplicated_when_reflow_keeps_it(self):
+        text = papers._preserve_layout_title("한국어 논문 제목\n\n본문", "한국어 논문 제목")
+
+        assert text == "한국어 논문 제목\n\n본문"
+
     def test_mixed_two_column_pdf_preserves_front_matter_and_column_order(self, monkeypatch):
         stored: dict[str, object] = {}
 

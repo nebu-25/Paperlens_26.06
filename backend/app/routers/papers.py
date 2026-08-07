@@ -862,6 +862,23 @@ def _choose_extracted_text(reflowed: str, raw: str) -> str:
     return _repair_email_attached_purpose_tail(reflowed)
 
 
+def _preserve_layout_title(text: str, layout_title: str) -> str:
+    """Keep a first-page title when coordinate reflow accidentally drops it.
+
+    Replacing the whole document with raw extraction would reintroduce two-column
+    ordering errors. Add only a title that the layout reader identified but the
+    selected text does not contain.
+    """
+    title = _tidy_spacing(layout_title).strip()
+    if not title:
+        return text
+    normalized_title = "".join(title.split()).casefold()
+    normalized_text = "".join(text.split()).casefold()
+    if normalized_title in normalized_text:
+        return text
+    return f"{title}\n\n{text}".strip()
+
+
 # 구두점 앞 공백 정리(스팬 분리로 생긴 "있다 ." → "있다.") 및 닫는 괄호/따옴표 앞 공백 제거.
 _SPACE_BEFORE_PUNCT = re.compile(r"\s+([,.;:!?)\]}»”’】」』])")
 # 문장부호 뒤 한글이 바로 붙은 경우(줄 잇기로 공백 소실) 공백 보강: "이다.번역" → "이다. 번역".
@@ -1978,9 +1995,12 @@ def _extract_pdf_content(
         # 블록 단위 reflow로 시각적 줄바꿈을 문단으로 재결합해 자연스럽게 읽히게 한다.
         reflowed_text = _reflow_document(document)
         raw_text = _raw_document_text(document)
-        text = _choose_extracted_text(reflowed_text, raw_text)
         pdf_meta = document.metadata or {}
         layout_meta = _first_page_metadata(document)
+        text = _preserve_layout_title(
+            _choose_extracted_text(reflowed_text, raw_text),
+            str(layout_meta.get("title") or ""),
+        )
     except Exception as exc:  # pragma: no cover - library-specific parse failures
         raise HTTPException(status_code=422, detail="PDF 텍스트를 추출하지 못했습니다.") from exc
 
