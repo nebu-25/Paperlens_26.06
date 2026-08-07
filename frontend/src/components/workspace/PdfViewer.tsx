@@ -2,10 +2,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Hand,
+  Image,
   BoxSelect,
   Maximize2,
   MousePointer2,
   RotateCcw,
+  Sigma,
+  Table2,
   Trash2,
   X,
   ZoomIn,
@@ -25,6 +28,7 @@ import { authHeaders } from '../../lib/authHeaders';
 import { isChunkLoadError } from '../../lib/chunkLoad';
 import type { Highlight, HighlightColor, PdfAreaAnnotationKind, PdfAreaNote } from '../../types';
 import { bandIndexOf, isHorizontalRect, mergeColumnBands, type XSpan } from './pdfHighlightColumns';
+import { groupPdfAreaNoteMarkers } from './pdfAreaNoteMarkers';
 import {
   AddTermButton,
   HighlightButton,
@@ -58,6 +62,7 @@ type PdfActiveHighlight = {
   memo?: string;
   x: number;
   y: number;
+  areaNotes?: PdfAreaNote[];
 };
 type PdfInteractionMode = 'select' | 'area' | 'pan';
 type PdfAreaDraft = {
@@ -116,6 +121,26 @@ const PDF_HIGHLIGHT_COLORS: Record<HighlightColor, string> = {
   orange: 'rgba(251, 146, 60, 0.32)',
   violet: 'rgba(167, 139, 250, 0.32)',
 };
+
+const PDF_AREA_NOTE_COLORS: Record<HighlightColor, string> = {
+  yellow: '#ca8a04',
+  green: '#059669',
+  blue: '#0284c7',
+  pink: '#e11d48',
+  orange: '#ea580c',
+  violet: '#7c3aed',
+};
+
+function areaNoteKindLabel(kind: PdfAreaAnnotationKind) {
+  return kind === 'table' ? '표' : kind === 'figure' ? '그림' : kind === 'formula' ? '수식' : '영역';
+}
+
+function AreaNoteKindIcon({ kind, size = 13 }: { kind: PdfAreaAnnotationKind; size?: number }) {
+  if (kind === 'table') return <Table2 size={size} aria-hidden="true" />;
+  if (kind === 'figure') return <Image size={size} aria-hidden="true" />;
+  if (kind === 'formula') return <Sigma size={size} aria-hidden="true" />;
+  return <BoxSelect size={size} aria-hidden="true" />;
+}
 
 function errorMessage(status?: number, error?: unknown) {
   if (isChunkLoadError(error)) {
@@ -746,7 +771,8 @@ export function PdfViewer({
     });
   };
 
-  const openAreaNote = (areaNote: PdfAreaNote, event: MouseEvent<HTMLDivElement>) => {
+  const openAreaNoteMarker = (notes: PdfAreaNote[], event: MouseEvent<HTMLButtonElement>) => {
+    const areaNote = notes[0];
     event.preventDefault();
     event.stopPropagation();
     setPendingHighlight(null);
@@ -760,6 +786,17 @@ export function PdfViewer({
       memo: areaNote.memo,
       x: event.clientX,
       y: event.clientY,
+      areaNotes: notes.length > 1 ? notes : undefined,
+    });
+  };
+
+  const selectActiveAreaNote = (areaNote: PdfAreaNote) => {
+    setActiveHighlight((current) => current && {
+      ...current,
+      id: areaNote.id,
+      color: areaNote.color,
+      annotationKind: areaNote.kind,
+      memo: areaNote.memo,
     });
   };
 
@@ -784,6 +821,7 @@ export function PdfViewer({
     : undefined;
   const pageHighlights = highlights.filter((highlight) => highlight.pdf?.page === pageNumber);
   const pageAreaNotes = areaNotes.filter((areaNote) => areaNote.page === pageNumber);
+  const areaNoteMarkers = groupPdfAreaNoteMarkers(pageAreaNotes);
   const pendingOverlapHighlightIds = pendingHighlight
     ? pageHighlights
         .filter((highlight) =>
@@ -1019,20 +1057,45 @@ export function PdfViewer({
                 {pageAreaNotes.map((areaNote) => (
                   <div
                     key={areaNote.id}
-                    className="pointer-events-auto absolute cursor-pointer border border-dashed border-action bg-action/20 hover:bg-action/30"
+                    className="absolute rounded-sm border-2 border-dashed"
                     style={{
                       left: `${areaNote.rect.x * scale}px`,
                       top: `${areaNote.rect.y * scale}px`,
                       width: `${areaNote.rect.width * scale}px`,
                       height: `${areaNote.rect.height * scale}px`,
+                      borderColor: PDF_AREA_NOTE_COLORS[areaNote.color],
                     }}
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                    onClick={(event) => openAreaNote(areaNote, event)}
                   />
                 ))}
+                {areaNoteMarkers.map((marker) => {
+                  const [firstNote] = marker.notes;
+                  const overlapping = marker.notes.length > 1;
+                  const label = overlapping
+                    ? `겹친 PDF 영역 메모 ${marker.notes.length}건 열기`
+                    : `PDF 영역 메모 열기: ${areaNoteKindLabel(firstNote.kind)}`;
+                  return (
+                    <button
+                      key={marker.notes.map((note) => note.id).join('-')}
+                      type="button"
+                      className="pointer-events-auto absolute inline-flex size-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 bg-white text-xs font-bold shadow-sm hover:scale-110 focus:outline-none focus:ring-2 focus:ring-action"
+                      style={{
+                        left: `${marker.x * scale}px`,
+                        top: `${marker.y * scale}px`,
+                        borderColor: PDF_AREA_NOTE_COLORS[firstNote.color],
+                        color: PDF_AREA_NOTE_COLORS[firstNote.color],
+                      }}
+                      aria-label={label}
+                      title={label}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => openAreaNoteMarker(marker.notes, event)}
+                    >
+                      {overlapping ? `+${marker.notes.length}` : <AreaNoteKindIcon kind={firstNote.kind} />}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1127,7 +1190,7 @@ export function PdfViewer({
             <button
               type="button"
               className="inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:bg-paper hover:text-ink"
-              aria-label="적용된 PDF 하이라이트 메뉴 닫기"
+              aria-label={activeHighlight.source === 'area-note' ? 'PDF 영역 메모 메뉴 닫기' : 'PDF 하이라이트 메뉴 닫기'}
               title="닫기"
               onClick={closeActiveHighlight}
             >
@@ -1137,6 +1200,25 @@ export function PdfViewer({
           <p className="line-clamp-3 text-xs leading-5 text-muted">
             {activeHighlight.memo || activeHighlight.text}
           </p>
+          {activeHighlight.areaNotes && (
+            <div className="mt-2 border-t border-line pt-2">
+              <p className="mb-1 text-[11px] font-medium text-muted">겹친 영역 메모</p>
+              <div className="max-h-28 space-y-1 overflow-y-auto">
+                {activeHighlight.areaNotes.map((areaNote) => (
+                  <button
+                    key={areaNote.id}
+                    type="button"
+                    className={`flex w-full items-center gap-1 rounded px-1.5 py-1 text-left text-[11px] hover:bg-paper ${activeHighlight.id === areaNote.id ? 'bg-paper text-ink' : 'text-muted'}`}
+                    onClick={() => selectActiveAreaNote(areaNote)}
+                  >
+                    <AreaNoteKindIcon kind={areaNote.kind} size={12} />
+                    <span className="font-semibold">{areaNoteKindLabel(areaNote.kind)}</span>
+                    <span className="min-w-0 truncate">{areaNote.memo || '내용 없음'}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="mt-2 flex items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1 rounded bg-paper px-2 py-1 text-[11px] font-medium text-muted">
               <span
@@ -1146,7 +1228,9 @@ export function PdfViewer({
                 }`}
                 aria-hidden="true"
               />
-              {HIGHLIGHT_COLORS.find((color) => color.value === activeHighlight.color)?.label ?? '주장'}
+              {activeHighlight.source === 'area-note' && activeHighlight.annotationKind
+                ? areaNoteKindLabel(activeHighlight.annotationKind)
+                : HIGHLIGHT_COLORS.find((color) => color.value === activeHighlight.color)?.label ?? '주장'}
             </span>
             <button
               type="button"
@@ -1154,7 +1238,7 @@ export function PdfViewer({
               onClick={removeActiveHighlight}
             >
               <Trash2 size={13} />
-              하이라이트 해제
+              {activeHighlight.source === 'area-note' ? '메모 삭제' : '하이라이트 해제'}
             </button>
           </div>
         </div>

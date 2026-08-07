@@ -721,7 +721,7 @@ export function SourcePanel() {
                               aria-label="PDF 영역 메모 삭제"
                               onClick={() => updateNote('pdfAreaNotes', pdfAreaNotes.filter((item) => item.id !== areaNote.id))}
                             >
-                              삭제
+                              메모 삭제
                             </button>
                           </div>
                           <textarea
